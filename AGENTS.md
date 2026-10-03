@@ -6,7 +6,7 @@
 Flat top-level packages, no `src/`. See `plan.md` section 6 for the full tree.
 - `config.py` — single source of truth for geometry, joint limits, clamps, timing, router, audio, paths, models.
 - `bridge.py` — `Command` / `Status` dataclasses, queue creation, validation.
-- `body/` — body process: `kinematics`, `gait`, `controller`, `arbitration`, `clock`, `process`, and the backend seam (`backend.py`, `sim_backend.py`, `servo_backend.py`).
+- `body/` — body process: `kinematics`, `poses`, `urdf`, `gait`, `controller`, `arbitration`, `clock`, `process`, and the backend seam (`backend.py`, `sim_backend.py`, `servo_backend.py`).
 - `brain/` — `router.py`, `chat.py`, `dialogue.py`.
 - `voice/` — `audio.py`, `stt.py`, `tts.py`, `playback.py`.
 - `tests/` — `test_<module>.py` per module, shared fakes in `tests/fakes.py`.
@@ -28,6 +28,7 @@ Avoid committing build output, caches, models, or secrets; add them to `.gitigno
 - Sim and kinematics use a clean joint frame (0 = neutral). Servo centre/sign/offset live only in the calibration table in `servo_backend.py`.
 - Units: metres and radians, unless a name ends in `_DEG`. Body frame: +X forward, +Y left, +Z up.
 - Leg mount angles are measured clockwise from above, 0° = +X: RF 30, RM 90, RR 150, LR 210, LM 270, LF 330. Convert to math yaw only through `config.mount_yaw_rad` (the single conversion point). Left mirrors right, and RF's foot target must land on the right side (y < 0).
+- The zero pose is the stand pose (`BODY_HEIGHT_STAND = TIBIA_LENGTH`). The URDF is generated from config by `scripts/generate_urdf.py` (re-run it after changing geometry; a test fails if the committed file is stale). Joint axes: coxa +Z, femur and tibia -Y.
 - Leg order is `RF, RM, RR, LR, LM, LF`; tripod A = RF, RR, LM; tripod B = RM, LR, LF.
 - IK always returns the knee-up solution and returns `None` for unreachable points.
 - Router: `stop` words match anywhere; other commands need a short utterance (after filler removal) and `fuzz.ratio >= ROUTER_THRESHOLD`; everything else goes to chat.
