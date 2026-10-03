@@ -1,0 +1,3 @@
+-r requirements.txt
+# Servo driver goes here at the hardware step, e.g.
+# adafruit-circuitpython-servokit>=1.3
