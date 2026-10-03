@@ -168,6 +168,7 @@ def main() -> int:
                 last_state = controller.state
                 print(f"state: {last_state.value}")
             controller.drain_events()
+            sim.update_view()
     except KeyboardInterrupt:
         pass
     finally:

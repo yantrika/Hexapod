@@ -99,6 +99,10 @@ class HexapodBackend(ABC):
         quantisation) unless the simulator had to drop time after a stall.
         """
 
+    def update_view(self) -> None:
+        """Optional visual refresh each control iteration (follow camera). Default: nothing."""
+        return None
+
     @abstractmethod
     def close(self) -> None:
         """Release the simulator or hardware."""

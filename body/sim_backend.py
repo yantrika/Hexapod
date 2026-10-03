@@ -8,6 +8,7 @@ a time accumulator, so simulated speed does not depend on loop iteration rate.
 from __future__ import annotations
 
 import math
+import time
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -47,12 +48,21 @@ class SimBackend(HexapodBackend):
             options=f"--width={window_size[0]} --height={window_size[1]}" if window_size else "",
         )
         pb = self._pb
+        self._camera_target = [0.0, 0.0, config.BODY_HEIGHT_STAND / 2]
+        self._next_camera_update = 0.0
         if gui:
-            # The side panel (sliders, parameters) is hidden unless asked for; G toggles it.
+            # No side panels: the Mesa-override build garbles PyBullet's text. The panel
+            # (sliders, parameters) is only enabled for dev tools that need it (joint_jog).
             pb.configureDebugVisualizer(pb.COV_ENABLE_GUI, 1 if show_panel else 0)
+            pb.configureDebugVisualizer(pb.COV_ENABLE_RGB_BUFFER_PREVIEW, 0)
+            pb.configureDebugVisualizer(pb.COV_ENABLE_DEPTH_BUFFER_PREVIEW, 0)
+            pb.configureDebugVisualizer(pb.COV_ENABLE_SEGMENTATION_MARK_PREVIEW, 0)
+            pb.configureDebugVisualizer(pb.COV_ENABLE_SHADOWS, 1 if config.GUI_SHADOWS else 0)
             pb.resetDebugVisualizerCamera(
-                cameraDistance=0.9, cameraYaw=45, cameraPitch=-25,
-                cameraTargetPosition=[0, 0, config.BODY_HEIGHT_STAND / 2],
+                cameraDistance=config.GUI_CAMERA_DISTANCE_M,
+                cameraYaw=config.GUI_CAMERA_YAW_DEG,
+                cameraPitch=config.GUI_CAMERA_PITCH_DEG,
+                cameraTargetPosition=self._camera_target,
             )
         pb.setAdditionalSearchPath(pybullet_data.getDataPath())
         pb.setGravity(0, 0, -config.SIM_GRAVITY)
@@ -128,6 +138,25 @@ class SimBackend(HexapodBackend):
         for _ in range(steps):
             self._pb.stepSimulation()
         return steps * self._physics_dt
+
+    def update_view(self) -> None:
+        """Follow camera: re-centre on the body at ``GUI_CAMERA_HZ``, keeping the user's angle."""
+        if not (self.gui and config.GUI_FOLLOW_CAMERA):
+            return
+        now = time.monotonic()
+        if now < self._next_camera_update:
+            return
+        self._next_camera_update = now + 1.0 / config.GUI_CAMERA_HZ
+        try:
+            camera = self._pb.getDebugVisualizerCamera()
+            position = self.get_base_pose().position
+            self._pb.resetDebugVisualizerCamera(
+                cameraDistance=camera[10], cameraYaw=camera[8], cameraPitch=camera[9],
+                cameraTargetPosition=[float(position[0]), float(position[1]),
+                                      config.BODY_HEIGHT_STAND / 2],
+            )
+        except pybullet.error:
+            pass  # window closed
 
     def close(self) -> None:
         if self._pb.isConnected():

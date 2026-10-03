@@ -151,6 +151,14 @@ BODY_START_TIMEOUT_S = 20.0  # waiting for the body process to report ready (PyB
 BODY_SHUTDOWN_TIMEOUT_S = 3.0  # join time before terminate, then kill
 PARENT_CHECK_TICKS = 5  # the body checks that its parent is alive every this many ticks
 
+# PyBullet window (GUI mode only; the window never draws text, see AGENTS.md)
+GUI_CAMERA_DISTANCE_M = 0.65  # PLACEHOLDER: the robot is about 0.55 m across with legs out
+GUI_CAMERA_YAW_DEG = 40.0
+GUI_CAMERA_PITCH_DEG = -30.0
+GUI_FOLLOW_CAMERA = True  # keep the robot in view while it walks
+GUI_CAMERA_HZ = 10.0  # follow-camera update rate
+GUI_SHADOWS = True  # PyBullet shadow rendering; False is cheaper on weak GPUs
+
 SIM_HEADLESS = False  # PyBullet DIRECT mode; overridden by --headless
 SIM_REALTIME = True  # --no-realtime is for fast tests only
 

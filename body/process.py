@@ -35,7 +35,10 @@ logger = logging.getLogger(__name__)
 _BLAS_VARS = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
 _CHANGE_RAD = 1e-6  # a joint target moved at least this much since the last tick
 _TIP_RPY = (1.4, 0.0, 0.0)  # test hook: roll about 80 degrees
-_PROBE_FIELDS = ("ticks", "work_sum_s", "work_max_s", "change_time", "blas_threads")
+_PROBE_FIELDS = (
+    "ticks", "work_sum_s", "work_max_s", "change_time", "blas_threads",
+    "base_x", "base_y", "base_yaw",  # body pose in the world, for tests
+)
 
 
 class BodyProbe:
@@ -115,6 +118,7 @@ class BodyRunner:
                 raise
             self._flush_events()
             self._check_fallen()
+        self.backend.update_view()
         self._note_target_change()
         if self._probe is not None:
             self._probe.record_tick(time.perf_counter() - started)
@@ -180,7 +184,12 @@ class BodyRunner:
     def _call_controller(self, command: Command) -> Result:
         ctrl, params = self.controller, command.params
         if command.action == "walk":
-            return ctrl.walk(params["direction"], float(params.get("speed", 0.5)))
+            return ctrl.walk(
+                params.get("direction"),
+                float(params.get("speed", 0.5)),
+                float(params.get("strafe", 0.0)),
+                float(params.get("yaw", 0.0)),
+            )
         if command.action == "turn":
             return ctrl.turn(params["direction"], float(params["angle_deg"]))
         return {"stand": ctrl.stand, "sit": ctrl.sit, "wave": ctrl.wave}[command.action]()
@@ -197,7 +206,12 @@ class BodyRunner:
 
     # --- fall and probe -----------------------------------------------------
     def _check_fallen(self) -> None:
-        roll, pitch, _ = self.backend.get_base_pose().rpy
+        pose = self.backend.get_base_pose()
+        roll, pitch, yaw = pose.rpy
+        if self._probe is not None:
+            self._probe.set("base_x", float(pose.position[0]))
+            self._probe.set("base_y", float(pose.position[1]))
+            self._probe.set("base_yaw", float(yaw))
         tilt = math.degrees(max(abs(roll), abs(pitch)))
         if not self.fallen and tilt > config.FALL_TILT_DEG:
             self.fallen = True
