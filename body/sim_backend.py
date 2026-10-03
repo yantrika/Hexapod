@@ -127,6 +127,11 @@ class SimBackend(HexapodBackend):
 
     # --- Simulation-only helpers ------------------------------------------
     @property
+    def client(self) -> bullet_client.BulletClient:
+        """The PyBullet client, for GUI-only input in dev tools (keyboard events, sliders)."""
+        return self._pb
+
+    @property
     def connected(self) -> bool:
         return bool(self._pb.isConnected())
 

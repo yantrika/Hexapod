@@ -103,3 +103,14 @@ def test_stand_poses_are_consistent() -> None:
     assert poses.STAND_ANGLES == pytest.approx(np.zeros((6, 3)), abs=1e-12)
     assert poses.SIT_ANGLES.shape == (6, 3)
     assert np.all(poses.SIT_ANGLES[:, 0] == 0.0)  # coxa untouched
+
+
+@pytest.mark.parametrize("tick_s", [0.005, 0.015, 0.02])
+def test_physics_time_follows_elapsed_wall_time_at_240_hz(sim: SimBackend, tick_s: float) -> None:
+    stepped, elapsed = 0.0, 0.0
+    while elapsed < 2.0 - 1e-9:
+        dt = min(tick_s, 2.0 - elapsed)
+        stepped += sim.advance(dt)
+        elapsed += dt
+    one_step = 1.01 / config.PHYSICS_HZ  # less than one step is left over
+    assert stepped == pytest.approx(2.0, abs=one_step)
