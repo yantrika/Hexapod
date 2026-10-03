@@ -25,7 +25,13 @@ from body.backend import BasePose, HexapodBackend, JointArray
 class SimBackend(HexapodBackend):
     """Simulated hexapod. Pass ``gui=True`` for the PyBullet window."""
 
-    def __init__(self, gui: bool | None = None, urdf_path: Path | None = None) -> None:
+    def __init__(
+        self,
+        gui: bool | None = None,
+        urdf_path: Path | None = None,
+        show_panel: bool = False,
+        window_size: tuple[int, int] | None = None,
+    ) -> None:
         super().__init__()
         if gui is None:
             gui = not config.SIM_HEADLESS
@@ -37,11 +43,13 @@ class SimBackend(HexapodBackend):
         self._time_debt = 0.0
         self.gui = gui
         self._pb = bullet_client.BulletClient(
-            connection_mode=pybullet.GUI if gui else pybullet.DIRECT
+            connection_mode=pybullet.GUI if gui else pybullet.DIRECT,
+            options=f"--width={window_size[0]} --height={window_size[1]}" if window_size else "",
         )
         pb = self._pb
         if gui:
-            pb.configureDebugVisualizer(pb.COV_ENABLE_GUI, 0)
+            # The side panel (sliders, parameters) is hidden unless asked for; G toggles it.
+            pb.configureDebugVisualizer(pb.COV_ENABLE_GUI, 1 if show_panel else 0)
             pb.resetDebugVisualizerCamera(
                 cameraDistance=0.9, cameraYaw=45, cameraPitch=-25,
                 cameraTargetPosition=[0, 0, config.BODY_HEIGHT_STAND / 2],

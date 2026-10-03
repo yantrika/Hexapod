@@ -7,7 +7,9 @@ controller, gait and bridge on purpose. It uses only the backend API
 applies: the sliders reach 30 degrees past the hard limits so you can see a
 command being clamped; the console reports it.
 
-On the dev laptop the GUI needs the Mesa override (see README).
+The slider panel is shown from the start (in plain PyBullet windows it is hidden until
+you press G). Each shown leg's angles are also drawn in yellow above the robot and printed
+in the terminal. On the dev laptop the GUI needs the Mesa override (see README).
 """
 
 from __future__ import annotations
@@ -27,6 +29,7 @@ import numpy as np  # noqa: E402
 import pybullet  # noqa: E402
 
 import config  # noqa: E402
+from body import kinematics  # noqa: E402
 from body.clock import FixedRateLoop  # noqa: E402
 from body.sim_backend import SimBackend  # noqa: E402
 
@@ -50,6 +53,12 @@ def format_leg_line(leg: str, applied_rad: np.ndarray) -> str:
     return f"{leg}  " + "   ".join(cells)
 
 
+def label_position(leg: str) -> list[float]:
+    """Where a leg's readout floats: above its hip, outside the body, in the world frame."""
+    hip = kinematics.hip_position(leg)
+    return [float(hip[0]) * 1.8, float(hip[1]) * 1.8, config.BODY_HEIGHT_STAND + 0.12]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--legs", default=",".join(config.LEG_NAMES),
@@ -62,8 +71,9 @@ def main() -> int:
     if unknown:
         parser.error(f"unknown legs {unknown}; choose from {', '.join(config.LEG_NAMES)}")
 
-    sim = SimBackend(gui=True)
+    sim = SimBackend(gui=True, show_panel=True, window_size=(1200, 700))  # panel on from the start
     client = sim.client
+    labels: dict[str, int] = {}  # leg -> id of its on-screen text above the robot
     slider_for = {}  # joint index -> slider id; hidden legs stay at 0 (the stand pose)
     for index, name in enumerate(config.JOINT_NAMES):
         if name.split("_")[0] not in shown:
@@ -80,6 +90,9 @@ def main() -> int:
     start = last_readout = time.monotonic()
     clamped_before: tuple[str, ...] = ()
     reported = np.zeros(config.DOF)
+    for i, leg in enumerate(config.LEG_NAMES):
+        if leg in shown:
+            reported[3 * i : 3 * i + 3] = np.inf  # forces a first readout for the shown legs
     try:
         while sim.connected:
             now = time.monotonic()
@@ -109,8 +122,17 @@ def main() -> int:
                 for i, leg in enumerate(config.LEG_NAMES):
                     row = slice(3 * i, 3 * i + 3)
                     if moved[row].any():
-                        print(format_leg_line(leg, applied[row]))
+                        line = format_leg_line(leg, applied[row])
+                        print(line)
                         reported[row] = applied[row]
+                        if leg in shown:
+                            labels[leg] = client.addUserDebugText(
+                                line,
+                                label_position(leg),
+                                textColorRGB=[1, 1, 0],
+                                textSize=1.6,
+                                replaceItemUniqueId=labels.get(leg, -1),
+                            )
     except KeyboardInterrupt:
         pass
     finally:

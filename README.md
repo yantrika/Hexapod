@@ -46,4 +46,6 @@ loop 7x slower and crashed the dev laptop).
 **Manual control.** `teleop.py`: W/S forward/back, A/D strafe, Q/E turn, Space stop,
 1 stand, 2 sit, 3 wave, +/- speed. Releasing a movement key ramps it to zero. It only uses
 the controller API. `joint_jog.py` is a tuning tool, not part of the runtime; it only uses
-the backend API, so the hard joint limits still apply.
+the backend API, so the hard joint limits still apply. Its slider panel is open from the start (in other PyBullet windows it
+is hidden until you press `G`), each shown leg's angles are drawn in yellow above the robot,
+and `--legs RF` keeps the panel short.
