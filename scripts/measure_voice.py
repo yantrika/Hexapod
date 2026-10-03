@@ -1,0 +1,215 @@
+#!/usr/bin/env python3
+"""Measure what the voice costs: Piper speed, body tick time with and without Piper, clear().
+
+    nice -n 19 python scripts/measure_voice.py --body            headless body sim
+    nice -n 19 python scripts/measure_voice.py --body --gui      with the PyBullet window
+    nice -n 19 python scripts/measure_voice.py --clear           clear() latency (speaker, quiet)
+
+``--body`` runs four windows (stand, stand + Piper, walk, walk + Piper) and prints the body's mean
+and worst control-tick work time, the tick rate, and while Piper runs: its real-time factor, time
+to first audio, CPU share, peak RAM and thread count. Piper is kept 100 % busy (sentences back
+to back), the worst case; real speech is mostly idle. One process at a time; no sound is played.
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import statistics
+import sys
+import threading
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+for _var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+    os.environ.setdefault(_var, "1")
+
+import config  # noqa: E402
+from body.process import BodyProbe, BodyProcess  # noqa: E402
+from bridge import make_bridge, new_command  # noqa: E402
+from voice.playback import Playback, SoundDeviceSink  # noqa: E402
+from voice.tts import AudioClip, PiperEngine, TtsError  # noqa: E402
+
+SENTENCES = [
+    "Okay, I am standing up.",
+    "I can't do that right now.",
+    "Hello, I am hexa, a six legged robot.",
+    "One moment, let me think about that.",
+]
+WINDOW_S = 8.0
+
+
+def proc_cpu_seconds(pid: int) -> float:
+    fields = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
+    return (int(fields[11]) + int(fields[12])) / os.sysconf("SC_CLK_TCK")
+
+
+def proc_status(pid: int, key: str) -> str:
+    for line in Path(f"/proc/{pid}/status").read_text().splitlines():
+        if line.startswith(key):
+            return line.split(":", 1)[1].strip()
+    return "?"
+
+
+class PiperLoad(threading.Thread):
+    """Synthesizes sentences back to back and records speed."""
+
+    def __init__(self, engine: PiperEngine) -> None:
+        super().__init__(daemon=True)
+        self.engine = engine
+        self.stop_flag = threading.Event()
+        self.took: list[float] = []
+        self.audio: list[float] = []
+
+    def run(self) -> None:
+        index = 0
+        while not self.stop_flag.is_set():
+            started = time.perf_counter()
+            clip = self.engine.synthesize(SENTENCES[index % len(SENTENCES)])
+            self.took.append(time.perf_counter() - started)
+            self.audio.append(clip.duration_s)
+            index += 1
+
+
+def piper_summary(took: list[float], audio: list[float]) -> str:
+    if not took:
+        return "no sentence finished"
+    rtf = sum(took) / sum(audio)
+    return (f"{len(took)} sentences, time to first audio median {statistics.median(took):.2f} s "
+            f"(worst {max(took):.2f} s), real-time factor {rtf:.2f}")
+
+
+def run_window(
+    body: BodyProcess, probe: BodyProbe, engine: PiperEngine | None, walking: bool
+) -> None:
+    load = PiperLoad(engine) if engine is not None else None
+    bridge = body.bridge
+    probe.reset_window()
+    cpu_before = proc_cpu_seconds(engine.pid) if engine and engine.pid else 0.0
+    started = time.monotonic()
+    if load:
+        load.start()
+    next_heartbeat = 0.0
+    while time.monotonic() - started < WINDOW_S:
+        if walking and time.monotonic() >= next_heartbeat:
+            bridge.send(new_command("heartbeat", {}))
+            next_heartbeat = time.monotonic() + 1.0 / config.HEARTBEAT_HZ
+        bridge.receive_all()
+        time.sleep(0.05)
+    elapsed = time.monotonic() - started
+    ticks, mean, worst = probe.window()
+    line = (f"body tick work: mean {mean * 1000:.2f} ms, worst {worst * 1000:.1f} ms, "
+            f"{ticks / elapsed:.1f} ticks/s (nominal {config.CONTROL_HZ:.0f})")
+    print(f"  {line}")
+    if load and engine and engine.pid:
+        load.stop_flag.set()
+        load.join(30)
+        cpu = (proc_cpu_seconds(engine.pid) - cpu_before) / elapsed * 100
+        print(f"  piper: {piper_summary(load.took, load.audio)}")
+        print(f"  piper CPU {cpu:.0f} % of one core; RAM peak {proc_status(engine.pid, 'VmHWM')}; "
+              f"threads {proc_status(engine.pid, 'Threads')}")
+
+
+def measure_body(gui: bool, nice: int, cpu_list: str | None, body_cpus: set[int] | None) -> int:
+    engine = PiperEngine(nice=nice, cpu_list=cpu_list)
+    try:
+        engine.check_installed()
+    except TtsError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    bridge = make_bridge()
+    probe = BodyProbe()
+    body = BodyProcess(bridge, headless=not gui, probe=probe)
+    body.start()
+    try:
+        if not body.wait_ready():
+            print("error: the body did not become ready", file=sys.stderr)
+            return 1
+        if body_cpus and body.pid:
+            os.sched_setaffinity(body.pid, body_cpus)
+        print(f"body CPUs: {sorted(body_cpus) if body_cpus else 'any'}")
+        print(f"mode: {'GUI viewer' if gui else 'headless'}; this process nice {os.nice(0)}, "
+              f"Piper extra nice {nice}, Piper CPUs {cpu_list or 'any'}")
+        engine.start()
+        engine.synthesize("Warm up.")
+        bridge.send(new_command("stand", {}))
+        time.sleep(3.0)
+        print("A. body standing, no Piper")
+        run_window(body, probe, None, walking=False)
+        print("B. body standing, Piper busy")
+        run_window(body, probe, engine, walking=False)
+        bridge.send(new_command("walk", {"direction": "fwd", "speed": 0.5}))
+        time.sleep(1.0)
+        print("C. body walking, no Piper")
+        run_window(body, probe, None, walking=True)
+        print("D. body walking, Piper busy")
+        run_window(body, probe, engine, walking=True)
+        bridge.send(new_command("stop", {}))
+    finally:
+        engine.close()
+        body.shutdown()
+    return 0
+
+
+class QuietSink(SoundDeviceSink):
+    """The real speaker at a low volume, for latency runs."""
+
+    def start(self, clip: AudioClip) -> None:
+        quiet = (clip.samples.astype("float32") * 0.1).astype(clip.samples.dtype)
+        super().start(AudioClip(quiet, clip.sample_rate))
+
+
+def measure_clear(trials: int) -> int:
+    engine = PiperEngine()
+    sink = QuietSink()
+    started = threading.Event()
+    playback = Playback(engine, sink, on_start=lambda _utterance: started.set())
+    playback.start()
+    latencies: list[float] = []
+    try:
+        for _ in range(trials):
+            started.clear()
+            playback.say_phrase("standing_up")
+            if not started.wait(5.0):
+                print("error: playback did not start (no audio device?)", file=sys.stderr)
+                return 1
+            time.sleep(0.3)
+            began = time.perf_counter()
+            playback.clear()
+            latencies.append(time.perf_counter() - began)
+            playback.wait_idle(2.0)
+            time.sleep(0.1)
+        stream = getattr(sink, "_stream", None)
+        print(f"clear() over {trials} trials: median {statistics.median(latencies) * 1000:.1f} ms, "
+              f"worst {max(latencies) * 1000:.1f} ms "
+              f"(bound {config.TTS_CLEAR_MAX_S * 1000:.0f} ms)")
+        if stream is not None:
+            print(f"output stream latency (audio already in the device): "
+                  f"{stream.latency * 1000:.0f} ms")
+    finally:
+        playback.shutdown()
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--body", action="store_true", help="body tick time with and without Piper")
+    parser.add_argument("--gui", action="store_true", help="with --body: open the PyBullet window")
+    parser.add_argument("--clear", action="store_true", help="clear() latency on the real speaker")
+    parser.add_argument("--piper-nice", type=int, default=config.PIPER_NICE)
+    parser.add_argument("--piper-cpus", default=config.PIPER_CPU_LIST, help="taskset list, e.g. 3")
+    parser.add_argument("--body-cpus", help="pin the body process to these CPUs, e.g. 0,2")
+    parser.add_argument("--trials", type=int, default=20)
+    args = parser.parse_args()
+    if args.clear:
+        return measure_clear(args.trials)
+    if args.body:
+        cpus = {int(n) for n in args.body_cpus.split(",")} if args.body_cpus else None
+        return measure_body(args.gui, args.piper_nice, args.piper_cpus, cpus)
+    parser.print_help()
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -10,3 +10,4 @@ assets/vosk/*/
 assets/piper/*.onnx
 assets/piper/*.onnx.json
 assets/piper/piper/
+assets/phrases/*.wav

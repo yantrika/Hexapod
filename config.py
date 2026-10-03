@@ -214,13 +214,43 @@ MIC_DEVICE: int | None = None
 SPEAKER_DEVICE: int | None = None
 SPEAK_TAIL_S = 0.4  # STT stays gated this long after TTS ends
 UTTERANCE_QUEUE_MAXSIZE = 8
-TTS_QUEUE_MAXSIZE = 8
-TTS_CLEAR_MAX_S = 0.1
+TTS_QUEUE_MAXSIZE = 8  # utterances waiting to be synthesized
+TTS_PREFETCH_SIZE = 1  # synthesized clips waiting for the speaker: sentence N+1 renders during N
+TTS_CLEAR_MAX_S = 0.1  # playback.clear() returns within this
+TTS_SYNTH_TIMEOUT_S = 10.0  # one sentence must be synthesized within this, else Piper is restarted
+TTS_START_TIMEOUT_S = 20.0  # extra allowance for the first sentence (model load, about 2.6 s here)
+TTS_STOP_TIMEOUT_S = 2.0  # how long a closing Piper gets to exit before it is killed
+TTS_SHUTDOWN_TIMEOUT_S = 5.0  # playback.shutdown() joins its threads for at most this long
+TTS_POLL_S = 0.005  # playback thread wake-up period while a speaking tail is running
+PHRASES_DIR = ASSETS_DIR / "phrases"  # pre-rendered WAVs, gitignored like the models
+# Fixed phrases and short fillers, rendered once by scripts/prerender_phrases.py and played with
+# no synthesis wait. name -> text. The dialogue step (9) speaks these by name.
+TTS_PHRASES: dict[str, str] = {
+    "okay": "Okay.",
+    "cant_do_that": "I can't do that.",
+    "already_sitting": "I'm already sitting.",
+    "already_standing": "I'm already standing.",
+    "standing_up": "Okay, I am standing up.",
+    "sitting_down": "Okay, I am sitting down.",
+    "walking": "Okay, walking.",
+    "turning": "Okay, turning.",
+    "waving": "Hello!",
+    "stopped": "Stopped.",
+    "fell_over": "Oops, I fell over.",
+    "didnt_catch": "Sorry, I didn't catch that.",
+    "hmm": "Hmm.",
+    "one_moment": "One moment.",
+    "let_me_think": "Let me think.",
+}
 
 # --- Models --------------------------------------------------------------
 VOSK_MODEL_PATH = VOSK_DIR / "vosk-model-small-en-us-0.15"
-PIPER_BINARY = "piper"  # standalone binary, called as a subprocess
+PIPER_BINARY = PIPER_DIR / "piper" / "piper"  # standalone binary, ONE long-lived subprocess
 PIPER_MODEL_PATH = PIPER_DIR / "en_US-amy-low.onnx"
+# Optional isolation of Piper from the control loop (measured: unconstrained, its two compute
+# threads take about 2.2 cores and double the body tick time on the dev laptop).
+PIPER_NICE = 0  # extra niceness for the Piper process (0 = none)
+PIPER_CPU_LIST: str | None = None  # taskset CPU list, e.g. "3"; None = any CPU
 OLLAMA_URL = "http://127.0.0.1:11434"
 OLLAMA_MODEL = "qwen2.5:1.5b"
 OLLAMA_TIMEOUT_S = 20.0

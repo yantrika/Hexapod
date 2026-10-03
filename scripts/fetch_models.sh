@@ -3,13 +3,14 @@
 # and reported). Models stay gitignored.
 #
 # Usage: scripts/fetch_models.sh [-h|--help]     no argument = fetch everything known so far
-#   fetches: the Piper binary and the en_US-amy-low voice into assets/piper/
+#   fetches: the Piper binary and the en_US-amy-low voice into assets/piper/, then renders the
+#   fixed phrases and fillers to assets/phrases/ (scripts/prerender_phrases.py; skips existing)
 #   (Vosk arrives in Step 8)
 set -euo pipefail
 
 case "${1:-}" in
   "") ;;
-  -h|--help) sed -n '2,7p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  -h|--help) sed -n '2,8p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
   *) echo "unknown argument '$1' (no argument fetches everything; see --help)" >&2; exit 2 ;;
 esac
 
@@ -48,4 +49,6 @@ for suffix in .onnx .onnx.json; do
     curl -fsSL --retry 3 -o "${piper_dir}/${voice_file}${suffix}" "${VOICE_BASE}${suffix}?download=true"
   fi
 done
+if [[ -x "${root}/.venv/bin/python" ]]; then python="${root}/.venv/bin/python"; else python=python3; fi
+"${python}" "${root}/scripts/prerender_phrases.py"
 echo "done: ${piper_dir}"

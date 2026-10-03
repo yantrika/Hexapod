@@ -8,9 +8,9 @@ Flat top-level packages, no `src/`. See `plan.md` section 6 for the full tree.
 - `bridge.py` — `Command` / `Status` dataclasses, queue creation, validation. `commandline.py` — the shared text-command parser.
 - `body/` — body process: `kinematics`, `poses`, `urdf`, `gait`, `controller`, `arbitration`, `clock`, `process`, and the backend seam (`backend.py`, `sim_backend.py`, `servo_backend.py`).
 - `brain/` — `router.py`, `chat.py`, `dialogue.py`.
-- `voice/` — `audio.py`, `stt.py`, `tts.py`, `playback.py`.
+- `voice/` — `audio.py`, `stt.py`, `tts.py` (Piper engine, no sound), `playback.py` (the only module that touches the audio output).
 - `tests/` — `test_<module>.py` per module, shared fakes in `tests/fakes.py`.
-- `scripts/` — model download, URDF generation, sim, walk and script demos, `teleop.py` (keyboard) and `joint_jog.py` (dev sliders). `assets/` — URDF and models (downloaded models are gitignored).
+- `scripts/` — model download and phrase pre-rendering, `say.py` (typed text to speech), `measure_voice.py`, URDF generation, sim, walk and script demos, `teleop.py` (keyboard) and `joint_jog.py` (dev sliders). `assets/` — URDF and models (downloaded models are gitignored).
 
 Avoid committing build output, caches, models, or secrets; add them to `.gitignore` first.
 
@@ -25,6 +25,8 @@ Avoid committing build output, caches, models, or secrets; add them to `.gitigno
 - `scripts/control_window.py` (Tkinter, parent process) owns the body process and talks to it ONLY through the Bridge (it imports `BodyProcess`, never the controller, gait or a backend). Its key logic lives in `scripts/control_logic.py` (pure, unit tested, clock injected); typed lines go through `commandline.parse_line`, the one text-command parser shared with `bridge_cli`. A key or button that the allowed actions cannot express is a schema question for the user, not something to patch locally.
 - The PyBullet window is a viewer only: no side panels, no preview buffers, no `addUserDebugText` (the Mesa-override build garbles its text). Camera, follow camera and shadows come from the `GUI_*` constants in `config.py`; `joint_jog` is the one dev tool that turns the slider panel back on.
 - Physics (240 Hz) and control (50 Hz) are driven by wall-clock time, not loop iteration counts. The body can run headless (PyBullet DIRECT) via a flag.
+- ONLY `voice/playback.py` touches the audio output (`sounddevice` is imported there, in `SoundDeviceSink`, and nowhere else for output). Everything else speaks through `Playback.say()`/`say_phrase()`; tests use a fake `AudioSink` with a fake clock.
+- Playback (`voice/playback.py`): a synthesis worker and a playback thread joined by `queue.Queue`s (prefetch: sentence N+1 renders while N plays, `TTS_PREFETCH_SIZE`). `clear()` is safe from any thread, bumps a generation counter, empties both queues and aborts the sound (bound `TTS_CLEAR_MAX_S`); a sentence still being synthesized is discarded when it ends. `speaking` is set from the start of a clip to its end plus `SPEAK_TAIL_S`. A synthesis or audio error is logged and skipped. Fixed phrases and fillers (`config.TTS_PHRASES`) are pre-rendered by `scripts/prerender_phrases.py` into `assets/phrases/` and played with `say_phrase(name)`.
 - Piper is ALWAYS a long-lived process fed lines on stdin, never one process per sentence (measured: about 1.5 s model load per call on the dev laptop). Fixed phrases are pre-rendered, never synthesized at speaking time.
 - While TTS is playing (plus `SPEAK_TAIL_S`), STT results are discarded.
 
@@ -50,7 +52,8 @@ Python 3.11 venv in `.venv/` (gitignored).
 - Test: `pytest`; single test: `pytest tests/test_<module>.py::test_name`.
 - The dev laptop is a 2010 dual-core i3 with 5.7 GB RAM and crashed when numpy's BLAS threads spun (`config.py`, `body/__init__.py` and `tests/__init__.py` now pin them to one thread). Keep it that way: run one process at a time (no `pytest -n`), prefix long runs with `nice -n 19 timeout <s>`, run sim test files in small batches, and use the GUI only on request. If it cannot run the code comfortably, the Pi will not either.
 - Lint and types: `ruff check .` and `mypy .`; run both before committing.
-- Models: `scripts/fetch_models.sh` (arrives in Steps 7–8).
+- Models: `scripts/fetch_models.sh` (no argument fetches everything known: Piper and its voice, then the pre-rendered phrases; Vosk arrives in Step 8). Speak: `python scripts/say.py`. Voice cost: `nice -n 19 python scripts/measure_voice.py --body|--clear`.
+- Tests marked `timing` or `audio` (real Piper) are excluded by default: `pytest -m timing`, `pytest -m audio -s`.
 
 ## Coding Style & Naming Conventions
 - 4 spaces for Python, 2 spaces for markup and config files.

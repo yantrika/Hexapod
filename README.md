@@ -85,3 +85,20 @@ MESA_GL_VERSION_OVERRIDE=3.3 MESA_GLSL_VERSION_OVERRIDE=330 python scripts/brain
 ```
 
 Try `walk forward`, `please sit down`, `can you wave`, `turn left`, `hexa stop`, `halt`, `I sat down for lunch` (chat). The line printed for each input shows the matched phrase and score.
+
+## Speech (Step 7)
+
+Piper (offline TTS) runs as ONE long-lived subprocess; `voice/playback.py` speaks sentence by sentence through a queue that `clear()` can cancel at any moment (it is the only module that touches the speaker).
+
+```bash
+scripts/fetch_models.sh                  # Piper binary + voice, then pre-renders the fixed phrases (skips what exists)
+python scripts/say.py                    # type a line, hear it; /clear cancels, /quit exits; prints time to first sound
+python scripts/say.py "Hello, I am hexa" # one line and exit
+python scripts/say.py --phrase okay      # a pre-rendered phrase: no synthesis wait (--list-phrases)
+nice -n 19 python scripts/measure_voice.py --clear   # clear() latency on the speaker (quiet)
+nice -n 19 python scripts/measure_voice.py --body    # body tick time with and without Piper (add --gui)
+```
+
+Tests: `pytest tests/test_playback.py tests/test_tts.py` (no sound device, no Piper: fake engine, sink and clock). `pytest -m audio -s tests/test_tts_real.py` synthesizes with the real Piper and prints time to first audio and the real-time factor.
+
+Dev laptop numbers (Core i3 M380, no AVX; they vary with background load): model load about 1.0-2.6 s once at startup, then real-time factor 0.4-1.0 and 0.6-2 s to first audio for a short sentence. While Piper synthesizes it takes about two cores and roughly doubles the body's tick time (see the Risks table in `plan.md`); pre-rendered phrases cost nothing at speaking time. `PIPER_NICE` and `PIPER_CPU_LIST` in `config.py` exist but did not help in measurement. Re-measure on the Pi 5 in Step 11.
