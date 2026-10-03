@@ -102,3 +102,5 @@ nice -n 19 python scripts/measure_voice.py --body    # body tick time with and w
 Tests: `pytest tests/test_playback.py tests/test_tts.py` (no sound device, no Piper: fake engine, sink and clock). `pytest -m audio -s tests/test_tts_real.py` synthesizes with the real Piper and prints time to first audio and the real-time factor.
 
 Dev laptop numbers (Core i3 M380, no AVX; they vary with background load): model load about 1.0-2.6 s once at startup, then real-time factor 0.4-1.0 and 0.6-2 s to first audio for a short sentence. While Piper synthesizes it takes about two cores and roughly doubles the body's tick time (see the Risks table in `plan.md`); pre-rendered phrases cost nothing at speaking time. `PIPER_NICE` and `PIPER_CPU_LIST` in `config.py` exist but did not help in measurement. Re-measure on the Pi 5 in Step 11.
+
+**Dev rule (this laptop):** test voice with a headless body. GUI viewer plus Piper plus walking gives about 90 ms body ticks (11 ticks/s).
