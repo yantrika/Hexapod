@@ -9,3 +9,4 @@ logs/*.log
 assets/vosk/*/
 assets/piper/*.onnx
 assets/piper/*.onnx.json
+assets/piper/piper/

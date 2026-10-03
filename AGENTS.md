@@ -25,6 +25,7 @@ Avoid committing build output, caches, models, or secrets; add them to `.gitigno
 - `scripts/control_window.py` (Tkinter, parent process) owns the body process and talks to it ONLY through the Bridge (it imports `BodyProcess`, never the controller, gait or a backend). Its key logic lives in `scripts/control_logic.py` (pure, unit tested, clock injected); typed lines go through `commandline.parse_line`, the one text-command parser shared with `bridge_cli`. A key or button that the allowed actions cannot express is a schema question for the user, not something to patch locally.
 - The PyBullet window is a viewer only: no side panels, no preview buffers, no `addUserDebugText` (the Mesa-override build garbles its text). Camera, follow camera and shadows come from the `GUI_*` constants in `config.py`; `joint_jog` is the one dev tool that turns the slider panel back on.
 - Physics (240 Hz) and control (50 Hz) are driven by wall-clock time, not loop iteration counts. The body can run headless (PyBullet DIRECT) via a flag.
+- Piper is ALWAYS a long-lived process fed lines on stdin, never one process per sentence (measured: about 1.5 s model load per call on the dev laptop). Fixed phrases are pre-rendered, never synthesized at speaking time.
 - While TTS is playing (plus `SPEAK_TAIL_S`), STT results are discarded.
 
 ## Conventions

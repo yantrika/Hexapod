@@ -382,6 +382,7 @@ Targets to be measured and logged, not guarantees.
 | Vosk poor on open conversation | Accept for commands; whisper.cpp tiny/base is a later option for chat only |
 | Ollama slow on the Pi 5 | Small model, `CHAT_MAX_TOKENS`, `OLLAMA_TIMEOUT_S`, spoken fallback |
 | Servo brown-outs or Pi reset | Separate servo supply, common ground (Step 11) |
+| Piper slow on the dev laptop (measured, Core i3 M380, no AVX, `en_US-amy-low`) | AVX count 0 but Piper runs. One process per sentence: about 1.5 s model load per call, end-to-end real-time factor 1.4 (ruled out). Long-lived process: startup about 2.6 s once, then real-time factor 0.6-1.0, first audio 0.6 s for one word, 1.8 s for a short sentence, 4.2 s for a 4 s one (Piper emits a sentence only when it is done). So Piper is ALWAYS a long-lived process; fixed phrases and fillers are pre-rendered; replies are split into sentences with prefetch; the Pi 5 (NEON, faster core) is expected to be well under 1.0 (Step 7) |
 | Piper/Vosk models missing on a fresh checkout | `scripts/fetch_models.sh`; startup check that names the missing file |
 
 ## 11. Out of scope
