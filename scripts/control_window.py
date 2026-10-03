@@ -71,6 +71,9 @@ class ControlWindow:
         root.configure(padx=12, pady=10)
 
         self.state_var = tk.StringVar(value="starting the body process...")
+        self.mode_var = tk.StringVar()
+        self.mode_label = tk.Label(root, textvariable=self.mode_var, font=big, anchor="w")
+        self.mode_label.pack(fill="x", pady=(2, 0))
         self.last_var = tk.StringVar(value="")
         self.state_label = tk.Label(root, textvariable=self.state_var, font=big, anchor="w")
         self.state_label.pack(fill="x")
@@ -106,9 +109,11 @@ class ControlWindow:
         root.bind("<KeyPress>", self._on_press)
         root.bind("<KeyRelease>", self._on_release)
         root.bind("<FocusOut>", self._on_focus_out)
+        root.bind("<FocusIn>", lambda _e: self._show_mode())
         root.protocol("WM_DELETE_WINDOW", self.close)
-        self.entry.bind("<FocusIn>", lambda _e: self._dispatch(self.state.set_entry_focus(True)))
-        self.entry.bind("<FocusOut>", lambda _e: self._dispatch(self.state.set_entry_focus(False)))
+        self.entry.bind("<FocusIn>", lambda _e: self._entry_focus(True))
+        self.entry.bind("<FocusOut>", lambda _e: self._entry_focus(False))
+        root.bind("<Button-1>", self._on_click)  # a click anywhere but the box returns to the keys
         self.entry.bind("<Return>", self._on_enter)
         self.entry.bind("<Up>", lambda _e: self._recall(-1))
         self.entry.bind("<Down>", lambda _e: self._recall(1))
@@ -116,6 +121,7 @@ class ControlWindow:
         root.bind("<Return>", self._focus_entry)
         root.bind("<Tab>", self._focus_entry)
         root.focus_force()
+        self._show_mode()
 
     # --- input ------------------------------------------------------------------
     def _key_of(self, event: tk.Event) -> str:
@@ -129,6 +135,23 @@ class ControlWindow:
     def _on_release(self, event: tk.Event) -> None:
         self.state.key_release(self._key_of(event))
 
+    def _entry_focus(self, focused: bool) -> None:
+        self._dispatch(self.state.set_entry_focus(focused))
+        self._show_mode()
+
+    def _on_click(self, event: tk.Event) -> None:
+        if event.widget is not self.entry:
+            self.root.focus_set()
+
+    def _show_mode(self) -> None:
+        """Say which mode the keyboard is in: typing in the box, or driving with the keys."""
+        if self.state.entry_focused:
+            self.mode_var.set("TYPING in the box: keys are OFF. Press Esc or click outside it.")
+            self.mode_label.configure(fg="#c27a00")
+        else:
+            self.mode_var.set("KEYS ACTIVE: W A S D Q E move, Space stops.")
+            self.mode_label.configure(fg="#1b8a3a")
+
     def _focus_entry(self, _event: tk.Event) -> str:
         self.entry.focus_set()
         return "break"
@@ -140,15 +163,22 @@ class ControlWindow:
     def _check_focus(self) -> None:
         if not self.closing and self.root.focus_displayof() is None:
             self._dispatch(self.state.focus_lost())
+            self.mode_var.set("This window lost the focus (stop sent). CLICK IT to drive again.")
+            self.mode_label.configure(fg="#c0182b")
 
-    def _on_enter(self, _event: tk.Event) -> None:
+    def _on_enter(self, _event: tk.Event) -> str:
+        """Send the typed line and return to the keys. ``"break"`` keeps the window-level
+        Enter binding (which focuses the box) from undoing that."""
         line = self.entry.get().strip()
         self.entry.delete(0, "end")
         if not line:
-            return
+            self.root.focus_set()
+            return "break"
         self.history.append(line)
         self.history_index = len(self.history)
         self._send_text(line)
+        self.root.focus_set()  # back to the keys; Enter or Tab types the next command
+        return "break"
 
     def _recall(self, step: int) -> str:
         if self.history:
@@ -177,7 +207,7 @@ class ControlWindow:
                 self.sent[command.seq] = item.kind
                 if len(self.sent) > 500:
                     self.sent.pop(next(iter(self.sent)))
-            if echo or item.action in ("stop", "stand", "sit", "wave"):
+            if item.action != "heartbeat":  # typed, clicked or key-driven: show what was sent
                 self._log_line(f"-> {item.action} {item.params}", "echo")
         if any(item.action == "walk" for item in sends):
             self._show_scale()
