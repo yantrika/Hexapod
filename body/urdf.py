@@ -1,0 +1,165 @@
+"""Builds the hexapod URDF from ``config.py`` (no hand-written geometry).
+
+Joint conventions match ``body/kinematics.py``:
+- coxa axis +Z: positive is counter-clockwise from above.
+- femur axis -Y: positive raises the femur (foot moves up).
+- tibia axis -Y: positive opens the knee. The tibia link's zero pose points
+  straight down when the femur is horizontal, so all-zero joints are the
+  stand pose.
+
+Each leg's coxa joint sits at ``kinematics.hip_position`` rotated by
+``config.mount_yaw_rad``; nothing here reads the raw mount angles.
+Foot link origin = foot target (tibia tip); its contact sphere is shifted up
+by its radius so the lowest point of the foot is the target.
+"""
+
+from __future__ import annotations
+
+import math
+
+import config
+from body import kinematics
+
+_COLORS = {
+    "base": "0.35 0.35 0.4 1",
+    "coxa": "0.9 0.6 0.1 1",
+    "femur": "0.2 0.5 0.8 1",
+    "tibia": "0.3 0.7 0.4 1",
+    "foot": "0.1 0.1 0.1 1",
+}
+
+
+def _f(*values: float) -> str:
+    return " ".join(f"{v:.9g}" if abs(v) > 1e-12 else "0" for v in values)
+
+
+def _rod_inertia(mass: float, length: float, radius: float) -> tuple[float, float]:
+    """(axial, transverse) moments of a solid cylinder."""
+    return 0.5 * mass * radius**2, mass * (3 * radius**2 + length**2) / 12.0
+
+
+def _material(name: str) -> str:
+    return f'<material name="{name}_mat"><color rgba="{_COLORS[name]}"/></material>'
+
+
+def _cylinder(length: float, radius: float) -> str:
+    return f'<geometry><cylinder length="{_f(length)}" radius="{_f(radius)}"/></geometry>'
+
+
+def _inertial(centre: tuple[float, ...], mass: float, ixx: float, iyy: float, izz: float) -> str:
+    return (
+        f'<inertial><origin xyz="{_f(*centre)}" rpy="0 0 0"/><mass value="{_f(mass)}"/>'
+        f'<inertia ixx="{_f(ixx)}" ixy="0" ixz="0" iyy="{_f(iyy)}" iyz="0" izz="{_f(izz)}"/>'
+        "</inertial>"
+    )
+
+
+def _shape_tags(
+    kind: str, centre: tuple[float, ...], rpy: tuple[float, ...], geometry: str, collide: bool
+) -> str:
+    origin = f'<origin xyz="{_f(*centre)}" rpy="{_f(*rpy)}"/>'
+    tags = [f"<visual>{origin}{geometry}{_material(kind)}</visual>"]
+    if collide:
+        tags.append(f"<collision>{origin}{geometry}</collision>")
+    return "\n    ".join(tags)
+
+
+def _link(name: str, inertial: str, shapes: str) -> str:
+    return f'  <link name="{name}">\n    {inertial}\n    {shapes}\n  </link>'
+
+
+def _rod_link(name: str, kind: str, length: float, axis: str, collide: bool) -> str:
+    """A cylinder link along +X (axis='x') or -Z (axis='z'), COM at its midpoint."""
+    mass = config.LINK_MASS_KG[kind]
+    axial, transverse = _rod_inertia(mass, length, config.LINK_RADIUS_M)
+    if axis == "x":
+        centre = (length / 2, 0.0, 0.0)
+        rpy = (0.0, math.pi / 2, 0.0)
+        inertia = (axial, transverse, transverse)
+    else:
+        centre = (0.0, 0.0, -length / 2)
+        rpy = (0.0, 0.0, 0.0)
+        inertia = (transverse, transverse, axial)
+    geometry = _cylinder(length, config.LINK_RADIUS_M)
+    return _link(
+        name,
+        _inertial(centre, mass, *inertia),
+        _shape_tags(kind, centre, rpy, geometry, collide),
+    )
+
+
+def _foot_link(name: str) -> str:
+    mass = config.LINK_MASS_KG["foot"]
+    radius = config.FOOT_RADIUS_M
+    moment = 0.4 * mass * radius**2
+    geometry = f'<geometry><sphere radius="{_f(radius)}"/></geometry>'
+    return _link(
+        name,
+        _inertial((0.0, 0.0, 0.0), mass, moment, moment, moment),
+        _shape_tags("foot", (0.0, 0.0, radius), (0.0, 0.0, 0.0), geometry, collide=True),
+    )
+
+
+def _revolute(
+    name: str, parent: str, child: str, xyz: tuple[float, ...], yaw: float, axis: str, joint: str
+) -> str:
+    low, high = config.JOINT_HARD_LIMITS_DEG[joint]
+    limit = (
+        f'<limit lower="{_f(math.radians(low))}" upper="{_f(math.radians(high))}" '
+        f'effort="{_f(config.JOINT_MAX_FORCE_NM)}" '
+        f'velocity="{_f(config.JOINT_MAX_VELOCITY_RAD_S)}"/>'
+    )
+    return (
+        f'  <joint name="{name}" type="revolute">\n'
+        f'    <parent link="{parent}"/>\n    <child link="{child}"/>\n'
+        f'    <origin xyz="{_f(*xyz)}" rpy="{_f(0.0, 0.0, yaw)}"/>\n'
+        f'    <axis xyz="{axis}"/>\n    {limit}\n  </joint>'
+    )
+
+
+def _foot_joint(leg: str) -> str:
+    return (
+        f'  <joint name="{leg}_foot_joint" type="fixed">\n'
+        f'    <parent link="{leg}_tibia_link"/>\n    <child link="{leg}_foot"/>\n'
+        f'    <origin xyz="0 0 {_f(-config.TIBIA_LENGTH)}" rpy="0 0 0"/>\n  </joint>'
+    )
+
+
+def build_urdf() -> str:
+    """Return the full URDF text for the current ``config.py``."""
+    radius, thickness, mass = config.BODY_RADIUS, config.BODY_THICKNESS_M, config.BODY_MASS_KG
+    transverse = mass * (3 * radius**2 + thickness**2) / 12.0
+    geometry = _cylinder(thickness, radius)
+    parts = [
+        '<?xml version="1.0"?>',
+        "<!-- Generated by scripts/generate_urdf.py from config.py. Do not edit. -->",
+        '<robot name="hexapod">',
+        _link(
+            "base_link",
+            _inertial((0.0, 0.0, 0.0), mass, transverse, transverse, 0.5 * mass * radius**2),
+            _shape_tags("base", (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), geometry, collide=True),
+        ),
+    ]
+    for leg in config.LEG_NAMES:
+        yaw = config.mount_yaw_rad(leg)
+        hip = tuple(float(v) for v in kinematics.hip_position(leg))
+        femur_origin = (config.COXA_LENGTH, 0.0, 0.0)
+        tibia_origin = (config.FEMUR_LENGTH, 0.0, 0.0)
+        parts += [
+            _rod_link(f"{leg}_coxa_link", "coxa", config.COXA_LENGTH, "x", collide=False),
+            _rod_link(f"{leg}_femur_link", "femur", config.FEMUR_LENGTH, "x", collide=True),
+            _rod_link(f"{leg}_tibia_link", "tibia", config.TIBIA_LENGTH, "z", collide=True),
+            _foot_link(f"{leg}_foot"),
+            _revolute(f"{leg}_coxa", "base_link", f"{leg}_coxa_link", hip, yaw, "0 0 1", "coxa"),
+            _revolute(
+                f"{leg}_femur", f"{leg}_coxa_link", f"{leg}_femur_link",
+                femur_origin, 0.0, "0 -1 0", "femur",
+            ),
+            _revolute(
+                f"{leg}_tibia", f"{leg}_femur_link", f"{leg}_tibia_link",
+                tibia_origin, 0.0, "0 -1 0", "tibia",
+            ),
+            _foot_joint(leg),
+        ]
+    parts.append("</robot>")
+    return "\n".join(parts) + "\n"
