@@ -5,7 +5,7 @@
 ## Project Structure & Module Organization
 Flat top-level packages, no `src/`. See `plan.md` section 6 for the full tree.
 - `config.py` — single source of truth for geometry, joint limits, clamps, timing, router, audio, paths, models.
-- `bridge.py` — `Command` / `Status` dataclasses, queue creation, validation.
+- `bridge.py` — `Command` / `Status` dataclasses, queue creation, validation. `commandline.py` — the shared text-command parser.
 - `body/` — body process: `kinematics`, `poses`, `urdf`, `gait`, `controller`, `arbitration`, `clock`, `process`, and the backend seam (`backend.py`, `sim_backend.py`, `servo_backend.py`).
 - `brain/` — `router.py`, `chat.py`, `dialogue.py`.
 - `voice/` — `audio.py`, `stt.py`, `tts.py`, `playback.py`.
@@ -21,6 +21,9 @@ Avoid committing build output, caches, models, or secrets; add them to `.gitigno
 - Each body control tick drains the command queue: stale messages (older than `MAX_MESSAGE_AGE_S`) are dropped, `stop` always preempts everything (even if stale) and holds the current pose, other motion commands are latest-wins. `bridge.send` sets `stop_event` for every `stop`, and the body checks it each tick before draining. `sit`/`stand`/`wave` answer `busy` while a transition runs. A watchdog stops the body if no command or heartbeat arrives within `WATCHDOG_TIMEOUT_S` while walking or turning.
 - The brain speaks based on status messages from the body, never on assumption.
 - `body/process.py`: `BodyRunner` (in-process core), `run_body` (child loop), `BodyProcess` (parent handle: spawn context, `wait_ready`, `shutdown`). The body never blocks on a queue (`put_nowait`, drop-oldest), ignores SIGINT, and exits when told to or when its parent dies. Wait for `ready_event` before sending: commands older than `MAX_MESSAGE_AGE_S` are stale. `scripts/bridge_cli.py` is the manual front end; it may only use the Bridge.
+- `walk` params: `direction` + `speed`, plus optional `strafe` and `yaw` in [-1, 1] (+1 = left / counter-clockwise), scaled by `speed` and clamped in the controller only (never in the bridge or a front end); see plan.md section 3. The router and the voice never send `strafe` or `yaw`: they are for manual front ends only.
+- `scripts/control_window.py` (Tkinter, parent process) owns the body process and talks to it ONLY through the Bridge (it imports `BodyProcess`, never the controller, gait or a backend). Its key logic lives in `scripts/control_logic.py` (pure, unit tested, clock injected); typed lines go through `commandline.parse_line`, the one text-command parser shared with `bridge_cli`. A key or button that the allowed actions cannot express is a schema question for the user, not something to patch locally.
+- The PyBullet window is a viewer only: no side panels, no preview buffers, no `addUserDebugText` (the Mesa-override build garbles its text). Camera, follow camera and shadows come from the `GUI_*` constants in `config.py`; `joint_jog` is the one dev tool that turns the slider panel back on.
 - Physics (240 Hz) and control (50 Hz) are driven by wall-clock time, not loop iteration counts. The body can run headless (PyBullet DIRECT) via a flag.
 - While TTS is playing (plus `SPEAK_TAIL_S`), STT results are discarded.
 

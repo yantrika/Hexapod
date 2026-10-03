@@ -50,6 +50,18 @@ the backend API, so the hard joint limits still apply. Its slider panel is open 
 is hidden until you press `G`), each shown leg's angles are drawn in yellow above the robot,
 and `--legs RF` keeps the panel short.
 
+## Control window (Step 5b)
+
+`scripts/control_window.py` is a small Tkinter window that drives the body process through the bridge: keys, Stand/Sit/Wave buttons, a big STOP, a command box and a status log. The PyBullet window is only the viewer (no panels, no text); click the control window to drive.
+
+```bash
+MESA_GL_VERSION_OVERRIDE=3.3 MESA_GLSL_VERSION_OVERRIDE=330 python scripts/control_window.py   # dev laptop, with the viewer
+python scripts/control_window.py              # other machines, with the viewer
+python scripts/control_window.py --headless   # no viewer
+```
+
+Keys (only when the command box is not focused): W/S forward/back, A/D strafe, Q/E turn, Space stop, 1 stand, 2 sit, 3 wave, +/- speed. Hold to move, release to ramp to zero; W+A or W+Q combine. Enter or Tab focuses the command box, Esc returns to the keys. Losing focus or closing the window sends stop. The command box takes the same lines as `bridge_cli` (`walk fwd 0.5`, `strafe left`, `turn right 45`, ...). It needs `sudo apt install python3.11-tk`.
+
 ## Talking to the body process (Step 5)
 
 The body runs in its own process; `scripts/bridge_cli.py` sends typed commands through the bridge and prints the status replies. Type `stand`, `sit`, `wave`, `stop`, `walk fwd 0.5`, `walk back`, `turn left 90`, `quit`.

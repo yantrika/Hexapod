@@ -82,11 +82,13 @@ Command params:
 
 | action | params | notes |
 |---|---|---|
-| `walk` | `{"direction": "fwd"\|"back", "speed": 0.0-1.0}` | continuous until `stop`, a new motion command, or watchdog |
+| `walk` | `{"direction": "fwd"\|"back", "speed": 0.0-1.0}`, plus optional `"strafe"` and `"yaw"` (floats in [-1.0, 1.0]) | continuous until `stop`, a new motion command, or watchdog. See "Walk with strafe and yaw" below |
 | `turn` | `{"direction": "left"\|"right", "angle_deg": 1-180}` | finishes itself, then `done` |
 | `stand`, `sit`, `wave` | `{}` | `wave` finishes itself, then `done` |
 | `stop` | `{}` | preempts everything |
 | `heartbeat` | `{}` | refreshes the watchdog only; never answered |
+
+**Walk with strafe and yaw (Step 5b, backward compatible).** `walk` gains two optional params: `strafe` (+1 = left) and `yaw` (+1 = counter-clockwise), each in [-1.0, 1.0] and scaled by `speed` like the forward component. `direction` is required only when neither `strafe` nor `yaw` is given; with them it may be omitted (no forward component), so `{"strafe": 1.0, "speed": 0.5}` is a pure sideways walk and `{"direction": "fwd", "strafe": 1.0, "yaw": 0.5}` combines all three. A message without them behaves exactly as before. The controller maps them to one `set_velocity(vx, vy, yaw_rate)` and clamps to the max speed and max yaw rate (`gait.limit_command`); neither the bridge nor any front end clamps. Out-of-range or non-finite `strafe`/`yaw`/`speed` are `rejected(invalid_params)`. Such a walk is continuous like any walk: it needs heartbeats, the watchdog ramps it to zero, and latest-wins applies. A walk with all components zero ramps a walk down to a halt (the body then reports `done` for the walk), which is how the control window handles key release. The router and the voice never send `strafe` or `yaw`; only manual front ends (the control window, `bridge_cli`) do.
 
 Examples:
 
