@@ -166,18 +166,40 @@ SIM_REALTIME = True  # --no-realtime is for fast tests only
 ROUTER_THRESHOLD = 85  # rapidfuzz fuzz.ratio, 0-100
 ROUTER_MAX_WORDS = 4  # after filler removal
 ROUTER_FILLERS = ("please", "can you", "could you", "hexa", "hey", "now", "just")
-STOP_WORDS = ("stop", "halt", "freeze")  # match anywhere, highest priority
-# phrase -> (action, params)
+# Stop words match anywhere (whole words / phrases), highest priority. The accepted tradeoff:
+# "I can't stop laughing" and "do not stop talking" stop the robot (stopping errs on the safe side).
+STOP_WORDS = ("stop", "halt", "freeze", "whoa", "hold still", "stay still")
+_WALK_FWD = ("walk", {"direction": "fwd", "speed": 0.5})
+_WALK_BACK = ("walk", {"direction": "back", "speed": 0.5})
+_TURN_LEFT = ("turn", {"direction": "left", "angle_deg": TURN_DEFAULT_ANGLE_DEG})
+_TURN_RIGHT = ("turn", {"direction": "right", "angle_deg": TURN_DEFAULT_ANGLE_DEG})
+# phrase -> (action, params). Numbers are not parsed in v1; the router never sends strafe or yaw.
 ROUTER_PHRASES: dict[str, tuple[str, dict[str, object]]] = {
-    "walk forward": ("walk", {"direction": "fwd", "speed": 0.5}),
-    "go forward": ("walk", {"direction": "fwd", "speed": 0.5}),
-    "walk back": ("walk", {"direction": "back", "speed": 0.5}),
-    "turn left": ("turn", {"direction": "left", "angle_deg": TURN_DEFAULT_ANGLE_DEG}),
-    "turn right": ("turn", {"direction": "right", "angle_deg": TURN_DEFAULT_ANGLE_DEG}),
+    "walk": _WALK_FWD,
+    "walk forward": _WALK_FWD,
+    "walk ahead": _WALK_FWD,
+    "go forward": _WALK_FWD,
+    "move forward": _WALK_FWD,
+    "walk back": _WALK_BACK,
+    "walk backward": _WALK_BACK,
+    "go back": _WALK_BACK,
+    "go backward": _WALK_BACK,
+    "move back": _WALK_BACK,
+    "back up": _WALK_BACK,
+    "turn left": _TURN_LEFT,
+    "turn right": _TURN_RIGHT,
+    "sit": ("sit", {}),
     "sit down": ("sit", {}),
+    "stand": ("stand", {}),
     "stand up": ("stand", {}),
+    "get up": ("stand", {}),
     "wave": ("wave", {}),
+    "wave hello": ("wave", {}),
+    "wave hi": ("wave", {}),
 }
+
+# --- Brain (typed-text and voice front ends) -------------------------------
+VOICE_WALK_MAX_S = 10.0  # a walk started by text/voice stops being kept alive after this
 
 # --- Audio ---------------------------------------------------------------
 AUDIO_SAMPLE_RATE = 16000  # Vosk expects 16 kHz mono
