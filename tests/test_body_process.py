@@ -1,7 +1,8 @@
 """Step 5 checks with real spawned body processes (PyBullet DIRECT), kept light.
 
-One body is shared by most tests (spawning costs about a second); tests that need a
-fresh body (tipping over, shutdown, parent death) start their own.
+Wall-clock bound tests carry ``@pytest.mark.timing`` (run them on a quiet machine with
+``pytest -m timing``). One body is shared by most tests (spawning costs about a second);
+tests that need a fresh body (tipping over, shutdown, parent death) start their own.
 """
 
 from __future__ import annotations
@@ -135,6 +136,7 @@ def test_walk_then_stop(body: Body) -> None:
     assert done.detail["action"] == "stop"
 
 
+@pytest.mark.timing
 def test_stop_with_a_full_queue_stops_within_the_bound(body: Body) -> None:
     body.send("walk", **WALK)
     body.wait(lambda s: s.status == "accepted")
@@ -154,6 +156,7 @@ def test_stop_with_a_full_queue_stops_within_the_bound(body: Body) -> None:
     assert max(times) < config.BODY_TEST_STOP_MAX_S
 
 
+@pytest.mark.timing
 def test_stop_event_alone_stops_the_body_and_is_answered(body: Body) -> None:
     body.send("walk", **WALK)
     body.wait(lambda s: s.status == "accepted")
@@ -174,6 +177,7 @@ def _flood(bridge: Bridge, stop: threading.Event) -> None:
         bridge.send(new_command("walk", WALK))
 
 
+@pytest.mark.timing
 def test_flooding_the_queue_does_not_slow_the_body_tick(body: Body) -> None:
     body.send("walk", **WALK)
     body.wait(lambda s: s.status == "accepted")
@@ -205,6 +209,7 @@ def test_flooding_the_queue_does_not_slow_the_body_tick(body: Body) -> None:
     assert flooded[0] > 0.8 * idle[0]  # and the loop kept its rate
 
 
+@pytest.mark.timing
 def test_a_stalled_brain_does_not_stall_the_body(body: Body) -> None:
     """Nobody reads statuses: the status queue fills and drops, the body keeps ticking."""
     body.probe.reset_window()
@@ -326,6 +331,7 @@ def test_the_body_exits_when_its_parent_dies(tmp_path: Path) -> None:
         pytest.fail("the orphaned body process is still running")
 
 
+@pytest.mark.timing
 def test_latency_from_walk_to_first_foot_target_change(body: Body) -> None:
     samples = []
     for _ in range(20):
@@ -352,6 +358,7 @@ def test_latency_from_walk_to_first_foot_target_change(body: Body) -> None:
     assert max(move) < 3 * config.BODY_TEST_ACCEPT_MAX_S
 
 
+@pytest.mark.timing
 def test_idle_tick_cost_is_reported(body: Body) -> None:
     body.probe.reset_window()
     time.sleep(2.0)
@@ -373,6 +380,7 @@ def _walk_with_heartbeats(body: Body, seconds: float, **params: Any) -> None:
         body.collect(1.0 / config.HEARTBEAT_HZ)
 
 
+@pytest.mark.timing
 def test_a_strafe_walk_moves_the_body_sideways_and_stops_on_stop_event(body: Body) -> None:
     time.sleep(0.5)  # settled
     x0, y0, yaw0 = _pose(body)
@@ -395,6 +403,7 @@ def test_a_strafe_walk_moves_the_body_sideways_and_stops_on_stop_event(body: Bod
     assert abs(y3 - y2) < 0.01 and abs(x3 - x2) < 0.01  # at rest
 
 
+@pytest.mark.timing
 def test_old_style_walk_still_goes_straight_ahead(body: Body) -> None:
     time.sleep(0.5)
     x0, y0, _ = _pose(body)

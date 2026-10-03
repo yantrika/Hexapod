@@ -14,3 +14,7 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-m 'not timing'"
+markers = [
+    "timing: wall-clock bound tests, sensitive to machine load (run with: pytest -m timing)",
+]

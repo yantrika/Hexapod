@@ -73,4 +73,4 @@ python scripts/bridge_cli.py --headless --no-heartbeat   # a walk stops by itsel
 python -m body.process --headless                # idle body; Ctrl-C exits cleanly
 ```
 
-The CLI sends a heartbeat at `HEARTBEAT_HZ`; without heartbeats a walk or turn is stopped by the watchdog and reported as `done` with `reason=watchdog`. Run the tests one file at a time (`nice -n 19 pytest tests/test_body_process.py`): they spawn real processes and take about a minute.
+The CLI sends a heartbeat at `HEARTBEAT_HZ`; without heartbeats a walk or turn is stopped by the watchdog and reported as `done` with `reason=watchdog`. Tests with a wall-clock bound (tick cost, stop and walk latency, distance walked in real time) are marked `timing` and skipped by default: run timing tests on a quiet machine with `pytest -m timing`. Run the tests one file at a time (`nice -n 19 pytest tests/test_body_process.py`): they spawn real processes and take about a minute.
