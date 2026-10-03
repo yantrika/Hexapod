@@ -16,18 +16,16 @@ import os
 import sys
 import threading
 import time
-from collections.abc import Callable
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 for _var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
     os.environ.setdefault(_var, "1")  # single-threaded BLAS, before numpy loads (also in the child)
 
-import config  # noqa: E402
 from body.process import BodyProcess  # noqa: E402
-from brain.motion_keeper import MotionKeeper  # noqa: E402
-from brain.router import RouteResult, route  # noqa: E402
-from bridge import Bridge, Status, make_bridge, new_command  # noqa: E402
+from brain.brain_loop import BrainLoop  # noqa: E402
+from brain.router import RouteResult  # noqa: E402
+from bridge import make_bridge  # noqa: E402
 from commandline import format_status  # noqa: E402
 
 PUMP_S = 0.05  # status and heartbeat pump period
@@ -40,42 +38,6 @@ def describe(result: RouteResult) -> str:
         return f"[chat] {result.text}{near}"
     label = "STOP" if result.kind == "stop" else f"{result.action} {result.params}"
     return f"route: {label} <- {result.phrase!r} score {result.score:.0f}"
-
-
-class BrainLoop:
-    """Route text, send it, keep walks alive. Thread-safe: one lock around the keeper."""
-
-    def __init__(
-        self,
-        bridge: Bridge,
-        clock: Callable[[], float] = time.monotonic,
-        max_walk_s: float = config.VOICE_WALK_MAX_S,
-    ) -> None:
-        self.bridge = bridge
-        self.keeper = MotionKeeper(clock, max_walk_s)
-        self._lock = threading.Lock()
-
-    def handle_text(self, text: str) -> RouteResult:
-        """Route *text* and send the command. A stop is sent first and never waits."""
-        result = route(text)
-        if result.kind == "chat":
-            return result
-        command = new_command(result.action or "", result.params)
-        self.bridge.send(command)  # immediately; the keeper only observes afterwards
-        with self._lock:
-            self.keeper.on_sent(command)
-        return result
-
-    def pump(self) -> list[Status]:
-        """Read the body's statuses, feed the keeper and send the heartbeats that are due."""
-        statuses = self.bridge.receive_all()
-        with self._lock:
-            for status in statuses:
-                self.keeper.on_status(status)
-            beats = self.keeper.tick()
-        for beat in beats:
-            self.bridge.send(beat)
-        return statuses
 
 
 def _pump_forever(loop: BrainLoop, done: threading.Event) -> None:
@@ -96,6 +58,7 @@ def main() -> int:
     body = BodyProcess(bridge, headless=not args.gui)
     body.start()
     done = threading.Event()
+    loop: BrainLoop | None = None
     try:
         if not body.wait_ready():
             print("the body process did not start", file=sys.stderr)
@@ -115,6 +78,8 @@ def main() -> int:
         pass
     finally:
         done.set()
+        if loop is not None:
+            loop.close()
         body.shutdown()
     return 0
 

@@ -5,7 +5,7 @@
 # Usage: scripts/fetch_models.sh [-h|--help]     no argument = fetch everything known so far
 #   fetches: the Piper binary and the en_US-amy-low voice into assets/piper/, then renders the
 #   fixed phrases and fillers to assets/phrases/ (scripts/prerender_phrases.py; skips existing)
-#   (Vosk arrives in Step 8)
+#   and the small Vosk models (US English and Indian English) into assets/vosk/
 set -euo pipefail
 
 case "${1:-}" in
@@ -49,6 +49,19 @@ for suffix in .onnx .onnx.json; do
     curl -fsSL --retry 3 -o "${piper_dir}/${voice_file}${suffix}" "${VOICE_BASE}${suffix}?download=true"
   fi
 done
+vosk_dir="${root}/assets/vosk"
+mkdir -p "${vosk_dir}"
+for model in vosk-model-small-en-us-0.15 vosk-model-small-en-in-0.4; do
+  if [[ -d "${vosk_dir}/${model}" ]]; then
+    echo "skip: ${model} already present"
+  else
+    echo "vosk: downloading ${model}"
+    curl -fsSL --retry 3 -o "${vosk_dir}/${model}.zip" "https://alphacephei.com/vosk/models/${model}.zip"
+    unzip -q -o "${vosk_dir}/${model}.zip" -d "${vosk_dir}"
+    rm -f "${vosk_dir}/${model}.zip"
+  fi
+done
+
 if [[ -x "${root}/.venv/bin/python" ]]; then python="${root}/.venv/bin/python"; else python=python3; fi
 "${python}" "${root}/scripts/prerender_phrases.py"
-echo "done: ${piper_dir}"
+echo "done"

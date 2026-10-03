@@ -10,6 +10,7 @@ import numpy as np
 import config
 from body.backend import BasePose, HexapodBackend, JointArray
 from body.clock import ManualClock
+from voice.stt import SttEvent
 from voice.tts import AudioClip
 
 
@@ -152,3 +153,36 @@ class FakeSink:
 
     def close(self) -> None:
         self.closed = True
+
+
+# --- recognizer double (Step 8) -----------------------------------------------------------------
+class FakeStt:
+    """An SttEngine driven by block markers: a block filled with value *v* makes ``feed`` return
+    ``script[v]`` as events (value 0 = silence, no events). Records what it was fed."""
+
+    def __init__(
+        self,
+        script: dict[int, list[tuple[str, str]]] | None = None,
+        fail_on_calls: tuple[int, ...] = (),
+    ) -> None:
+        self.script = script or {}
+        self.fail_on_calls = fail_on_calls
+        self.fed: list[int] = []  # marker of every block that reached the recognizer
+        self.calls = 0
+        self.resets = 0
+
+    def feed(self, block: np.ndarray) -> list[SttEvent]:
+        self.calls += 1
+        if self.calls in self.fail_on_calls:
+            raise RuntimeError("synthetic recognizer failure")
+        marker = int(block[0])
+        self.fed.append(marker)
+        events = self.script.get(marker, [])
+        return [SttEvent(kind, text, time.monotonic()) for kind, text in events]
+
+    def reset(self) -> None:
+        self.resets += 1
+
+
+def marker_block(value: int, size: int = 100) -> np.ndarray:
+    return np.full(size, value, dtype=np.int16)

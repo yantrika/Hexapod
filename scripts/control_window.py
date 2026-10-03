@@ -25,6 +25,7 @@ for _var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
     os.environ.setdefault(_var, "1")  # single-threaded BLAS, before numpy loads (also in the child)
 
 from body.process import BodyProcess  # noqa: E402
+from brain.status_hub import StatusHub  # noqa: E402
 from bridge import Status, make_bridge, new_command  # noqa: E402
 from commandline import HELP, format_status, parse_line  # noqa: E402
 from scripts.control_logic import (  # noqa: E402
@@ -50,6 +51,9 @@ class ControlWindow:
         self.root = root
         self.bridge = make_bridge()
         self.body = BodyProcess(self.bridge, headless=headless)
+        self.hub = StatusHub(self.bridge)  # the one reader of the status queue
+        self.statuses = self.hub.subscribe("control-window")
+        self.hub.start()
         self.state = ControlState(time.monotonic)
         self.sent: dict[int, str] = {}  # seq -> Send.kind, to follow the body's statuses
         self.label = "standing"
@@ -226,7 +230,7 @@ class ControlWindow:
             self._show_state()
         elif not self.ready and not self.body.alive:
             self.state_var.set("the body process died; see the terminal")
-        for status in self.bridge.receive_all():  # get_nowait: the UI never waits on the body
+        for status in self.statuses.get_all():  # get_nowait: the UI never waits on the body
             self._on_status(status)
         self.root.after(STATUS_POLL_MS, self._poll_status)
 
@@ -263,6 +267,7 @@ class ControlWindow:
             self._dispatch(self.state.close())
             time.sleep(0.05)  # let the stop reach the queue before the body is told to exit
         self.closing = True
+        self.hub.stop()
         self.body.shutdown()
         self.root.destroy()
 
@@ -281,6 +286,7 @@ def main() -> int:
     except KeyboardInterrupt:
         window.close()
     finally:
+        window.hub.stop()
         window.body.shutdown()
     return 0
 

@@ -64,6 +64,7 @@ def rig() -> Iterator[Callable[..., Rig]]:
 
     yield make
     for item in made:
+        item.brain.close()
         item.body.shutdown()
 
 

@@ -63,8 +63,8 @@ We do one step at a time. Each step ends with all tests passing. We wait for app
 | 4 | The controller and timing | done |
 | 5 | The link between brain and body, stop, heartbeat | done |
 | 6 | The router (words to commands) | done |
-| 7 | Speech out (Piper) with a playback queue you can cancel | built, waiting for approval |
-| 8 | Speech in (Vosk) and no self-hearing | next |
+| 7 | Speech out (Piper) with a playback queue you can cancel | done |
+| 8 | Speech in (Vosk) and no self-hearing | built, waiting for approval |
 | 9 | Talking from status, chat with Ollama, full `main.py` | later |
 | 10 | Interrupt the robot while it talks (barge-in), push-to-talk | later |
 | 11 | Real robot on the Pi 5 | later |

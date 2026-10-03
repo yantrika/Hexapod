@@ -104,3 +104,20 @@ Tests: `pytest tests/test_playback.py tests/test_tts.py` (no sound device, no Pi
 Dev laptop numbers (Core i3 M380, no AVX; they vary with background load): model load about 1.0-2.6 s once at startup, then real-time factor 0.4-1.0 and 0.6-2 s to first audio for a short sentence. While Piper synthesizes it takes about two cores and roughly doubles the body's tick time (see the Risks table in `plan.md`); pre-rendered phrases cost nothing at speaking time. `PIPER_NICE` and `PIPER_CPU_LIST` in `config.py` exist but did not help in measurement. Re-measure on the Pi 5 in Step 11.
 
 **Dev rule (this laptop):** test voice with a headless body. GUI viewer plus Piper plus walking gives about 90 ms body ticks (11 ticks/s).
+
+## Voice in (Step 8)
+
+Microphone, Vosk (offline), the router and the body, with hexa ignoring its own voice. Models come from `scripts/fetch_models.sh` (small US English `us` and small Indian English `in`).
+
+```bash
+python scripts/mic_check.py                  # lists inputs, records 3 s, prints peak and RMS: speak!
+python scripts/stt_check.py --model us       # say each phrase, see what Vosk heard and what the router did
+python scripts/stt_check.py --model in       # the same with the Indian English model, to compare
+python scripts/voice_cli.py                  # the whole loop, headless body: say "walk forward", "stop"
+python scripts/voice_cli.py --model in       # other model;  --no-speak: no Piper;  --gui: viewer
+nice -n 19 python scripts/measure_voice.py --stt     # Vosk cost, body ticks with Vosk, voice latency
+```
+
+Say "walk forward", "sit down", "stand up", "turn left", "wave", "stop". After a command hexa says "okay" (a placeholder; speech from body statuses is Step 9) and the microphone is ignored while it speaks and for `SPEAK_TAIL_S` after. Tests (no microphone or speaker): `pytest tests/test_status_hub.py tests/test_audio.py tests/test_stt_gate.py` (fake recognizer), `pytest tests/test_voice_loop.py` (real Vosk on Piper-rendered speech, skipped without models), `nice -n 19 pytest tests/test_voice_body.py` (end to end with a headless body; run alone).
+
+Dev laptop numbers (they move with background load): Vosk uses about 15-25 % of a core, real-time factor 0.07-0.11 decoding speech; it adds about 1-2 ms to the body's mean tick. Spoken "walk forward" is sent about 0.85 s after you stop talking (Vosk waits for silence) and the first foot target moves about 0.25 s later. Piper busy at the same time is still the expensive part (see Speech above).

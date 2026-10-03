@@ -21,14 +21,21 @@ import threading
 import time
 from pathlib import Path
 
+import numpy as np
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 for _var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
     os.environ.setdefault(_var, "1")
 
 import config  # noqa: E402
 from body.process import BodyProbe, BodyProcess  # noqa: E402
+from brain.brain_loop import BrainLoop  # noqa: E402
+from brain.status_hub import StatusHub  # noqa: E402
+from brain.voice_loop import VoiceEvent, VoiceLoop  # noqa: E402
 from bridge import make_bridge, new_command  # noqa: E402
+from voice.audio import FileSource  # noqa: E402
 from voice.playback import Playback, SoundDeviceSink  # noqa: E402
+from voice.stt import VoskStt  # noqa: E402
 from voice.tts import AudioClip, PiperEngine, TtsError  # noqa: E402
 
 SENTENCES = [
@@ -192,11 +199,195 @@ def measure_clear(trials: int) -> int:
     return 0
 
 
+STT_PHRASES = ["walk forward", "sit down", "I sat down for lunch", "stop", "stand up"]
+
+
+def render_speech(engine: PiperEngine) -> dict[str, np.ndarray]:
+    return {text: engine.synthesize(text).samples for text in STT_PHRASES}
+
+
+def speech_mix(clips: dict[str, np.ndarray], seconds: float) -> np.ndarray:
+    """The phrases one after another with 0.6 s gaps, repeated to last *seconds*."""
+    gap = np.zeros(int(0.6 * config.AUDIO_SAMPLE_RATE), dtype=np.int16)
+    parts: list[np.ndarray] = []
+    total = 0
+    while total < seconds * config.AUDIO_SAMPLE_RATE:
+        for clip in clips.values():
+            parts += [clip, gap]
+            total += len(clip) + len(gap)
+    return np.concatenate(parts)[: int(seconds * config.AUDIO_SAMPLE_RATE)]
+
+
+def vosk_cpu(stt: VoskStt, samples: np.ndarray, label: str) -> None:
+    """Vosk alone (no body): CPU share fed in real time, and the decode real-time factor."""
+    source = FileSource(samples, realtime=True, pad_silence_s=0.0)
+    source.start()
+    cpu0, wall0, audio = time.process_time(), time.perf_counter(), 0.0
+    while True:
+        try:
+            block = source.read(0.5)
+        except Exception:  # EndOfAudio
+            break
+        if block is not None:
+            stt.feed(block)
+            audio += len(block) / config.AUDIO_SAMPLE_RATE
+    cpu, wall = time.process_time() - cpu0, time.perf_counter() - wall0
+    print(f"  {label}: {audio:.1f} s of audio in real time, Vosk CPU {cpu / wall * 100:.0f} % "
+          f"of one core")
+    stt.reset()
+    fast = FileSource(samples, realtime=False, pad_silence_s=0.0)
+    fast.start()
+    started, count = time.process_time(), 0.0
+    while True:
+        try:
+            block = fast.read(0.5)
+        except Exception:
+            break
+        if block is not None:
+            stt.feed(block)
+            count += len(block) / config.AUDIO_SAMPLE_RATE
+    took = time.process_time() - started
+    print(f"  {label}: decode as fast as possible: {took:.2f} s CPU for {count:.1f} s of audio, "
+          f"real-time factor {took / count:.2f}")
+    stt.reset()
+
+
+def measure_stt(gui: bool) -> int:
+    engine = PiperEngine()
+    try:
+        engine.check_installed()
+        stt = VoskStt()
+    except Exception as error:  # noqa: BLE001
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    engine.start()
+    clips = render_speech(engine)
+    print(f"model {stt.model_path.name}; this process nice {os.nice(0)}")
+    print("a/d. Vosk alone")
+    vosk_cpu(stt, np.zeros(10 * config.AUDIO_SAMPLE_RATE, dtype=np.int16), "silence")
+    vosk_cpu(stt, speech_mix(clips, 10.0), "speech ")
+
+    bridge = make_bridge()
+    probe = BodyProbe()
+    body = BodyProcess(bridge, headless=not gui, probe=probe)
+    body.start()
+    hub = StatusHub(bridge)
+    hub.start()
+    brain = BrainLoop(bridge, hub=hub)
+    try:
+        if not body.wait_ready():
+            print("error: the body did not become ready", file=sys.stderr)
+            return 1
+        print(f"mode: {'GUI viewer' if gui else 'headless'}")
+        bridge.send(new_command("stand", {}))
+        time.sleep(3.0)
+        bridge.send(new_command("walk", {"direction": "fwd", "speed": 0.5}))
+        time.sleep(1.0)
+        walking = Window(body, probe, brain)
+        print("b1. body walking, no voice")
+        walking.run(None, None, engine=None)
+        silence = np.zeros(int((WINDOW_S + 4) * config.AUDIO_SAMPLE_RATE), dtype=np.int16)
+        print("b2. body walking, Vosk running on silence")
+        walking.run(stt, silence, engine=None)
+        print("b3. body walking, Vosk on silence + Piper busy")
+        walking.run(stt, silence, engine=engine)
+        bridge.send(new_command("stop", {}))
+        time.sleep(1.5)
+        print("c. end of speech -> command sent -> first foot-target change (\"walk forward\")")
+        latencies = []
+        for trial in range(3):
+            latencies.append(latency_trial(stt, clips["walk forward"], bridge, probe, brain))
+            bridge.send(new_command("stop", {}))
+            time.sleep(2.0)
+            print(f"  trial {trial + 1}: " + ", ".join(f"{name} {value * 1000:.0f} ms"
+                  for name, value in latencies[-1].items()))
+        for name in latencies[0]:
+            values = [trial[name] for trial in latencies]
+            print(f"  {name}: median {statistics.median(values) * 1000:.0f} ms, "
+                  f"worst {max(values) * 1000:.0f} ms")
+    finally:
+        bridge.send(new_command("stop", {}))
+        brain.close()
+        hub.stop()
+        engine.close()
+        body.shutdown()
+    return 0
+
+
+class Window:
+    """Body tick statistics over a window while a voice loop (and Piper) run."""
+
+    def __init__(self, body: BodyProcess, probe: BodyProbe, brain: BrainLoop) -> None:
+        self.body, self.probe, self.brain = body, probe, brain
+
+    def run(
+        self, stt: VoskStt | None, audio: np.ndarray | None, engine: PiperEngine | None
+    ) -> None:
+        bridge = self.body.bridge
+        loop = None
+        if stt is not None and audio is not None:
+            stt.reset()
+            loop = VoiceLoop(FileSource(audio, realtime=True, pad_silence_s=0.0), stt, self.brain,
+                             threading.Event(), None)
+            loop.start()
+        load = PiperLoad(engine) if engine is not None else None
+        cpu0 = time.process_time()
+        piper0 = proc_cpu_seconds(engine.pid) if engine and engine.pid else 0.0
+        self.probe.reset_window()
+        started = time.monotonic()
+        if load:
+            load.start()
+        next_beat = 0.0
+        while time.monotonic() - started < WINDOW_S:
+            if time.monotonic() >= next_beat:
+                bridge.send(new_command("heartbeat", {}))
+                next_beat = time.monotonic() + 1.0 / config.HEARTBEAT_HZ
+            self.brain.pump()
+            time.sleep(0.05)
+        elapsed = time.monotonic() - started
+        ticks, mean, worst = self.probe.window()
+        cpu = time.process_time() - cpu0
+        print(f"  body tick work: mean {mean * 1000:.2f} ms, worst {worst * 1000:.1f} ms, "
+              f"{ticks / elapsed:.1f} ticks/s (nominal {config.CONTROL_HZ:.0f}); "
+              f"this process CPU {cpu / elapsed * 100:.0f} % of one core")
+        if load and engine and engine.pid:
+            load.stop_flag.set()
+            load.join(30)
+            print(f"  piper: {piper_summary(load.took, load.audio)}; "
+                  f"CPU {(proc_cpu_seconds(engine.pid) - piper0) / elapsed * 100:.0f} %")
+        if loop is not None:
+            loop.shutdown()
+
+
+def latency_trial(
+    stt: VoskStt, walk: np.ndarray, bridge: object, probe: BodyProbe, brain: BrainLoop
+) -> dict[str, float]:
+    stt.reset()
+    source = FileSource(walk, realtime=True, lead_silence_s=0.5, pad_silence_s=3.0)
+    routed: list[VoiceEvent] = []
+    loop = VoiceLoop(source, stt, brain, threading.Event(), None,
+                     lambda e: routed.append(e) if e.kind == "route" else None)
+    before = probe.get("change_time")
+    loop.start()
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline and (not routed or probe.get("change_time") <= before):
+        brain.pump()
+        time.sleep(0.005)
+    loop.shutdown()
+    speech_end = source.speech_end_at or 0.0
+    sent = routed[0].timestamp if routed else float("nan")
+    moved = probe.get("change_time")
+    return {"end of speech to command sent": sent - speech_end,
+            "command sent to first foot-target change": moved - sent,
+            "end of speech to first foot-target change": moved - speech_end}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--body", action="store_true", help="body tick time with and without Piper")
     parser.add_argument("--gui", action="store_true", help="with --body: open the PyBullet window")
     parser.add_argument("--clear", action="store_true", help="clear() latency on the real speaker")
+    parser.add_argument("--stt", action="store_true", help="Vosk cost and voice latency")
     parser.add_argument("--piper-nice", type=int, default=config.PIPER_NICE)
     parser.add_argument("--piper-cpus", default=config.PIPER_CPU_LIST, help="taskset list, e.g. 3")
     parser.add_argument("--body-cpus", help="pin the body process to these CPUs, e.g. 0,2")
@@ -204,6 +395,8 @@ def main() -> int:
     args = parser.parse_args()
     if args.clear:
         return measure_clear(args.trials)
+    if args.stt:
+        return measure_stt(args.gui)
     if args.body:
         cpus = {int(n) for n in args.body_cpus.split(",")} if args.body_cpus else None
         return measure_body(args.gui, args.piper_nice, args.piper_cpus, cpus)

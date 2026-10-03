@@ -206,11 +206,18 @@ ROUTER_ALIASES: dict[str, tuple[str, dict[str, object]]] = {
 
 # --- Brain (typed-text and voice front ends) -------------------------------
 VOICE_WALK_MAX_S = 10.0  # a walk started by text/voice stops being kept alive after this
+VOICE_PUMP_S = 0.05  # the voice worker serves heartbeats and statuses at least this often
+VOICE_ACK_PHRASE = "okay"  # spoken after a routed command (placeholder until Step 9)
+STATUS_SUBSCRIBER_MAXSIZE = 64  # per subscriber; the oldest status is dropped when it is full
+STATUS_HUB_POLL_S = 0.05  # the hub's single reader wakes this often to notice a shutdown
 
 # --- Audio ---------------------------------------------------------------
 AUDIO_SAMPLE_RATE = 16000  # Vosk expects 16 kHz mono
 AUDIO_BLOCKSIZE = 4000  # 250 ms
 MIC_DEVICE: int | None = None
+MIC_QUEUE_BLOCKS = 16  # the mic callback only copies into this bounded queue (about 4 s)
+STT_READ_TIMEOUT_S = 0.2  # the STT thread wakes this often to notice a shutdown
+STT_ERROR_BACKOFF_S = 0.5  # pause after a source or recognizer error, then carry on
 SPEAKER_DEVICE: int | None = None
 SPEAK_TAIL_S = 0.4  # STT stays gated this long after TTS ends
 UTTERANCE_QUEUE_MAXSIZE = 8
@@ -244,7 +251,12 @@ TTS_PHRASES: dict[str, str] = {
 }
 
 # --- Models --------------------------------------------------------------
-VOSK_MODEL_PATH = VOSK_DIR / "vosk-model-small-en-us-0.15"
+VOSK_MODELS = {  # short name -> directory under assets/vosk (scripts/fetch_models.sh)
+    "us": "vosk-model-small-en-us-0.15",
+    "in": "vosk-model-small-en-in-0.4",
+}
+VOSK_MODEL_DEFAULT = "us"
+VOSK_MODEL_PATH = VOSK_DIR / VOSK_MODELS[VOSK_MODEL_DEFAULT]
 PIPER_BINARY = PIPER_DIR / "piper" / "piper"  # standalone binary, ONE long-lived subprocess
 PIPER_MODEL_PATH = PIPER_DIR / "en_US-amy-low.onnx"
 # Optional isolation of Piper from the control loop (measured: unconstrained, its two compute
