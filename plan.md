@@ -324,6 +324,8 @@ Each step is small, ends green (`pytest`, `ruff check .`, `mypy .`), and waits f
 ### Step 8 — STT, self-hearing protection, voice-to-body wiring
 - **Goal**: spoken commands move the simulated robot, and the robot cannot hear itself.
 - **Files**: `voice/audio.py`, `voice/stt.py`, `scripts/fetch_models.sh` (Vosk part), `main.py` (voice commands only), `tests/test_stt_gate.py`.
+- **AudioSource interface (required)**: between audio capture and Vosk sits a small `AudioSource` interface in `voice/audio.py` that yields 16 kHz mono int16 blocks (`AUDIO_SAMPLE_RATE`, `AUDIO_BLOCKSIZE`), with `start()`/`stop()`/`read(timeout)`. Step 8 ships the local-microphone implementation (`MicSource`, sounddevice) and a fake/file source for tests. `stt.py` depends only on the interface, never on sounddevice, so a network-stream source (the Step 12 web UI's WebSocket audio) can be added later with no change to STT, the gate or the router.
+- **Status subscribers (required, built with the voice loop)**: the body's `status_queue` has ONE reader, a status hub in the brain (`brain/status_hub.py`) that fans every status out to any number of subscribers (dialogue/speech, the motion keeper, CLI, control window, the web UI later); each subscriber has its own small drop-oldest queue so a slow subscriber never blocks the others or the body. Nothing else reads `status_queue` directly.
 - **Verify**: `scripts/fetch_models.sh`; `pytest tests/test_stt_gate.py`; `python main.py --headless` then say "walk forward", "stop" (check log); manual self-hearing check below.
 - **Self-hearing protection**: STT results (partial and final) are discarded while `speaking.is_set()` or within `SPEAK_TAIL_S` after it clears. The mic stream is still read while gated, and the recognizer is reset when the gate opens so audio captured during speech is never decoded.
 - **Tests** (fake clock): results inside the speaking window and the tail are discarded; the first result after the tail is accepted; gate state survives rapid speak/clear cycles.
@@ -333,6 +335,7 @@ Each step is small, ends green (`pytest`, `ruff check .`, `mypy .`), and waits f
 ### Step 9 — Status-driven speech, chat fallback, full `main.py`
 - **Goal**: the brain speaks from body status; open conversation goes to Ollama.
 - **Files**: `brain/dialogue.py`, `brain/chat.py`, `main.py`, `tests/test_dialogue.py`, `tests/test_chat.py`.
+- **Status subscribers**: `dialogue.py` is one subscriber of the status hub introduced in Step 8 (not a second reader of `status_queue`); `brain_cli` moves onto the hub too. Test that two subscribers each see every status and that a stalled subscriber does not delay the other.
 - **Verify**: `pytest tests/test_dialogue.py tests/test_chat.py`; `ollama serve` running, then `python main.py` and talk.
 - **Tests**: each status maps to the right phrase (`rejected/already_in_state` gives "I'm already sitting"); heartbeats are sent only while the body is walking or turning; chat uses `requests` against a stubbed server, honours `OLLAMA_TIMEOUT_S`, and degrades to a spoken apology when Ollama is down.
 - **Done when**: full loop works in the sim (commands, status speech, chat) and killing the brain stops a walking body within `WATCHDOG_TIMEOUT_S`.
@@ -340,6 +343,7 @@ Each step is small, ends green (`pytest`, `ruff check .`, `mypy .`), and waits f
 ### Step 10 — Barge-in
 - **Goal**: the user can interrupt hexa mid-sentence.
 - **Files**: `voice/stt.py`, `voice/playback.py`, `brain/chat.py`, `tests/test_barge_in.py`.
+- **Push-to-talk (alternative to the wake word)**: besides always-listening mode (wake-word detection stays out of scope), STT can be gated by a push-to-talk signal: audio is decoded only while the button/key is held (a keyboard key locally; the Step 12 web button later). Pressing it also counts as barge-in (`playback.clear()`). The self-hearing gate still applies. Tests with a fake clock: nothing is decoded while released, the utterance is finalised on release.
 - **Verify**: `pytest tests/test_barge_in.py`; manual interruption test.
 - **Behaviour**: confirmed user speech during TTS calls `playback.clear()` and cancels the in-flight chat request; `stop` always works even while hexa is talking. This replaces the simple self-hearing gate during speech, so it needs a way to tell the user from hexa's own voice (default 5 in section 12).
 - **Done when**: interrupting stops speech within `TTS_CLEAR_MAX_S` and hexa does not interrupt itself.
@@ -351,6 +355,21 @@ Each step is small, ends green (`pytest`, `ruff check .`, `mypy .`), and waits f
 - **Verify**: `pytest tests/test_servo_backend.py`; calibration script with the robot held off the ground; then ground tests starting with `stand`.
 - **Power (required)**: the 18 servos need a **separate high-current 5–6 V supply**, with a common ground to the Pi. **The Pi must never power the servos.** Add a physical power switch as the emergency stop.
 - **Done when**: stand, sit, walk, stop behave like the sim, and pulling the brain process stops the robot via the watchdog.
+
+### Step 12 — Phone web UI on the Pi (later, after the Pi deployment)
+- **Goal**: drive and talk to the robot from a phone on the local Wi-Fi, served by the Pi.
+- **Features**: hold-to-move buttons (forward, back, strafe left/right, turn left/right), stand / sit / wave / stop, a push-to-talk button that streams 16 kHz mono audio over a WebSocket to Vosk on the Pi, and a live status line (posture, last status, connection, who is in control).
+- **Architecture rules**: the web server runs in the brain process and talks to the body ONLY through the `Bridge`, exactly like `scripts/control_window.py`; it is a status-hub subscriber (Step 8/9), not a second reader of `status_queue`. Typed commands go through `commandline.parse_line`; spoken audio enters through the network `AudioSource` (Step 8) into the normal STT, gate and router, so the router and voice rules are unchanged (router and voice never send `strafe` or `yaw`; the manual buttons may, like `control_window.py`). Clamps stay in the controller.
+- **Requirements**:
+  - HTTPS with a self-signed certificate (the browser microphone needs a secure origin); generated by a script, never committed; the page explains the one-time browser warning.
+  - No browser or cloud speech recognition (offline rule): the page only captures and streams audio; recognition is Vosk on the Pi.
+  - A PIN or token required to connect (set in a gitignored local config), compared in constant time, with rate limiting on failures.
+  - One controller at a time: a second client is refused or read-only; control can be taken over only with the PIN.
+  - Stop on disconnect: a closed socket, a lost connection or a missed web heartbeat sends `stop` through the bridge at once (on top of the body watchdog, which stays the last line of defence).
+  - Touch hold-to-move with heartbeats: a held button sends the motion command once and then heartbeats at `HEARTBEAT_HZ`; release, touch cancel, page hidden or blur sends `stop`/zero. Multi-touch and long-press menus must not leave a button stuck.
+  - Optional Pi-hosted Wi-Fi hotspot for demos (no router needed), documented, with the same HTTPS and PIN rules.
+- **Tests** (no real phone): server logic with a fake bridge: the PIN is enforced; a second controller is refused; a disconnect sends `stop`; hold/release produce command then heartbeats then stop; a stalled client cannot block the status hub.
+- **Done when**: from a phone, hold-to-move walks the robot and releasing or losing Wi-Fi stops it, push-to-talk "walk forward" works, and the wrong PIN is refused.
 
 ## 9. Performance targets
 
@@ -389,7 +408,7 @@ Targets to be measured and logged, not guarantees.
 
 ## 11. Out of scope
 
-Vision, SLAM, navigation or obstacle avoidance; IMU balance control and rough terrain; gaits other than tripod; wake-word detection, speaker identification, multi-language; cloud STT/TTS/LLM; web or GUI control panel; mechanical design and CAD; battery management; over-the-air updates. Barge-in and hardware are in scope but only at Steps 10 and 11.
+Vision, SLAM, navigation or obstacle avoidance; IMU balance control and rough terrain; gaits other than tripod; wake-word detection, speaker identification, multi-language; cloud STT/TTS/LLM (and browser speech recognition); a web control panel before Step 12; mechanical design and CAD; battery management; over-the-air updates. Barge-in, hardware and the phone web UI are in scope but only at Steps 10, 11 and 12.
 
 ## 12. Open Questions
 
