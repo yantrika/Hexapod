@@ -220,3 +220,18 @@ def test_gait_module_is_pure() -> None:
     source = (Path(config.PROJECT_ROOT) / "body" / "gait.py").read_text()
     for forbidden in ("pybullet", "import time", "monotonic", "sleep"):
         assert forbidden not in source
+
+
+def test_swing_height_shrinks_with_the_stride_so_ramps_to_zero_have_no_jump() -> None:
+    # Half the stride that gives a full lift -> half the swing height.
+    half = BodyVelocity(vx=0.5 * PARAMS.full_lift_stride_m / PARAMS.stance_time_s)
+    peak = max(
+        gait.foot_targets(p, half)[LEG_INDEX["RM"], 2] - GROUND for p in np.linspace(0, 1, 200)
+    )
+    assert peak == pytest.approx(0.5 * PARAMS.swing_height_m, abs=2e-4)
+    # And targets approach the neutral stance continuously as the command goes to zero.
+    for scale in (1e-2, 1e-3, 1e-4):
+        tiny = BodyVelocity(vx=MAX_V * scale)
+        for phase in (0.0, 0.1, 0.25, 0.4, 0.6, 0.9):
+            gap = np.abs(gait.foot_targets(phase, tiny) - gait.foot_targets(phase, BodyVelocity()))
+            assert gap.max() <= 0.2 * scale + 1e-12

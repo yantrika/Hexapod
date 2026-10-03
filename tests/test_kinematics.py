@@ -183,3 +183,14 @@ def test_neutral_foot_height_equals_stand_height() -> None:
     assert NEUTRAL[2] == pytest.approx(-config.BODY_HEIGHT_STAND)
     for leg in config.LEG_NAMES:
         assert kin.neutral_foot_body(leg)[2] == pytest.approx(-config.BODY_HEIGHT_STAND)
+
+
+def test_foot_positions_body_matches_per_leg_fk_and_neutral() -> None:
+    zero = np.zeros((6, 3))
+    for i, leg in enumerate(config.LEG_NAMES):
+        assert kin.foot_positions_body(zero)[i] == pytest.approx(kin.neutral_foot_body(leg))
+    angles = np.random.default_rng(3).uniform(-1.0, 1.0, size=(6, 3))
+    feet = kin.foot_positions_body(angles)
+    for i, leg in enumerate(config.LEG_NAMES):
+        assert feet[i] == pytest.approx(kin.leg_to_body(leg, kin.fk(*angles[i])))
+    assert kin.foot_positions_body(angles.ravel()) == pytest.approx(feet)  # flat input works too

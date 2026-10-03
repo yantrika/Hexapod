@@ -105,8 +105,7 @@ def ik(point: Sequence[float] | Vec3) -> JointAngles | None:
     return angles if _within_hard_limits(angles) else None
 
 
-def hip_position(leg: str) -> Vec3:
-    """Coxa joint position in the body frame."""
+def _hip_position(leg: str) -> Vec3:
     yaw = config.mount_yaw_rad(leg)
     return _vec(config.BODY_RADIUS * math.cos(yaw), config.BODY_RADIUS * math.sin(yaw), 0.0)
 
@@ -116,18 +115,34 @@ def _rotation_z(yaw: float) -> NDArray[np.float64]:
     return np.array([[cos_y, -sin_y, 0.0], [sin_y, cos_y, 0.0], [0.0, 0.0, 1.0]])
 
 
+# Per-leg mount transform, built once from config.mount_yaw_rad (the one conversion point).
+_HIP = {leg: _hip_position(leg) for leg in config.LEG_NAMES}
+_ROTATION = {leg: _rotation_z(config.mount_yaw_rad(leg)) for leg in config.LEG_NAMES}
+
+
+def hip_position(leg: str) -> Vec3:
+    """Coxa joint position in the body frame."""
+    return _HIP[leg].copy()
+
+
 def leg_to_body(leg: str, point: Sequence[float] | Vec3) -> Vec3:
     """Convert a leg-local point to the body frame."""
-    local = np.asarray(point, dtype=np.float64)
-    rotated: Vec3 = _rotation_z(config.mount_yaw_rad(leg)) @ local
-    return hip_position(leg) + rotated
+    rotated: Vec3 = _ROTATION[leg] @ np.asarray(point, dtype=np.float64)
+    return _HIP[leg] + rotated
 
 
 def body_to_leg(leg: str, point: Sequence[float] | Vec3) -> Vec3:
     """Convert a body-frame point to the leg-local frame (inverse of ``leg_to_body``)."""
-    offset = np.asarray(point, dtype=np.float64) - hip_position(leg)
-    local: Vec3 = _rotation_z(config.mount_yaw_rad(leg)).T @ offset
+    local: Vec3 = _ROTATION[leg].T @ (np.asarray(point, dtype=np.float64) - _HIP[leg])
     return local
+
+
+def foot_positions_body(
+    angles: Sequence[Sequence[float]] | NDArray[np.float64],
+) -> NDArray[np.float64]:
+    """Foot positions in the body frame, shape ``(6, 3)``, for joint angles of shape ``(6, 3)``."""
+    rows = np.asarray(angles, dtype=np.float64).reshape(len(config.LEG_NAMES), 3)
+    return np.array([leg_to_body(leg, fk(*rows[i])) for i, leg in enumerate(config.LEG_NAMES)])
 
 
 NEUTRAL_FOOT_LOCAL: Vec3 = fk(0.0, 0.0, 0.0)  # (COXA + FEMUR, 0, -TIBIA)

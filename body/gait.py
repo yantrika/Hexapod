@@ -18,8 +18,9 @@ Foot paths, per leg, in the body frame:
   cycloid ``s - sin(2 pi s) / (2 pi)`` and height ``H sin^2(pi s)``, so foot
   velocity is zero at lift-off and touch-down. Positions are continuous
   across the phase wrap (the speed jumps between swing and stance).
-- A zero command puts every foot at its neutral position on the ground with
-  no lifting. Callers should ramp commands rather than jump to zero.
+- The swing height scales with the stride when the stride is below
+  ``full_lift_stride_m``, so targets stay continuous as a command ramps to zero.
+  A zero command puts every foot at its neutral position on the ground.
 
 Every foot target goes through ``kinematics.ik`` and must respect
 ``config.GAIT_SOFT_LIMITS_DEG``. If a target does not, ``plan`` scales the
@@ -57,6 +58,7 @@ class GaitParams:
     max_stride_m: float = config.STEP_LENGTH_MAX_M
     max_speed_m_s: float = config.GAIT_MAX_SPEED_M_S
     max_yaw_rate_rad_s: float = math.radians(config.TURN_RATE_MAX_DEG_S)
+    full_lift_stride_m: float = config.GAIT_FULL_LIFT_STRIDE_M
 
     def __post_init__(self) -> None:
         if self.period_s <= 0:
@@ -147,6 +149,10 @@ def foot_targets(
     stance_time = params.stance_time_s
     beta = params.swing_fraction
     still = (abs(command.vx) + abs(command.vy) + abs(command.yaw_rate)) * stride_scale < _ZERO
+    worst_stride = stride_scale * stance_time * max(
+        math.hypot(*_foot_velocity(leg, command)) for leg in config.LEG_NAMES
+    )
+    lift = min(1.0, worst_stride / params.full_lift_stride_m)
 
     targets = np.zeros((len(config.LEG_NAMES), 3))
     for i, leg in enumerate(config.LEG_NAMES):
@@ -165,7 +171,7 @@ def foot_targets(
             progress = s - math.sin(2.0 * math.pi * s) / (2.0 * math.pi)
             x = back_x + (front_x - back_x) * progress
             y = back_y + (front_y - back_y) * progress
-            z = ground + params.swing_height_m * math.sin(math.pi * s) ** 2
+            z = ground + lift * params.swing_height_m * math.sin(math.pi * s) ** 2
         else:  # stance: straight line at ground height
             s = (gp - beta) / (1.0 - beta)
             x = front_x + (back_x - front_x) * s
