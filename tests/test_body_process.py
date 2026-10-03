@@ -359,3 +359,45 @@ def test_idle_tick_cost_is_reported(body: Body) -> None:
     print(f"body tick work, standing idle: mean {mean * 1000:.2f} ms, max {worst * 1000:.2f} ms, "
           f"{ticks / 2.0:.1f} ticks/s")
     assert mean < 0.5 / config.CONTROL_HZ
+
+
+def _pose(body: Body) -> tuple[float, float, float]:
+    return body.probe.get("base_x"), body.probe.get("base_y"), body.probe.get("base_yaw")
+
+
+def _walk_with_heartbeats(body: Body, seconds: float, **params: Any) -> None:
+    body.send("walk", **params)
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        body.send("heartbeat")
+        body.collect(1.0 / config.HEARTBEAT_HZ)
+
+
+def test_a_strafe_walk_moves_the_body_sideways_and_stops_on_stop_event(body: Body) -> None:
+    time.sleep(0.5)  # settled
+    x0, y0, yaw0 = _pose(body)
+    _walk_with_heartbeats(body, 4.0, strafe=1.0, speed=1.0)  # left
+    x1, y1, yaw1 = _pose(body)
+    left, forward = y1 - y0, x1 - x0
+    print(f"strafe left 4 s: sideways {left * 100:+.1f} cm, forward {forward * 100:+.1f} cm, "
+          f"heading change {abs(yaw1 - yaw0) * 57.3:.1f} deg")
+    assert left > 0.25  # +y is left; 0.5 s ramp, then 0.1 m/s
+    assert abs(forward) < 0.25 * left and abs(yaw1 - yaw0) < 0.1
+
+    with body.bridge.stop_seq.get_lock():  # stop_event alone: the queue message is withheld
+        body.bridge.stop_seq.value = 515151
+    body.bridge.stop_event.set()
+    body.wait(lambda s: s.ref_seq == 515151 and s.status == "done")
+    time.sleep(0.5)  # the hold pose settles
+    x2, y2, _ = _pose(body)
+    time.sleep(1.0)
+    x3, y3, _ = _pose(body)
+    assert abs(y3 - y2) < 0.01 and abs(x3 - x2) < 0.01  # at rest
+
+
+def test_old_style_walk_still_goes_straight_ahead(body: Body) -> None:
+    time.sleep(0.5)
+    x0, y0, _ = _pose(body)
+    _walk_with_heartbeats(body, 3.0, direction="fwd", speed=1.0)
+    x1, y1, _ = _pose(body)
+    assert x1 - x0 > 0.08 and abs(y1 - y0) < 0.25 * (x1 - x0)

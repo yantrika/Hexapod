@@ -251,3 +251,32 @@ def test_a_failing_tick_reports_error_and_raises(monkeypatch: pytest.MonkeyPatch
         rig.tick()
     (status,) = rig.bridge.receive_all()
     assert status.status == "error" and "backend died" in status.detail["message"]
+
+
+def test_old_style_walk_messages_are_unchanged_and_strafe_walks_are_accepted() -> None:
+    rig = Rig()
+    old = rig.send("walk", direction="fwd", speed=1.0)
+    assert kinds(rig.tick()) == [("accepted", old)]
+    rig.seconds(1.0)
+    assert rig.controller.target_velocity.vy == 0.0 and rig.controller.target_velocity.vx > 0
+    strafe = rig.send("walk", strafe=1.0, speed=0.5)  # latest-wins replaces the old walk
+    assert kinds(rig.tick()) == [("accepted", strafe)]
+    rig.seconds(0.2)
+    assert rig.controller.target_velocity.vx == 0.0 and rig.controller.target_velocity.vy > 0
+
+
+def test_a_walk_with_out_of_range_strafe_is_rejected_invalid_params() -> None:
+    rig = Rig()
+    bad = rig.send("walk", strafe=3.0)
+    (status,) = rig.tick()
+    assert (status.status, status.ref_seq, status.detail["reason"]) == (
+        "rejected", bad, "invalid_params")
+    assert rig.controller.state is State.STANDING
+
+
+def test_latest_wins_between_a_strafe_walk_and_a_turn_walk() -> None:
+    rig = Rig()
+    first = rig.send("walk", strafe=1.0)
+    second = rig.send("walk", yaw=1.0)
+    assert kinds(rig.tick()) == [("rejected", first), ("accepted", second)]
+    assert rig.controller.target_velocity.vy == 0.0 and rig.controller.target_velocity.yaw_rate > 0

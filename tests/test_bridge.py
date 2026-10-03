@@ -121,3 +121,29 @@ def test_garbage_in_the_queue_is_ignored() -> None:
     bridge.command_queue.put_nowait("not a command")
     bridge.send(command("stand"))
     assert [c.action for c in bridge.drain()] == ["stand"]
+
+
+@pytest.mark.parametrize(
+    ("params", "expected"),
+    [
+        ({"direction": "fwd", "speed": 0.5}, None),  # the original form
+        ({"direction": "fwd"}, None),
+        ({"strafe": 1.0, "speed": 0.5}, None),  # direction is optional with strafe or yaw
+        ({"yaw": -1.0}, None),
+        ({"direction": "back", "strafe": -0.3, "yaw": 0.2, "speed": 1}, None),
+        ({"strafe": 0.0, "yaw": 0.0, "speed": 0.5}, None),
+        ({}, "invalid_params"),  # still needs a direction when there is no strafe or yaw
+        ({"speed": 0.5}, "invalid_params"),
+        ({"direction": "up", "strafe": 0.5}, "invalid_params"),
+        ({"strafe": 1.01}, "invalid_params"),
+        ({"strafe": -1.01}, "invalid_params"),
+        ({"yaw": 2.0}, "invalid_params"),
+        ({"strafe": float("nan")}, "invalid_params"),
+        ({"yaw": float("inf")}, "invalid_params"),
+        ({"strafe": "left"}, "invalid_params"),
+        ({"yaw": True}, "invalid_params"),
+        ({"strafe": 0.5, "speed": float("nan")}, "invalid_params"),
+    ],
+)
+def test_validate_walk_with_strafe_and_yaw(params: dict, expected: str | None) -> None:
+    assert validate_command(Command("walk", params, 1, 0.0)) == expected

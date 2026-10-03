@@ -462,3 +462,64 @@ def test_every_pose_sent_to_the_backend_is_inside_the_hard_limits() -> None:
     run(ctrl, clock, 4.0)
     for angles in backend.history:
         assert np.all(np.abs(angles) <= math.radians(90.0) + 1e-9)
+
+
+# --- walk with strafe and yaw (schema extension) --------------------------------
+def test_walk_strafe_and_yaw_map_to_set_velocity() -> None:
+    ctrl, _, _ = make()
+    calls: list[tuple[float, float, float]] = []
+    original = ctrl.set_velocity
+
+    def spy(vx: float, vy: float, yaw: float) -> Result:
+        calls.append((vx, vy, yaw))
+        return original(vx, vy, yaw)
+
+    ctrl.set_velocity = spy  # type: ignore[method-assign,assignment]
+    max_v, max_w = ctrl._params.max_speed_m_s, ctrl._params.max_yaw_rate_rad_s
+    assert ctrl.walk("fwd", 0.5) == ACCEPTED  # the original form: forward only
+    assert ctrl.walk(None, 0.5, strafe=1.0) == ACCEPTED  # left
+    assert ctrl.walk(None, 1.0, strafe=-1.0) == ACCEPTED  # right
+    assert ctrl.walk(None, 0.5, yaw=1.0) == ACCEPTED  # counter-clockwise
+    assert ctrl.walk("back", 0.4, strafe=0.5, yaw=-0.5) == ACCEPTED
+    assert calls[0] == pytest.approx((0.5 * max_v, 0.0, 0.0))
+    assert calls[1] == pytest.approx((0.0, 0.5 * max_v, 0.0))
+    assert calls[2] == pytest.approx((0.0, -max_v, 0.0))
+    assert calls[3] == pytest.approx((0.0, 0.0, 0.5 * max_w))
+    assert calls[4] == pytest.approx((-0.4 * max_v, 0.4 * 0.5 * max_v, -0.4 * 0.5 * max_w))
+
+
+def test_walk_with_strafe_and_yaw_is_clamped_by_the_controller() -> None:
+    ctrl, _, _ = make()
+    assert ctrl.walk("fwd", 1.0, strafe=1.0, yaw=1.0) == ACCEPTED  # full forward + full left
+    v = ctrl.target_velocity
+    assert math.hypot(v.vx, v.vy) <= ctrl._params.max_speed_m_s + 1e-9
+    assert v.yaw_rate <= ctrl._params.max_yaw_rate_rad_s + 1e-9
+    assert v.vx > 0 and v.vy > 0 and v.yaw_rate > 0
+
+
+@pytest.mark.parametrize(
+    "kwargs", [{"strafe": 1.5}, {"yaw": -1.5}, {"strafe": math.nan}, {"yaw": math.inf}]
+)
+def test_walk_rejects_out_of_range_or_non_finite_strafe_and_yaw(kwargs: dict) -> None:
+    ctrl, _, _ = make()
+    assert ctrl.walk("fwd", 0.5, **kwargs) == rejected("invalid_params")
+    assert ctrl.state is State.STANDING
+
+
+def test_a_strafe_walk_needs_heartbeats_and_the_watchdog_ramps_it_to_zero() -> None:
+    ctrl, _, clock = make()
+    ctrl.walk(None, 0.5, strafe=1.0)
+    run(ctrl, clock, 1.0)
+    assert ctrl.state is State.MOVING and ctrl.velocity.vy > 0
+    run(ctrl, clock, config.WATCHDOG_TIMEOUT_S + 2.0, heartbeat=False)
+    assert ctrl.state is State.STANDING and ctrl.velocity.vy == 0.0
+    assert ctrl.drain_events()[-1].reason == "watchdog"
+
+
+def test_a_zero_walk_ramps_a_strafe_to_a_halt() -> None:
+    ctrl, _, clock = make()
+    ctrl.walk(None, 0.5, strafe=1.0)
+    run(ctrl, clock, 1.0)
+    assert ctrl.walk(None, 0.5, strafe=0.0, yaw=0.0) == ACCEPTED
+    run(ctrl, clock, 2.0)
+    assert ctrl.state is State.STANDING

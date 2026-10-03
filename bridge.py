@@ -70,6 +70,20 @@ def _is_number(value: object) -> bool:
     return isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value)
 
 
+def _walk_params_valid(params: dict[str, Any]) -> bool:
+    """``direction`` + ``speed`` as before; optional ``strafe`` / ``yaw`` in [-1, 1].
+
+    ``direction`` is only optional when ``strafe`` or ``yaw`` is given.
+    """
+    extras = [params[key] for key in ("strafe", "yaw") if key in params]
+    if not all(_is_number(value) and abs(value) <= 1.0 for value in extras):
+        return False
+    if "direction" in params or not extras:
+        if params.get("direction") not in ("fwd", "back"):
+            return False
+    return _is_number(params.get("speed", 0.5))
+
+
 def validate_command(command: Command) -> str | None:
     """Return a rejection reason (``unknown_action`` / ``invalid_params``) or None if valid.
 
@@ -81,7 +95,7 @@ def validate_command(command: Command) -> str | None:
     if not isinstance(params, dict):
         return "invalid_params"
     if command.action == "walk":
-        ok = params.get("direction") in ("fwd", "back") and _is_number(params.get("speed", 0.5))
+        ok = _walk_params_valid(params)
     elif command.action == "turn":
         ok = params.get("direction") in ("left", "right") and _is_number(params.get("angle_deg"))
     else:

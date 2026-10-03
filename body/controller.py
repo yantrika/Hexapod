@@ -182,13 +182,28 @@ class Controller:
         self.state = State.MOVING
         return ACCEPTED
 
-    def walk(self, direction: str, speed: float) -> Result:
-        """Walk ``"fwd"`` or ``"back"`` at *speed* (0..1 of the max speed)."""
-        if direction not in ("fwd", "back") or not math.isfinite(speed):
+    def walk(
+        self, direction: str | None, speed: float, strafe: float = 0.0, yaw: float = 0.0
+    ) -> Result:
+        """Walk at *speed* (0..1 of the max speed) with up to three components.
+
+        *direction* is ``"fwd"``, ``"back"`` or None (no forward component);
+        *strafe* and *yaw* are in [-1, 1] (+1 = left / counter-clockwise) and are
+        scaled by *speed* too. The result is clamped to the max speed and yaw rate
+        by ``gait.limit_command``. All zero components ramp a walk down to a halt.
+        """
+        components = (speed, strafe, yaw)
+        if direction not in ("fwd", "back", None) or not all(map(math.isfinite, components)):
+            return rejected("invalid_params")
+        if abs(strafe) > 1.0 or abs(yaw) > 1.0:
             return rejected("invalid_params")
         speed = config.clamp(speed, config.SPEED_MIN, config.SPEED_MAX)
-        sign = 1.0 if direction == "fwd" else -1.0
-        return self.set_velocity(sign * speed * self._params.max_speed_m_s, 0.0, 0.0)
+        forward = {"fwd": 1.0, "back": -1.0, None: 0.0}[direction]
+        return self.set_velocity(
+            forward * speed * self._params.max_speed_m_s,
+            strafe * speed * self._params.max_speed_m_s,
+            yaw * speed * self._params.max_yaw_rate_rad_s,
+        )
 
     def turn(self, direction: str, angle_deg: float) -> Result:
         """Turn ``"left"`` or ``"right"`` in place by *angle_deg*, then finish."""
