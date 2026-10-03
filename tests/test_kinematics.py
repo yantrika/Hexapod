@@ -177,3 +177,9 @@ def test_kinematics_uses_mount_yaw_helper_only() -> None:
     source = (Path(config.PROJECT_ROOT) / "body" / "kinematics.py").read_text()
     assert "mount_yaw_rad" in source
     assert "LEG_MOUNT_ANGLES_DEG" not in source
+
+
+def test_neutral_foot_height_equals_stand_height() -> None:
+    assert NEUTRAL[2] == pytest.approx(-config.BODY_HEIGHT_STAND)
+    for leg in config.LEG_NAMES:
+        assert kin.neutral_foot_body(leg)[2] == pytest.approx(-config.BODY_HEIGHT_STAND)

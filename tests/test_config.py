@@ -14,13 +14,17 @@ REQUIRED_NAMES = [
     "LOG_DIR", "LOG_FILE", "LOG_LEVEL",
     # geometry
     "BODY_RADIUS", "COXA_LENGTH", "FEMUR_LENGTH", "TIBIA_LENGTH", "LEG_NAMES",
-    "JOINTS_PER_LEG", "DOF", "LEG_MOUNT_ANGLES_DEG", "TRIPOD_A", "TRIPOD_B",
+    "JOINTS_PER_LEG", "DOF", "JOINT_NAMES", "LEG_MOUNT_ANGLES_DEG", "TRIPOD_A", "TRIPOD_B",
     "KNEE_BRANCH", "mount_yaw_rad",
     # limits and clamps
     "JOINT_HARD_LIMITS_DEG", "GAIT_SOFT_LIMITS_DEG", "SPEED_MIN", "SPEED_MAX",
     "TURN_ANGLE_MIN_DEG", "TURN_ANGLE_MAX_DEG", "TURN_RATE_MAX_DEG_S",
     "STEP_LENGTH_MAX_M", "STEP_HEIGHT_M", "BODY_HEIGHT_SIT", "BODY_HEIGHT_STAND",
     "FALL_TILT_DEG", "clamp",
+    # simulation model
+    "BODY_THICKNESS_M", "BODY_MASS_KG", "LINK_RADIUS_M", "LINK_MASS_KG", "FOOT_RADIUS_M",
+    "GROUND_FRICTION", "FOOT_FRICTION", "JOINT_MAX_FORCE_NM", "JOINT_MAX_VELOCITY_RAD_S",
+    "JOINT_POSITION_GAIN", "JOINT_VELOCITY_GAIN", "SIM_GRAVITY", "SIM_SPAWN_CLEARANCE_M",
     # timing and bridge
     "PHYSICS_HZ", "CONTROL_HZ", "MAX_PHYSICS_CATCHUP_STEPS", "GAIT_PERIOD_S",
     "MAX_MESSAGE_AGE_S", "WATCHDOG_TIMEOUT_S", "HEARTBEAT_HZ", "COMMAND_QUEUE_MAXSIZE",
@@ -133,3 +137,13 @@ def test_timing_relationships() -> None:
     assert config.WATCHDOG_TIMEOUT_S > 1.0 / config.HEARTBEAT_HZ
     assert config.MAX_MESSAGE_AGE_S > 1.0 / config.CONTROL_HZ
     assert config.BODY_HEIGHT_SIT < config.BODY_HEIGHT_STAND
+
+
+def test_stand_height_is_tibia_length() -> None:
+    assert config.BODY_HEIGHT_STAND == config.TIBIA_LENGTH
+
+
+def test_joint_names() -> None:
+    assert len(config.JOINT_NAMES) == config.DOF
+    assert len(set(config.JOINT_NAMES)) == config.DOF
+    assert config.JOINT_NAMES[:3] == ("RF_coxa", "RF_femur", "RF_tibia")

@@ -37,6 +37,8 @@ TIBIA_LENGTH = 0.13  # m
 LEG_NAMES = ("RF", "RM", "RR", "LR", "LM", "LF")  # clockwise from front-right
 JOINTS_PER_LEG = ("coxa", "femur", "tibia")
 DOF = len(LEG_NAMES) * len(JOINTS_PER_LEG)  # 18
+# Flat joint order used everywhere (backend arrays, URDF joint names).
+JOINT_NAMES = tuple(f"{leg}_{joint}" for leg in LEG_NAMES for joint in JOINTS_PER_LEG)
 
 # Mount angle around the body, degrees CLOCKWISE from above, 0 = +X (forward).
 # Left legs mirror right legs: angle(L) = 360 - angle(R) for the same position.
@@ -81,8 +83,25 @@ TURN_RATE_MAX_DEG_S = 60.0  # PLACEHOLDER
 STEP_LENGTH_MAX_M = 0.05  # PLACEHOLDER
 STEP_HEIGHT_M = 0.03  # PLACEHOLDER
 BODY_HEIGHT_SIT = 0.06  # m, PLACEHOLDER
-BODY_HEIGHT_STAND = 0.11  # m, PLACEHOLDER
+# The zero pose is the stand pose: femur horizontal, tibia vertical, so the
+# neutral foot hangs TIBIA_LENGTH below the body plane.
+BODY_HEIGHT_STAND = TIBIA_LENGTH
 FALL_TILT_DEG = 50.0
+
+# --- Simulation model (URDF and PyBullet; PLACEHOLDER values) -------------
+BODY_THICKNESS_M = 0.04
+BODY_MASS_KG = 0.6
+LINK_RADIUS_M = 0.008
+LINK_MASS_KG = {"coxa": 0.03, "femur": 0.05, "tibia": 0.05, "foot": 0.01}
+FOOT_RADIUS_M = 0.01  # contact sphere; its lowest point is the foot target
+GROUND_FRICTION = 1.0
+FOOT_FRICTION = 1.0
+JOINT_MAX_FORCE_NM = 3.0  # servo torque limit
+JOINT_MAX_VELOCITY_RAD_S = 6.0  # servo speed limit
+JOINT_POSITION_GAIN = 0.3
+JOINT_VELOCITY_GAIN = 1.0
+SIM_GRAVITY = 9.81
+SIM_SPAWN_CLEARANCE_M = 0.002  # spawn this far above the stand height
 
 # --- Timing and bridge ---------------------------------------------------
 PHYSICS_HZ = 240.0  # PyBullet step, driven by wall-clock time
