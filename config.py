@@ -95,6 +95,7 @@ BODY_HEIGHT_SIT = 0.06  # m, PLACEHOLDER
 # neutral foot hangs TIBIA_LENGTH below the body plane.
 BODY_HEIGHT_STAND = TIBIA_LENGTH
 FALL_TILT_DEG = 50.0
+FALL_CLEAR_TILT_DEG = 25.0  # a fallen body counts as upright again below this (hysteresis)
 
 # --- Simulation model (URDF and PyBullet; PLACEHOLDER values) -------------
 BODY_THICKNESS_M = 0.04
@@ -145,6 +146,10 @@ WATCHDOG_TIMEOUT_S = 1.0  # walking/turning with no command or heartbeat
 HEARTBEAT_HZ = 5.0
 COMMAND_QUEUE_MAXSIZE = 8  # drop-oldest when full
 STATUS_QUEUE_MAXSIZE = 64
+BRIDGE_DRAIN_LIMIT = 4 * COMMAND_QUEUE_MAXSIZE  # max messages read per tick (flood guard)
+BODY_START_TIMEOUT_S = 20.0  # waiting for the body process to report ready (PyBullet start-up)
+BODY_SHUTDOWN_TIMEOUT_S = 3.0  # join time before terminate, then kill
+PARENT_CHECK_TICKS = 5  # the body checks that its parent is alive every this many ticks
 
 SIM_HEADLESS = False  # PyBullet DIRECT mode; overridden by --headless
 SIM_REALTIME = True  # --no-realtime is for fast tests only
@@ -195,6 +200,9 @@ WALK_TEST_POSITION_DRIFT_M = 0.05  # sim walk tests: unwanted displacement over 
 WALK_TEST_HEADING_DRIFT_DEG = 5.0  # sim walk tests: unwanted heading change over 10 s
 HOLD_TEST_MAX_TILT_DEG = 5.0  # sim hold tests: roll/pitch while a pose is held
 HOLD_TEST_MAX_BODY_SPEED_M_S = 0.02  # sim hold tests: body must be at rest after 3 s
+BODY_TEST_STOP_MAX_S = 0.1  # body process: send stop -> done status, even with a full queue
+BODY_TEST_FLOOD_TICK_RATIO = 2.0  # body process: mean tick under a flood vs. idle, at most
+BODY_TEST_ACCEPT_MAX_S = 0.06  # body process: send -> accepted (3 control ticks)
 
 
 def clamp(value: float, low: float, high: float) -> float:
