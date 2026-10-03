@@ -25,6 +25,7 @@ python scripts/walk_demo.py                          # same in the GUI
 python scripts/sim_demo.py --headless --script "stand,walk,stop,sit"   # scripted controller run
 python scripts/teleop.py                             # keyboard control (GUI); prints the key map
 python scripts/joint_jog.py                          # dev only: 18 joint sliders (GUI)
+python scripts/joint_jog.py --legs RF                # only one leg's 3 sliders: labels stay readable
 ```
 
 **Laptop-specific note (Intel HD Graphics "ILK", OpenGL 2.1):** PyBullet's GUI needs

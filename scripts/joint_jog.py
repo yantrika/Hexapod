@@ -31,34 +31,65 @@ from body.clock import FixedRateLoop  # noqa: E402
 from body.sim_backend import SimBackend  # noqa: E402
 
 OVERSHOOT_DEG = 30.0  # how far the sliders go past the hard limits
+READOUT_HZ = 5.0  # console readout rate
+CHANGE_DEG = 0.5  # only report joints that moved at least this much
+
+
+def slider_label(joint_name: str) -> str:
+    """Short slider label, e.g. ``RF_femur`` -> ``RF fem``: long names get cut off in the panel."""
+    leg, joint = joint_name.split("_")
+    return f"{leg} {joint[:3]}"
+
+
+def format_leg_line(leg: str, applied_rad: np.ndarray) -> str:
+    """One readable console line per leg, in degrees: ``RF  cox  +12.0  fem  -30.0  tib   +5.0``."""
+    cells = [
+        f"{joint[:3]} {math.degrees(angle):+7.1f}"
+        for joint, angle in zip(config.JOINTS_PER_LEG, applied_rad, strict=True)
+    ]
+    return f"{leg}  " + "   ".join(cells)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--legs", default=",".join(config.LEG_NAMES),
+                        help="legs to show sliders for, e.g. RF or RF,LM (default: all six)")
     parser.add_argument("--duration", type=float, default=None,
                         help="exit after this many wall seconds (smoke tests)")
     args = parser.parse_args()
+    shown = [leg.strip().upper() for leg in args.legs.split(",") if leg.strip()]
+    unknown = [leg for leg in shown if leg not in config.LEG_NAMES]
+    if unknown:
+        parser.error(f"unknown legs {unknown}; choose from {', '.join(config.LEG_NAMES)}")
 
     sim = SimBackend(gui=True)
     client = sim.client
-    sliders = []
-    for name in config.JOINT_NAMES:
+    slider_for = {}  # joint index -> slider id; hidden legs stay at 0 (the stand pose)
+    for index, name in enumerate(config.JOINT_NAMES):
+        if name.split("_")[0] not in shown:
+            continue
         low, high = config.JOINT_HARD_LIMITS_DEG[name.split("_")[1]]
-        sliders.append(
-            client.addUserDebugParameter(name, low - OVERSHOOT_DEG, high + OVERSHOOT_DEG, 0.0)
+        slider_for[index] = client.addUserDebugParameter(
+            slider_label(name), low - OVERSHOOT_DEG, high + OVERSHOOT_DEG, 0.0
         )
-    print("Joint jog: move the sliders (degrees). Close the window or Ctrl-C to quit.")
+    print(f"Joint jog: sliders for {', '.join(shown)} (degrees). Values print below.")
+    print("  tip: --legs RF shows only one leg's three sliders so the labels stay readable.")
+    print("Close the window or Ctrl-C to quit.\n")
 
     loop = FixedRateLoop(config.CONTROL_HZ)
-    start = time.monotonic()
+    start = last_readout = time.monotonic()
     clamped_before: tuple[str, ...] = ()
+    reported = np.zeros(config.DOF)
     try:
         while sim.connected:
-            if args.duration is not None and time.monotonic() - start >= args.duration:
+            now = time.monotonic()
+            if args.duration is not None and now - start >= args.duration:
                 break
             dt = loop.wait()
             try:
-                requested = np.radians([client.readUserDebugParameter(s) for s in sliders])
+                requested = np.zeros(config.DOF)
+                for index, slider in slider_for.items():
+                    requested[index] = math.radians(client.readUserDebugParameter(slider))
                 applied = sim.set_joint_targets(requested)
                 sim.advance(dt)
             except pybullet.error:
@@ -71,6 +102,15 @@ def main() -> int:
             if clamped != clamped_before and clamped:
                 print("clamped (deg):", ", ".join(clamped))
             clamped_before = clamped
+
+            if now - last_readout >= 1.0 / READOUT_HZ:
+                last_readout = now
+                moved = np.abs(np.degrees(applied - reported)) >= CHANGE_DEG
+                for i, leg in enumerate(config.LEG_NAMES):
+                    row = slice(3 * i, 3 * i + 3)
+                    if moved[row].any():
+                        print(format_leg_line(leg, applied[row]))
+                        reported[row] = applied[row]
     except KeyboardInterrupt:
         pass
     finally:
