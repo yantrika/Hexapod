@@ -2,10 +2,11 @@
 """Type commands, see the body's status replies: the Step 5 bridge, by hand.
 
 Runs in the parent process, spawns the body process and talks to it only through
-the Bridge. Lines: ``stand``, ``sit``, ``wave``, ``stop``, ``walk fwd 0.5``,
-``walk back``, ``turn left 90``, ``heartbeat``, ``quit``. A heartbeat is sent
-automatically while the CLI runs (``--no-heartbeat`` shows the watchdog stopping
-a walk after a second). On the dev laptop the GUI needs the Mesa override (README).
+the Bridge. Lines are parsed by ``commandline.parse_line``: ``stand``, ``sit``,
+``wave``, ``stop``, ``walk fwd 0.5``, ``walk back``, ``strafe left 0.5``,
+``turn left 90``, ``heartbeat``, ``quit``. A heartbeat is sent automatically while
+the CLI runs (``--no-heartbeat`` shows the watchdog stopping a walk after a second).
+On the dev laptop the GUI needs the Mesa override (README).
 """
 
 from __future__ import annotations
@@ -24,42 +25,8 @@ for _var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
 
 import config  # noqa: E402
 from body.process import BodyProcess  # noqa: E402
-from bridge import Bridge, Status, make_bridge, new_command  # noqa: E402
-
-DEFAULT_SPEED = 0.5
-DEFAULT_TURN_DEG = 90.0
-POSTURES = ("stand", "sit", "wave", "stop", "heartbeat")
-
-
-def parse_line(line: str) -> tuple[str, dict[str, object]] | None:
-    """Turn a typed line into ``(action, params)``; None if it is not a command.
-
-    ``walk [fwd|back] [speed]``, ``turn left|right [degrees]``, or a bare posture word.
-    """
-    words = line.lower().split()
-    if not words:
-        return None
-    action, args = words[0], words[1:]
-    try:
-        if action in POSTURES and not args:
-            return action, {}
-        if action == "walk" and len(args) <= 2:
-            direction = args[0] if args else "fwd"
-            speed = float(args[1]) if len(args) > 1 else DEFAULT_SPEED
-            if direction in ("fwd", "back"):
-                return "walk", {"direction": direction, "speed": speed}
-        if action == "turn" and 1 <= len(args) <= 2 and args[0] in ("left", "right"):
-            angle = float(args[1]) if len(args) > 1 else DEFAULT_TURN_DEG
-            return "turn", {"direction": args[0], "angle_deg": angle}
-    except ValueError:
-        return None
-    return None
-
-
-def format_status(status: Status) -> str:
-    ref = "-" if status.ref_seq is None else str(status.ref_seq)
-    detail = " ".join(f"{k}={v}" for k, v in status.detail.items())
-    return f"<- {status.status:<9} ref={ref:<4} {detail}".rstrip()
+from bridge import Bridge, make_bridge, new_command  # noqa: E402
+from commandline import HELP, format_status, parse_line  # noqa: E402
 
 
 def _listen(bridge: Bridge, stop: threading.Event) -> None:
@@ -96,7 +63,7 @@ def main() -> int:
             threads.append(threading.Thread(target=_beat, args=(bridge, done), daemon=True))
         for thread in threads:
             thread.start()
-        print("ready. stand | sit | wave | stop | walk fwd 0.5 | turn left 90 | quit", flush=True)
+        print(f"ready. {HELP} | quit", flush=True)
         for line in sys.stdin:
             if line.strip().lower() in ("quit", "exit", "q"):
                 break

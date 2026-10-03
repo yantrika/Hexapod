@@ -11,7 +11,7 @@ import pytest
 
 import config
 from bridge import Status
-from scripts.bridge_cli import format_status, parse_line
+from commandline import format_status, parse_line
 
 # stop leaves the body holding: sit settles the feet first, then lowers
 SIT_WAIT_S = config.SETTLE_S + config.SIT_STAND_TRANSITION_S + 0.7
@@ -34,6 +34,10 @@ ROOT = Path(__file__).resolve().parent.parent
         ("dance", None),
         ("walk sideways", None),
         ("walk fwd fast", None),
+        ("strafe left", ("walk", {"strafe": 1.0, "speed": 0.5})),
+        ("strafe right 0.8", ("walk", {"strafe": -1.0, "speed": 0.8})),
+        ("strafe", None),
+        ("strafe up", None),
         ("turn", None),
         ("turn up 10", None),
         ("stand now", None),
