@@ -10,7 +10,7 @@ Flat top-level packages, no `src/`. See `plan.md` section 6 for the full tree.
 - `brain/` — `router.py`, `chat.py`, `dialogue.py`.
 - `voice/` — `audio.py`, `stt.py`, `tts.py`, `playback.py`.
 - `tests/` — `test_<module>.py` per module, shared fakes in `tests/fakes.py`.
-- `scripts/` — model download, URDF generation, sim demo. `assets/` — URDF and models (downloaded models are gitignored).
+- `scripts/` — model download, URDF generation, sim, walk and script demos, `teleop.py` (keyboard) and `joint_jog.py` (dev sliders). `assets/` — URDF and models (downloaded models are gitignored).
 
 Avoid committing build output, caches, models, or secrets; add them to `.gitignore` first.
 
@@ -31,6 +31,9 @@ Avoid committing build output, caches, models, or secrets; add them to `.gitigno
 - The zero pose is the stand pose (`BODY_HEIGHT_STAND = TIBIA_LENGTH`). The URDF is generated from config by `scripts/generate_urdf.py` (re-run it after changing geometry; a test fails if the committed file is stale). Joint axes: coxa +Z, femur and tibia -Y.
 - `body/gait.py` is a pure planner (no PyBullet, no clock): `plan(phase, BodyVelocity, GaitParams)` returns foot targets and joint angles, respects the soft limits, and scales the stride down (with a warning) instead of ever returning an out-of-limit pose.
 - `HexapodBackend.advance(dt)` returns the seconds actually advanced; callers that drive a gait should advance phase by that value.
+- `body/controller.py` is the state machine the bridge will call: `set_velocity`, `walk`, `turn`, `heartbeat`, `stand`, `sit`, `wave`, `stop`, `tick(dt)`, `drain_events()`; commands return `Result(accepted|rejected|busy, reason)`. Velocity commands are ramped (`VELOCITY_RAMP_S`), `stop` holds the pose, sit/stand from a held pose settle to the neutral stance first, and a watchdog ramps to zero without commands or heartbeats. All clamps live there (via `gait.limit_command` and `config.clamp`).
+- Control loops run nominal-length ticks (`FixedStepper`): the walk degrades above about 40 ms per tick, so a late loop runs several 20 ms ticks, never one long one.
+- Manual control: `scripts/teleop.py` may only command motion through the `Controller` API (it keeps its key mapping pure and unit tested); `scripts/joint_jog.py` is a dev tuning tool that may only use the backend API (`set_joint_targets`, `advance`), so the clamp layer applies. Neither is part of the runtime.
 - Leg order is `RF, RM, RR, LR, LM, LF`; tripod A = RF, RR, LM; tripod B = RM, LR, LF.
 - IK always returns the knee-up solution and returns `None` for unreachable points.
 - Router: `stop` words match anywhere; other commands need a short utterance (after filler removal) and `fuzz.ratio >= ROUTER_THRESHOLD`; everything else goes to chat.
@@ -39,6 +42,7 @@ Avoid committing build output, caches, models, or secrets; add them to `.gitigno
 Python 3.11 venv in `.venv/` (gitignored).
 - Install: `pip install -r requirements-dev.txt` (plus `requirements-sim.txt` for PyBullet, `requirements-pi.txt` on the Pi).
 - Test: `pytest`; single test: `pytest tests/test_<module>.py::test_name`.
+- The dev laptop is a 2010 dual-core i3 with 5.7 GB RAM and crashed when numpy's BLAS threads spun (`config.py`, `body/__init__.py` and `tests/__init__.py` now pin them to one thread). Keep it that way: run one process at a time (no `pytest -n`), prefix long runs with `nice -n 19 timeout <s>`, run sim test files in small batches, and use the GUI only on request. If it cannot run the code comfortably, the Pi will not either.
 - Lint and types: `ruff check .` and `mypy .`; run both before committing.
 - Models: `scripts/fetch_models.sh` (arrives in Steps 7–8).
 

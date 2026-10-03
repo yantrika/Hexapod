@@ -22,6 +22,9 @@ python scripts/sim_demo.py --headless --pose stand   # no window, prints measure
 python scripts/sim_demo.py --pose stand              # PyBullet GUI
 python scripts/walk_demo.py --headless               # walk, turn in place, strafe; prints distances
 python scripts/walk_demo.py                          # same in the GUI
+python scripts/sim_demo.py --headless --script "stand,walk,stop,sit"   # scripted controller run
+python scripts/teleop.py                             # keyboard control (GUI); prints the key map
+python scripts/joint_jog.py                          # dev only: 18 joint sliders (GUI)
 ```
 
 **Laptop-specific note (Intel HD Graphics "ILK", OpenGL 2.1):** PyBullet's GUI needs
@@ -34,3 +37,12 @@ MESA_GL_VERSION_OVERRIDE=3.3 MESA_GLSL_VERSION_OVERRIDE=330 python scripts/walk_
 ```
 
 The scripts do not set this themselves; tests never open the GUI.
+
+**Keep it light on slow machines:** run one process at a time, and prefix long runs with
+`nice -n 19 timeout 300`. numpy's BLAS threads are pinned to one thread (they made the
+loop 7x slower and crashed the dev laptop).
+
+**Manual control.** `teleop.py`: W/S forward/back, A/D strafe, Q/E turn, Space stop,
+1 stand, 2 sit, 3 wave, +/- speed. Releasing a movement key ramps it to zero. It only uses
+the controller API. `joint_jog.py` is a tuning tool, not part of the runtime; it only uses
+the backend API, so the hard joint limits still apply.
