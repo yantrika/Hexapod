@@ -76,3 +76,22 @@ def test_link_lengths_match_config(robot: ET.Element) -> None:
     foot = _joint(robot, "RF_foot_joint").find("origin")
     assert foot is not None
     assert _floats(foot.get("xyz")) == pytest.approx([0, 0, -config.TIBIA_LENGTH])
+
+
+def test_ground_contact_goes_through_the_tibia_sphere_not_the_foot_link(robot: ET.Element) -> None:
+    # A tiny-mass foot link carrying contact forces made the solver jitter, and
+    # a flat tibia end contacting the ground rolled on its rim. The tibia gets a
+    # collision sphere whose lowest point is the tip; the foot link has none.
+    links = {link.get("name"): link for link in robot.findall("link")}
+    for leg in config.LEG_NAMES:
+        assert links[f"{leg}_foot"].find("collision") is None
+        collisions = links[f"{leg}_tibia_link"].findall("collision")
+        sphere = next(c for c in collisions if c.find("geometry/sphere") is not None)
+        radius = float(sphere.find("geometry/sphere").get("radius", "nan"))  # type: ignore[union-attr]
+        centre = _floats(sphere.find("origin").get("xyz"))  # type: ignore[union-attr]
+        assert radius == pytest.approx(config.FOOT_RADIUS_M)
+        assert centre[2] - radius == pytest.approx(-config.TIBIA_LENGTH)  # lowest point = tip
+        cylinder = next(c for c in collisions if c.find("geometry/cylinder") is not None)
+        length = float(cylinder.find("geometry/cylinder").get("length", "nan"))  # type: ignore[union-attr]
+        bottom = _floats(cylinder.find("origin").get("xyz"))[2] - length / 2  # type: ignore[union-attr]
+        assert bottom >= -config.TIBIA_LENGTH + config.FOOT_RADIUS_M - 1e-9  # ends above the tip

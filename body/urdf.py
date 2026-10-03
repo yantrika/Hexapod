@@ -9,8 +9,9 @@ Joint conventions match ``body/kinematics.py``:
 
 Each leg's coxa joint sits at ``kinematics.hip_position`` rotated by
 ``config.mount_yaw_rad``; nothing here reads the raw mount angles.
-Foot link origin = foot target (tibia tip); its contact sphere is shifted up
-by its radius so the lowest point of the foot is the target.
+Foot link origin = foot target (tibia tip). It is a visual-only marker; the
+ground-contact sphere belongs to the tibia link and is positioned so its lowest
+point is the foot target.
 """
 
 from __future__ import annotations
@@ -54,13 +55,18 @@ def _inertial(centre: tuple[float, ...], mass: float, ixx: float, iyy: float, iz
     )
 
 
+def _collision(centre: tuple[float, ...], rpy: tuple[float, ...], geometry: str) -> str:
+    origin = f'<origin xyz="{_f(*centre)}" rpy="{_f(*rpy)}"/>'
+    return f"<collision>{origin}{geometry}</collision>"
+
+
 def _shape_tags(
     kind: str, centre: tuple[float, ...], rpy: tuple[float, ...], geometry: str, collide: bool
 ) -> str:
     origin = f'<origin xyz="{_f(*centre)}" rpy="{_f(*rpy)}"/>'
     tags = [f"<visual>{origin}{geometry}{_material(kind)}</visual>"]
     if collide:
-        tags.append(f"<collision>{origin}{geometry}</collision>")
+        tags.append(_collision(centre, rpy, geometry))
     return "\n    ".join(tags)
 
 
@@ -68,8 +74,21 @@ def _link(name: str, inertial: str, shapes: str) -> str:
     return f'  <link name="{name}">\n    {inertial}\n    {shapes}\n  </link>'
 
 
-def _rod_link(name: str, kind: str, length: float, axis: str, collide: bool) -> str:
-    """A cylinder link along +X (axis='x') or -Z (axis='z'), COM at its midpoint."""
+def _rod_link(
+    name: str,
+    kind: str,
+    length: float,
+    axis: str,
+    collide: bool,
+    foot_sphere_radius: float = 0.0,
+) -> str:
+    """A cylinder link along +X (axis='x') or -Z (axis='z'), COM at its midpoint.
+
+    With *foot_sphere_radius* > 0 (the tibia), the collision cylinder is shortened
+    by that radius and a collision sphere is added whose lowest point is the link
+    tip. Ground contact then goes through the tibia body, not a tiny-mass foot
+    link, which keeps the solver well conditioned.
+    """
     mass = config.LINK_MASS_KG[kind]
     axial, transverse = _rod_inertia(mass, length, config.LINK_RADIUS_M)
     if axis == "x":
@@ -80,12 +99,17 @@ def _rod_link(name: str, kind: str, length: float, axis: str, collide: bool) -> 
         centre = (0.0, 0.0, -length / 2)
         rpy = (0.0, 0.0, 0.0)
         inertia = (transverse, transverse, axial)
-    geometry = _cylinder(length, config.LINK_RADIUS_M)
-    return _link(
-        name,
-        _inertial(centre, mass, *inertia),
-        _shape_tags(kind, centre, rpy, geometry, collide),
-    )
+    shapes = _shape_tags(kind, centre, rpy, _cylinder(length, config.LINK_RADIUS_M), False)
+    if collide:
+        shorter = length - foot_sphere_radius
+        hit_centre = (shorter / 2, 0.0, 0.0) if axis == "x" else (0.0, 0.0, -shorter / 2)
+        hit_geometry = _cylinder(shorter, config.LINK_RADIUS_M)
+        shapes += "\n    " + _collision(hit_centre, rpy, hit_geometry)
+        if foot_sphere_radius > 0.0:
+            sphere = f'<geometry><sphere radius="{_f(foot_sphere_radius)}"/></geometry>'
+            tip_centre = (0.0, 0.0, -(length - foot_sphere_radius))
+            shapes += "\n    " + _collision(tip_centre, (0.0, 0.0, 0.0), sphere)
+    return _link(name, _inertial(centre, mass, *inertia), shapes)
 
 
 def _foot_link(name: str) -> str:
@@ -96,7 +120,7 @@ def _foot_link(name: str) -> str:
     return _link(
         name,
         _inertial((0.0, 0.0, 0.0), mass, moment, moment, moment),
-        _shape_tags("foot", (0.0, 0.0, radius), (0.0, 0.0, 0.0), geometry, collide=True),
+        _shape_tags("foot", (0.0, 0.0, radius), (0.0, 0.0, 0.0), geometry, collide=False),
     )
 
 
@@ -148,7 +172,10 @@ def build_urdf() -> str:
         parts += [
             _rod_link(f"{leg}_coxa_link", "coxa", config.COXA_LENGTH, "x", collide=False),
             _rod_link(f"{leg}_femur_link", "femur", config.FEMUR_LENGTH, "x", collide=True),
-            _rod_link(f"{leg}_tibia_link", "tibia", config.TIBIA_LENGTH, "z", collide=True),
+            _rod_link(
+                f"{leg}_tibia_link", "tibia", config.TIBIA_LENGTH, "z", collide=True,
+                foot_sphere_radius=config.FOOT_RADIUS_M,
+            ),
             _foot_link(f"{leg}_foot"),
             _revolute(f"{leg}_coxa", "base_link", f"{leg}_coxa_link", hip, yaw, "0 0 1", "coxa"),
             _revolute(

@@ -99,7 +99,7 @@ FOOT_FRICTION = 1.0
 JOINT_MAX_FORCE_NM = 3.0  # servo torque limit
 JOINT_MAX_VELOCITY_RAD_S = 6.0  # servo speed limit
 JOINT_POSITION_GAIN = 0.3
-JOINT_VELOCITY_GAIN = 1.0
+JOINT_VELOCITY_GAIN = 0.3  # low sim damping: real servos do not resist their own motion
 SIM_GRAVITY = 9.81
 SIM_SPAWN_CLEARANCE_M = 0.002  # spawn this far above the stand height
 

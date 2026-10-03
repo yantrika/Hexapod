@@ -18,12 +18,12 @@
   <link name="RF_tibia_link">
     <inertial><origin xyz="0 0 -0.065" rpy="0 0 0"/><mass value="0.05"/><inertia ixx="7.12166667e-05" ixy="0" ixz="0" iyy="7.12166667e-05" iyz="0" izz="1.6e-06"/></inertial>
     <visual><origin xyz="0 0 -0.065" rpy="0 0 0"/><geometry><cylinder length="0.13" radius="0.008"/></geometry><material name="tibia_mat"><color rgba="0.3 0.7 0.4 1"/></material></visual>
-    <collision><origin xyz="0 0 -0.065" rpy="0 0 0"/><geometry><cylinder length="0.13" radius="0.008"/></geometry></collision>
+    <collision><origin xyz="0 0 -0.06" rpy="0 0 0"/><geometry><cylinder length="0.12" radius="0.008"/></geometry></collision>
+    <collision><origin xyz="0 0 -0.12" rpy="0 0 0"/><geometry><sphere radius="0.01"/></geometry></collision>
   </link>
   <link name="RF_foot">
     <inertial><origin xyz="0 0 0" rpy="0 0 0"/><mass value="0.01"/><inertia ixx="4e-07" ixy="0" ixz="0" iyy="4e-07" iyz="0" izz="4e-07"/></inertial>
     <visual><origin xyz="0 0 0.01" rpy="0 0 0"/><geometry><sphere radius="0.01"/></geometry><material name="foot_mat"><color rgba="0.1 0.1 0.1 1"/></material></visual>
-    <collision><origin xyz="0 0 0.01" rpy="0 0 0"/><geometry><sphere radius="0.01"/></geometry></collision>
   </link>
   <joint name="RF_coxa" type="revolute">
     <parent link="base_link"/>
@@ -63,12 +63,12 @@
   <link name="RM_tibia_link">
     <inertial><origin xyz="0 0 -0.065" rpy="0 0 0"/><mass value="0.05"/><inertia ixx="7.12166667e-05" ixy="0" ixz="0" iyy="7.12166667e-05" iyz="0" izz="1.6e-06"/></inertial>
     <visual><origin xyz="0 0 -0.065" rpy="0 0 0"/><geometry><cylinder length="0.13" radius="0.008"/></geometry><material name="tibia_mat"><color rgba="0.3 0.7 0.4 1"/></material></visual>
-    <collision><origin xyz="0 0 -0.065" rpy="0 0 0"/><geometry><cylinder length="0.13" radius="0.008"/></geometry></collision>
+    <collision><origin xyz="0 0 -0.06" rpy="0 0 0"/><geometry><cylinder length="0.12" radius="0.008"/></geometry></collision>
+    <collision><origin xyz="0 0 -0.12" rpy="0 0 0"/><geometry><sphere radius="0.01"/></geometry></collision>
   </link>
   <link name="RM_foot">
     <inertial><origin xyz="0 0 0" rpy="0 0 0"/><mass value="0.01"/><inertia ixx="4e-07" ixy="0" ixz="0" iyy="4e-07" iyz="0" izz="4e-07"/></inertial>
     <visual><origin xyz="0 0 0.01" rpy="0 0 0"/><geometry><sphere radius="0.01"/></geometry><material name="foot_mat"><color rgba="0.1 0.1 0.1 1"/></material></visual>
-    <collision><origin xyz="0 0 0.01" rpy="0 0 0"/><geometry><sphere radius="0.01"/></geometry></collision>
   </link>
   <joint name="RM_coxa" type="revolute">
     <parent link="base_link"/>
@@ -108,12 +108,12 @@
   <link name="RR_tibia_link">
     <inertial><origin xyz="0 0 -0.065" rpy="0 0 0"/><mass value="0.05"/><inertia ixx="7.12166667e-05" ixy="0" ixz="0" iyy="7.12166667e-05" iyz="0" izz="1.6e-06"/></inertial>
     <visual><origin xyz="0 0 -0.065" rpy="0 0 0"/><geometry><cylinder length="0.13" radius="0.008"/></geometry><material name="tibia_mat"><color rgba="0.3 0.7 0.4 1"/></material></visual>
-    <collision><origin xyz="0 0 -0.065" rpy="0 0 0"/><geometry><cylinder length="0.13" radius="0.008"/></geometry></collision>
+    <collision><origin xyz="0 0 -0.06" rpy="0 0 0"/><geometry><cylinder length="0.12" radius="0.008"/></geometry></collision>
+    <collision><origin xyz="0 0 -0.12" rpy="0 0 0"/><geometry><sphere radius="0.01"/></geometry></collision>
   </link>
   <link name="RR_foot">
     <inertial><origin xyz="0 0 0" rpy="0 0 0"/><mass value="0.01"/><inertia ixx="4e-07" ixy="0" ixz="0" iyy="4e-07" iyz="0" izz="4e-07"/></inertial>
     <visual><origin xyz="0 0 0.01" rpy="0 0 0"/><geometry><sphere radius="0.01"/></geometry><material name="foot_mat"><color rgba="0.1 0.1 0.1 1"/></material></visual>
-    <collision><origin xyz="0 0 0.01" rpy="0 0 0"/><geometry><sphere radius="0.01"/></geometry></collision>
   </link>
   <joint name="RR_coxa" type="revolute">
     <parent link="base_link"/>
@@ -153,12 +153,12 @@
   <link name="LR_tibia_link">
     <inertial><origin xyz="0 0 -0.065" rpy="0 0 0"/><mass value="0.05"/><inertia ixx="7.12166667e-05" ixy="0" ixz="0" iyy="7.12166667e-05" iyz="0" izz="1.6e-06"/></inertial>
     <visual><origin xyz="0 0 -0.065" rpy="0 0 0"/><geometry><cylinder length="0.13" radius="0.008"/></geometry><material name="tibia_mat"><color rgba="0.3 0.7 0.4 1"/></material></visual>
-    <collision><origin xyz="0 0 -0.065" rpy="0 0 0"/><geometry><cylinder length="0.13" radius="0.008"/></geometry></collision>
+    <collision><origin xyz="0 0 -0.06" rpy="0 0 0"/><geometry><cylinder length="0.12" radius="0.008"/></geometry></collision>
+    <collision><origin xyz="0 0 -0.12" rpy="0 0 0"/><geometry><sphere radius="0.01"/></geometry></collision>
   </link>
   <link name="LR_foot">
     <inertial><origin xyz="0 0 0" rpy="0 0 0"/><mass value="0.01"/><inertia ixx="4e-07" ixy="0" ixz="0" iyy="4e-07" iyz="0" izz="4e-07"/></inertial>
     <visual><origin xyz="0 0 0.01" rpy="0 0 0"/><geometry><sphere radius="0.01"/></geometry><material name="foot_mat"><color rgba="0.1 0.1 0.1 1"/></material></visual>
-    <collision><origin xyz="0 0 0.01" rpy="0 0 0"/><geometry><sphere radius="0.01"/></geometry></collision>
   </link>
   <joint name="LR_coxa" type="revolute">
     <parent link="base_link"/>
@@ -198,12 +198,12 @@
   <link name="LM_tibia_link">
     <inertial><origin xyz="0 0 -0.065" rpy="0 0 0"/><mass value="0.05"/><inertia ixx="7.12166667e-05" ixy="0" ixz="0" iyy="7.12166667e-05" iyz="0" izz="1.6e-06"/></inertial>
     <visual><origin xyz="0 0 -0.065" rpy="0 0 0"/><geometry><cylinder length="0.13" radius="0.008"/></geometry><material name="tibia_mat"><color rgba="0.3 0.7 0.4 1"/></material></visual>
-    <collision><origin xyz="0 0 -0.065" rpy="0 0 0"/><geometry><cylinder length="0.13" radius="0.008"/></geometry></collision>
+    <collision><origin xyz="0 0 -0.06" rpy="0 0 0"/><geometry><cylinder length="0.12" radius="0.008"/></geometry></collision>
+    <collision><origin xyz="0 0 -0.12" rpy="0 0 0"/><geometry><sphere radius="0.01"/></geometry></collision>
   </link>
   <link name="LM_foot">
     <inertial><origin xyz="0 0 0" rpy="0 0 0"/><mass value="0.01"/><inertia ixx="4e-07" ixy="0" ixz="0" iyy="4e-07" iyz="0" izz="4e-07"/></inertial>
     <visual><origin xyz="0 0 0.01" rpy="0 0 0"/><geometry><sphere radius="0.01"/></geometry><material name="foot_mat"><color rgba="0.1 0.1 0.1 1"/></material></visual>
-    <collision><origin xyz="0 0 0.01" rpy="0 0 0"/><geometry><sphere radius="0.01"/></geometry></collision>
   </link>
   <joint name="LM_coxa" type="revolute">
     <parent link="base_link"/>
@@ -243,12 +243,12 @@
   <link name="LF_tibia_link">
     <inertial><origin xyz="0 0 -0.065" rpy="0 0 0"/><mass value="0.05"/><inertia ixx="7.12166667e-05" ixy="0" ixz="0" iyy="7.12166667e-05" iyz="0" izz="1.6e-06"/></inertial>
     <visual><origin xyz="0 0 -0.065" rpy="0 0 0"/><geometry><cylinder length="0.13" radius="0.008"/></geometry><material name="tibia_mat"><color rgba="0.3 0.7 0.4 1"/></material></visual>
-    <collision><origin xyz="0 0 -0.065" rpy="0 0 0"/><geometry><cylinder length="0.13" radius="0.008"/></geometry></collision>
+    <collision><origin xyz="0 0 -0.06" rpy="0 0 0"/><geometry><cylinder length="0.12" radius="0.008"/></geometry></collision>
+    <collision><origin xyz="0 0 -0.12" rpy="0 0 0"/><geometry><sphere radius="0.01"/></geometry></collision>
   </link>
   <link name="LF_foot">
     <inertial><origin xyz="0 0 0" rpy="0 0 0"/><mass value="0.01"/><inertia ixx="4e-07" ixy="0" ixz="0" iyy="4e-07" iyz="0" izz="4e-07"/></inertial>
     <visual><origin xyz="0 0 0.01" rpy="0 0 0"/><geometry><sphere radius="0.01"/></geometry><material name="foot_mat"><color rgba="0.1 0.1 0.1 1"/></material></visual>
-    <collision><origin xyz="0 0 0.01" rpy="0 0 0"/><geometry><sphere radius="0.01"/></geometry></collision>
   </link>
   <joint name="LF_coxa" type="revolute">
     <parent link="base_link"/>
