@@ -15,7 +15,14 @@ to turn a mount angle into math yaw; it is the only conversion point.
 from __future__ import annotations
 
 import math
+import os
 from pathlib import Path
+
+# Small numpy arrays gain nothing from BLAS threads, and the spinning threads starve the
+# control loop (measured: 7x slower ticks on the 2-core dev laptop). config is imported
+# before numpy everywhere, so this takes effect.
+for _var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+    os.environ.setdefault(_var, "1")
 
 # --- Filesystem ----------------------------------------------------------
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -82,6 +89,7 @@ TURN_DEFAULT_ANGLE_DEG = 90.0
 TURN_RATE_MAX_DEG_S = 20.0  # max yaw rate; PLACEHOLDER, limited by STEP_LENGTH_MAX_M
 STEP_LENGTH_MAX_M = 0.05  # max stride (stance travel per foot per step); PLACEHOLDER
 STEP_HEIGHT_M = 0.03  # swing height; PLACEHOLDER
+GAIT_FULL_LIFT_STRIDE_M = 0.01  # below this stride the swing height shrinks proportionally
 BODY_HEIGHT_SIT = 0.06  # m, PLACEHOLDER
 # The zero pose is the stand pose: femur horizontal, tibia vertical, so the
 # neutral foot hangs TIBIA_LENGTH below the body plane.
@@ -102,6 +110,25 @@ JOINT_POSITION_GAIN = 0.3
 JOINT_VELOCITY_GAIN = 0.3  # low sim damping: real servos do not resist their own motion
 SIM_GRAVITY = 9.81
 SIM_SPAWN_CLEARANCE_M = 0.002  # spawn this far above the stand height
+
+# --- Controller (body/controller.py) ---------------------------------------
+VELOCITY_RAMP_S = 0.5  # time to ramp a velocity command from zero to its maximum
+SIT_STAND_TRANSITION_S = 1.5  # PLACEHOLDER
+SETTLE_S = 0.8  # held pose -> neutral stance before a sit/stand transition; PLACEHOLDER
+RESUME_BLEND_S = 0.5  # held pose -> gait output when walking resumes after a stop
+WAVE_LEG = "RF"
+WAVE_DURATION_S = 3.0
+WAVE_BLEND_S = 0.5  # raise and lower time at each end of the wave
+WAVE_FREQUENCY_HZ = 1.5
+WAVE_FEMUR_DEG = 60.0  # raised femur angle
+WAVE_TIBIA_DEG = 20.0
+WAVE_COXA_AMPLITUDE_DEG = 25.0
+FOOT_TARGET_MAX_SPEED_M_S = 0.4  # no foot target may move faster than this (walk, ramps, blends)
+
+# --- Manual control (scripts/teleop.py) ----------------------------------
+TELEOP_SPEED_SCALE_DEFAULT = 0.5  # fraction of the max speed
+TELEOP_SPEED_SCALE_MIN = 0.1
+TELEOP_SPEED_SCALE_STEP = 0.1
 
 # --- Timing and bridge ---------------------------------------------------
 PHYSICS_HZ = 240.0  # PyBullet step, driven by wall-clock time
@@ -166,6 +193,8 @@ WALK_TEST_HEIGHT_TOL_M = 0.02  # sim walk tests: body height within this of stan
 WALK_TEST_SPEED_TOL = 0.25  # sim walk tests: measured motion within 25 % of commanded
 WALK_TEST_POSITION_DRIFT_M = 0.05  # sim walk tests: unwanted displacement over 10 s
 WALK_TEST_HEADING_DRIFT_DEG = 5.0  # sim walk tests: unwanted heading change over 10 s
+HOLD_TEST_MAX_TILT_DEG = 5.0  # sim hold tests: roll/pitch while a pose is held
+HOLD_TEST_MAX_BODY_SPEED_M_S = 0.02  # sim hold tests: body must be at rest after 3 s
 
 
 def clamp(value: float, low: float, high: float) -> float:
