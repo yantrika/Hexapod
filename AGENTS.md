@@ -29,6 +29,8 @@ Avoid committing build output, caches, models, or secrets; add them to `.gitigno
 - Units: metres and radians, unless a name ends in `_DEG`. Body frame: +X forward, +Y left, +Z up.
 - Leg mount angles are measured clockwise from above, 0° = +X: RF 30, RM 90, RR 150, LR 210, LM 270, LF 330. Convert to math yaw only through `config.mount_yaw_rad` (the single conversion point). Left mirrors right, and RF's foot target must land on the right side (y < 0).
 - The zero pose is the stand pose (`BODY_HEIGHT_STAND = TIBIA_LENGTH`). The URDF is generated from config by `scripts/generate_urdf.py` (re-run it after changing geometry; a test fails if the committed file is stale). Joint axes: coxa +Z, femur and tibia -Y.
+- `body/gait.py` is a pure planner (no PyBullet, no clock): `plan(phase, BodyVelocity, GaitParams)` returns foot targets and joint angles, respects the soft limits, and scales the stride down (with a warning) instead of ever returning an out-of-limit pose.
+- `HexapodBackend.advance(dt)` returns the seconds actually advanced; callers that drive a gait should advance phase by that value.
 - Leg order is `RF, RM, RR, LR, LM, LF`; tripod A = RF, RR, LM; tripod B = RM, LR, LF.
 - IK always returns the knee-up solution and returns `None` for unreachable points.
 - Router: `stop` words match anywhere; other commands need a short utterance (after filler removal) and `fuzz.ratio >= ROUTER_THRESHOLD`; everything else goes to chat.

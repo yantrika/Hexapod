@@ -179,8 +179,9 @@ hexa/
 ├── scripts/
 │   ├── fetch_models.sh       # Vosk + Piper downloads (Step 7/8)
 │   ├── generate_urdf.py      # writes assets/urdf/hexapod.urdf via body/urdf.py (--check verifies)
-│   └── sim_demo.py           # drives controller directly, no queues (Steps 2-4)
-├── tests/                    # test_<module>.py mirroring the packages; tests/fakes.py
+│   ├── sim_demo.py           # holds stand/sit in the sim (Step 2)
+│   └── walk_demo.py          # forward, turn in place, strafe at the control rate (Step 3)
+├── tests/                    # test_<module>.py mirroring the packages; fakes.py, walk_harness.py
 └── logs/
 ```
 
@@ -202,18 +203,18 @@ Existing names that are replaced: `BODY_COMMAND_QUEUE`, `BODY_TELEMETRY_QUEUE` (
 - `JOINT_HARD_LIMITS_DEG = {"coxa": (-90, 90), "femur": (-90, 90), "tibia": (-90, 90)}` (servo range in the clean frame)
 - `GAIT_SOFT_LIMITS_DEG = {"coxa": (-30, 30), "femur": (-90, 90), "tibia": (-90, 90)}` (**P**; femur/tibia tuned in Steps 2–3; each must lie inside the hard limits)
 - `SPEED_MIN = 0.0`, `SPEED_MAX = 1.0`
-- `TURN_ANGLE_MIN_DEG = 1`, `TURN_ANGLE_MAX_DEG = 180`, `TURN_RATE_MAX_DEG_S = 60` (**P**)
-- `STEP_LENGTH_MAX_M = 0.05` (**P**), `STEP_HEIGHT_M = 0.03` (**P**)
+- `TURN_ANGLE_MIN_DEG = 1`, `TURN_ANGLE_MAX_DEG = 180`, `TURN_RATE_MAX_DEG_S = 20` (**P**; the gait's max yaw rate, limited by the max stride)
+- `STEP_LENGTH_MAX_M = 0.05` (**P**; max stride), `STEP_HEIGHT_M = 0.03` (**P**; swing height)
 - `BODY_HEIGHT_SIT = 0.06` (**P**), `BODY_HEIGHT_STAND = TIBIA_LENGTH = 0.13` (the zero pose is the stand pose, so the neutral foot hangs `TIBIA_LENGTH` below the body plane)
 - `FALL_TILT_DEG = 50`
 - helper `clamp(value, low, high)`
 
-**Simulation model** (all **P**): `BODY_THICKNESS_M = 0.04`, `BODY_MASS_KG = 0.6`, `LINK_RADIUS_M = 0.008`, `LINK_MASS_KG = {coxa 0.03, femur 0.05, tibia 0.05, foot 0.01}`, `FOOT_RADIUS_M = 0.01`, `GROUND_FRICTION = 1.0`, `FOOT_FRICTION = 1.0`, `JOINT_MAX_FORCE_NM = 3.0`, `JOINT_MAX_VELOCITY_RAD_S = 6.0`, `JOINT_POSITION_GAIN = 0.3`, `JOINT_VELOCITY_GAIN = 1.0`, `SIM_GRAVITY = 9.81`, `SIM_SPAWN_CLEARANCE_M = 0.002`
+**Simulation model** (all **P**): `BODY_THICKNESS_M = 0.04`, `BODY_MASS_KG = 0.6`, `LINK_RADIUS_M = 0.008`, `LINK_MASS_KG = {coxa 0.03, femur 0.05, tibia 0.05, foot 0.01}`, `FOOT_RADIUS_M = 0.01`, `GROUND_FRICTION = 1.0`, `FOOT_FRICTION = 1.0`, `JOINT_MAX_FORCE_NM = 3.0`, `JOINT_MAX_VELOCITY_RAD_S = 6.0`, `JOINT_POSITION_GAIN = 0.3`, `JOINT_VELOCITY_GAIN = 0.3` (low sim damping; 1.0 acted as viscous drag and cost about 20 % of walking speed), `SIM_GRAVITY = 9.81`, `SIM_SPAWN_CLEARANCE_M = 0.002`
 
 **Timing and bridge**
 - `PHYSICS_HZ = 240`, `CONTROL_HZ = 50`
 - `MAX_PHYSICS_CATCHUP_STEPS = 12` (caps catch-up after a stall to about 50 ms of sim time)
-- `GAIT_PERIOD_S = 1.0` (**P**)
+- `GAIT_PERIOD_S = 1.0` (**P**), `GAIT_SWING_FRACTION = 0.5` (0 < f ≤ 0.5), `GAIT_MAX_SPEED_M_S = STEP_LENGTH_MAX_M / ((1 − GAIT_SWING_FRACTION) × GAIT_PERIOD_S) = 0.1` (derived)
 - `MAX_MESSAGE_AGE_S = 0.5`
 - `WATCHDOG_TIMEOUT_S = 1.0`, `HEARTBEAT_HZ = 5.0`
 - `COMMAND_QUEUE_MAXSIZE = 8` (drop-oldest), `STATUS_QUEUE_MAXSIZE = 64`
@@ -236,7 +237,7 @@ Existing names that are replaced: `BODY_COMMAND_QUEUE`, `BODY_TELEMETRY_QUEUE` (
 - `PIPER_BINARY = "piper"`, `PIPER_MODEL_PATH = PIPER_DIR/"en_US-amy-low.onnx"`
 - `OLLAMA_URL = "http://127.0.0.1:11434"`, `OLLAMA_MODEL = "qwen2.5:1.5b"`, `OLLAMA_TIMEOUT_S = 20`, `CHAT_MAX_TOKENS = 80`, `CHAT_HISTORY_TURNS = 4`
 
-**Test tolerances**: `IK_TOLERANCE_M = 1e-4`.
+**Test tolerances**: `IK_TOLERANCE_M = 1e-4`, `WALK_TEST_MAX_TILT_DEG = 10`, `WALK_TEST_HEIGHT_TOL_M = 0.02`, `WALK_TEST_SPEED_TOL = 0.25`, `WALK_TEST_POSITION_DRIFT_M = 0.05`, `WALK_TEST_HEADING_DRIFT_DEG = 5`.
 
 **Not in `config.py`**: servo calibration (per-joint centre, sign, offset, channel, pulse range) lives in a table inside `body/servo_backend.py` (Step 11). `config.py` stays hardware-agnostic.
 
@@ -272,11 +273,14 @@ Each step is small, ends green (`pytest`, `ruff check .`, `mypy .`), and waits f
 - **GUI note**: PyBullet's GUI needs OpenGL 3.3+ shaders. On the dev laptop (Intel HD Graphics "ILK", OpenGL 2.1) the plain GUI aborts with `GLSL 1.50 is not supported`; it starts with Mesa's `MESA_GL_VERSION_OVERRIDE=3.3 MESA_GLSL_VERSION_OVERRIDE=330`. Tests never use the GUI.
 
 ### Step 3 — Tripod gait
-- **Goal**: pure gait generator, phase to 18 joint targets.
-- **Files**: `body/gait.py`, `tests/test_gait.py`.
-- **Verify**: `pytest tests/test_gait.py`
-- **Tests**: A and B are 180° out of phase; stance feet keep constant ground height; swing feet lift by `STEP_HEIGHT_M`; output is periodic; speed scales step length within the clamp; turning produces opposite left/right stride; IK succeeds for every sampled phase; coxa targets never exceed `GAIT_SOFT_LIMITS_DEG` over a full cycle at every speed and turn rate.
-- **Done when**: tests pass; `scripts/sim_demo.py --gait walk` visibly walks in the GUI.
+- **Goal**: pure gait planner (phase + body velocity to six foot targets and joint angles) that walks the sim robot forward, turns it in place and strafes it.
+- **Files**: `body/gait.py`, `tests/test_gait.py`, `tests/walk_harness.py`, `tests/test_walk_sim.py`, `scripts/walk_demo.py`. Also: `SimBackend.advance()` now returns the simulated seconds actually stepped; the URDF's ground contact moved to a sphere on the tibia link (see Step 3 findings); new gait constants in `config.py`.
+- **Planner**: input is `phase` in [0, 1), `BodyVelocity(vx, vy, yaw_rate)` (m/s, m/s, rad/s, body frame, turning about the body centre) and `GaitParams` (defaults from config). Tripod A swings in group phase [0, `GAIT_SWING_FRACTION`), B half a cycle later. A foot's stance velocity is `−(v + yaw_rate × p)` for its neutral position `p`; stance is a straight line at ground height, swing is a cycloid in the horizontal and `H sin²(πs)` in height, so velocity is zero at lift-off and touch-down. A zero command gives every foot at neutral with no lift (callers ramp commands). Commands are clamped to the max speed, max yaw rate and max stride. Every target goes through `kinematics.ik` and `GAIT_SOFT_LIMITS_DEG`; if one fails, `plan()` bisects to the largest feasible stride scale and logs a warning.
+- **Verify**: `pytest tests/test_gait.py tests/test_walk_sim.py -s`; `python scripts/walk_demo.py --headless`; GUI: `python scripts/walk_demo.py` (laptop note in README).
+- **Tests (no PyBullet)**: stance feet never above ground and swing feet lift by `STEP_HEIGHT_M`; the groups are never in swing together; zero velocity leaves every foot at neutral; stance foot moves back in a straight line at ground height by `v × stance time`; swing velocity is zero at lift-off and touch-down; a mirrored command gives mirrored targets (mirror pairs sit in opposite groups, so the mirror image at phase p equals the mirrored command at p + 0.5); all targets reachable and inside the soft limits at max speed for 8 command directions; targets continuous across the phase wrap and over the whole cycle; over-limit commands are clamped; an unreachable stride is scaled down with a warning and never yields an out-of-limit pose; the module has no PyBullet or clock.
+- **Tests (sim, DIRECT)**: 10 s of sim time after a 2 s ramp-up. Forward and strafe distance within `WALK_TEST_SPEED_TOL` (25 %) of speed × time; turn rate within 25 %; roll and pitch under `WALK_TEST_MAX_TILT_DEG`; body height within `WALK_TEST_HEIGHT_TOL_M` of stand; unwanted drift under `WALK_TEST_POSITION_DRIFT_M` / `WALK_TEST_HEADING_DRIFT_DEG`; the planner never had to shrink the stride.
+- **Step 3 findings (measured, before any tuning)**: the first working model walked stably (roll/pitch < 0.2°) but 22–25 % short of the commanded distance. Joint tracking was fine (0.5 mm foot error), so the stance feet were sliding in the world (about −0.023 m/s at 0.1 m/s). Causes, in order of effect: (1) servo velocity gain 1.0 acted as viscous drag between body and feet (gain 0.1–0.3 recovered about 15 %); (2) low friction (μ 1 → 100 recovered about 15 %, but not needed once (1) and (3) are fixed); (3) the ground contact was the flat end of the tibia cylinder rolling on its rim (never the foot sphere), worth about 5 %. Fixing the contact exposed a fourth problem: contact forces through the 10 g foot link made the solver jitter (stand joint speed spiking to 3.7 rad/s). The fix is a collision sphere on the tibia link and a visual-only foot link. Result: `JOINT_VELOCITY_GAIN = 0.3`, friction unchanged.
+- **Done when**: all tests pass and the demo walks, turns and strafes in headless and GUI modes.
 
 ### Step 4 — Controller and body timing
 - **Goal**: state machine plus wall-clock-driven fixed loops.
