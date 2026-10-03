@@ -74,3 +74,14 @@ python -m body.process --headless                # idle body; Ctrl-C exits clean
 ```
 
 The CLI sends a heartbeat at `HEARTBEAT_HZ`; without heartbeats a walk or turn is stopped by the watchdog and reported as `done` with `reason=watchdog`. Tests with a wall-clock bound (tick cost, stop and walk latency, distance walked in real time) are marked `timing` and skipped by default: run timing tests on a quiet machine with `pytest -m timing`. Run the tests one file at a time (`nice -n 19 pytest tests/test_body_process.py`): they spawn real processes and take about a minute.
+
+## Typed text to the robot (Step 6)
+
+`scripts/brain_cli.py` routes typed text with the offline router and drives the body process through the bridge. A walk keeps going (a motion keeper sends heartbeats) until you say stop, or for `VOICE_WALK_MAX_S` (10 s). Anything that is not a command prints `[chat] <text>` (the chat model comes in Step 9).
+
+```bash
+python scripts/brain_cli.py --headless      # no window
+MESA_GL_VERSION_OVERRIDE=3.3 MESA_GLSL_VERSION_OVERRIDE=330 python scripts/brain_cli.py --gui   # dev laptop
+```
+
+Try `walk forward`, `please sit down`, `can you wave`, `turn left`, `hexa stop`, `halt`, `I sat down for lunch` (chat). The line printed for each input shows the matched phrase and score.
