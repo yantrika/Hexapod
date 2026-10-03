@@ -31,8 +31,8 @@ class RecordingBackend(HexapodBackend):
     def get_base_pose(self) -> BasePose:
         return BasePose(np.zeros(3), np.zeros(3))
 
-    def advance(self, dt: float) -> None:
-        pass
+    def advance(self, dt: float) -> float:
+        return dt
 
     def close(self) -> None:
         pass

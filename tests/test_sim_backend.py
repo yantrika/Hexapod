@@ -89,8 +89,11 @@ def test_advance_uses_wall_clock_time_not_call_count(sim: SimBackend) -> None:
     assert steps_for(1) == pytest.approx(steps_for(5), abs=1e-4)
 
 
-def test_advance_caps_catch_up_after_a_stall(sim: SimBackend) -> None:
-    sim.advance(5.0)  # a 5 s stall must not run 1200 steps in one call
+def test_advance_returns_simulated_time_and_caps_catch_up(sim: SimBackend) -> None:
+    dt = 1.0 / config.PHYSICS_HZ
+    assert sim.advance(3.5 * dt) == pytest.approx(3 * dt)  # whole steps only; remainder is kept
+    stepped = sim.advance(5.0)  # a 5 s stall must not run 1200 steps in one call
+    assert stepped == pytest.approx(config.MAX_PHYSICS_CATCHUP_STEPS * dt)
     assert sim._time_debt == 0.0  # noqa: SLF001
     sim.advance(1.0 / config.PHYSICS_HZ * 0.5)  # less than one step: nothing to run
     assert sim._time_debt > 0.0  # noqa: SLF001

@@ -92,8 +92,12 @@ class HexapodBackend(ABC):
         """Body pose in the world frame."""
 
     @abstractmethod
-    def advance(self, dt: float) -> None:
-        """Advance the backend by *dt* seconds of wall-clock time."""
+    def advance(self, dt: float) -> float:
+        """Advance the backend by *dt* seconds of wall-clock time.
+
+        Returns the seconds actually advanced. It equals *dt* (up to physics-step
+        quantisation) unless the simulator had to drop time after a stall.
+        """
 
     @abstractmethod
     def close(self) -> None:

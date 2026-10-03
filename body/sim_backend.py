@@ -102,11 +102,13 @@ class SimBackend(HexapodBackend):
         rpy = self._pb.getEulerFromQuaternion(orientation)
         return BasePose(np.array(position, dtype=np.float64), np.array(rpy, dtype=np.float64))
 
-    def advance(self, dt: float) -> None:
+    def advance(self, dt: float) -> float:
         """Step physics for *dt* seconds of wall time at the fixed physics rate.
 
         Elapsed time is accumulated and converted to whole physics steps, capped
         at ``config.MAX_PHYSICS_CATCHUP_STEPS`` so a stall cannot cause a burst.
+        Returns the simulated seconds actually stepped, so callers can keep the
+        gait phase in step with the physics when time was dropped.
         """
         self._time_debt += max(0.0, dt)
         steps = int(self._time_debt / self._physics_dt)
@@ -117,6 +119,7 @@ class SimBackend(HexapodBackend):
             self._time_debt -= steps * self._physics_dt
         for _ in range(steps):
             self._pb.stepSimulation()
+        return steps * self._physics_dt
 
     def close(self) -> None:
         if self._pb.isConnected():
