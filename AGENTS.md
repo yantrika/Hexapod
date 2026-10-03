@@ -15,11 +15,12 @@ Flat top-level packages, no `src/`. See `plan.md` section 6 for the full tree.
 Avoid committing build output, caches, models, or secrets; add them to `.gitignore` first.
 
 ## Architecture Rules
-- Two processes joined only by the `Bridge` handle from `bridge.py`: `command_queue` (brain to body, small, drop-oldest), `status_queue` (body to brain) and a shared `stop_event`. Message fields: `action`, `params`, `seq`, `timestamp` for commands; `status`, `ref_seq`, `detail`, `seq`, `timestamp` for status.
+- Two processes joined only by the `Bridge` handle from `bridge.py`: `command_queue` (brain to body, small, drop-oldest), `status_queue` (body to brain) a shared `stop_event` (plus `stop_seq`, `shutdown_event`, `ready_event`). Message fields: `action`, `params`, `seq`, `timestamp` for commands; `status`, `ref_seq`, `detail`, `seq`, `timestamp` for status.
 - The voice/brain process uses threads (STT, router/chat worker, TTS playback, status listener, heartbeat) that talk only through `queue.Queue` and one shared `speaking` `threading.Event`. The TTS queue must stay clearable (needed for barge-in).
 - Voice and brain never touch joint angles. Nothing outside `sim_backend.py` / `servo_backend.py` may depend on which backend is loaded.
 - Each body control tick drains the command queue: stale messages (older than `MAX_MESSAGE_AGE_S`) are dropped, `stop` always preempts everything (even if stale) and holds the current pose, other motion commands are latest-wins. `bridge.send` sets `stop_event` for every `stop`, and the body checks it each tick before draining. `sit`/`stand`/`wave` answer `busy` while a transition runs. A watchdog stops the body if no command or heartbeat arrives within `WATCHDOG_TIMEOUT_S` while walking or turning.
 - The brain speaks based on status messages from the body, never on assumption.
+- `body/process.py`: `BodyRunner` (in-process core), `run_body` (child loop), `BodyProcess` (parent handle: spawn context, `wait_ready`, `shutdown`). The body never blocks on a queue (`put_nowait`, drop-oldest), ignores SIGINT, and exits when told to or when its parent dies. Wait for `ready_event` before sending: commands older than `MAX_MESSAGE_AGE_S` are stale. `scripts/bridge_cli.py` is the manual front end; it may only use the Bridge.
 - Physics (240 Hz) and control (50 Hz) are driven by wall-clock time, not loop iteration counts. The body can run headless (PyBullet DIRECT) via a flag.
 - While TTS is playing (plus `SPEAK_TAIL_S`), STT results are discarded.
 

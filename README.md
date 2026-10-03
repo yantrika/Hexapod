@@ -49,3 +49,16 @@ the controller API. `joint_jog.py` is a tuning tool, not part of the runtime; it
 the backend API, so the hard joint limits still apply. Its slider panel is open from the start (in other PyBullet windows it
 is hidden until you press `G`), each shown leg's angles are drawn in yellow above the robot,
 and `--legs RF` keeps the panel short.
+
+## Talking to the body process (Step 5)
+
+The body runs in its own process; `scripts/bridge_cli.py` sends typed commands through the bridge and prints the status replies. Type `stand`, `sit`, `wave`, `stop`, `walk fwd 0.5`, `walk back`, `turn left 90`, `quit`.
+
+```bash
+python scripts/bridge_cli.py --headless          # PyBullet DIRECT, no window
+MESA_GL_VERSION_OVERRIDE=3.3 MESA_GLSL_VERSION_OVERRIDE=330 python scripts/bridge_cli.py --gui   # dev laptop
+python scripts/bridge_cli.py --headless --no-heartbeat   # a walk stops by itself after 1 s (watchdog)
+python -m body.process --headless                # idle body; Ctrl-C exits cleanly
+```
+
+The CLI sends a heartbeat at `HEARTBEAT_HZ`; without heartbeats a walk or turn is stopped by the watchdog and reported as `done` with `reason=watchdog`. Run the tests one file at a time (`nice -n 19 pytest tests/test_body_process.py`): they spawn real processes and take about a minute.
