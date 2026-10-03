@@ -41,7 +41,7 @@ Avoid committing build output, caches, models, or secrets; add them to `.gitigno
 - Leg order is `RF, RM, RR, LR, LM, LF`; tripod A = RF, RR, LM; tripod B = RM, LR, LF.
 - IK always returns the knee-up solution and returns `None` for unreachable points.
 - `brain/motion_keeper.py` keeps a text/voice walk or turn alive with heartbeats (injected clock, no I/O) and releases it on stop, rejection, fall, `done` or `VOICE_WALK_MAX_S`; a `stop` is always sent immediately through the bridge, never through the keeper. `scripts/brain_cli.py` is the typed-text front end (routes, sends, prints the route and the statuses).
-- Router: `stop` words match anywhere; other commands need a short utterance (after filler removal) and `fuzz.ratio >= ROUTER_THRESHOLD`; everything else goes to chat.
+- Router: `stop` words match anywhere; other commands need a short utterance (after filler removal). A single word must match a phrase EXACTLY; two or more words need `fuzz.ratio >= ROUTER_THRESHOLD`. `ROUTER_ALIASES` are exact-only near-forms ("waves", "sat down"). Everything else goes to chat.
 
 ## Build, Test, and Development Commands
 Python 3.11 venv in `.venv/` (gitignored).

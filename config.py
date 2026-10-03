@@ -173,6 +173,7 @@ _WALK_FWD = ("walk", {"direction": "fwd", "speed": 0.5})
 _WALK_BACK = ("walk", {"direction": "back", "speed": 0.5})
 _TURN_LEFT = ("turn", {"direction": "left", "angle_deg": TURN_DEFAULT_ANGLE_DEG})
 _TURN_RIGHT = ("turn", {"direction": "right", "angle_deg": TURN_DEFAULT_ANGLE_DEG})
+# A single word must match a phrase here exactly; two or more words are fuzzy-matched.
 # phrase -> (action, params). Numbers are not parsed in v1; the router never sends strafe or yaw.
 ROUTER_PHRASES: dict[str, tuple[str, dict[str, object]]] = {
     "walk": _WALK_FWD,
@@ -196,6 +197,11 @@ ROUTER_PHRASES: dict[str, tuple[str, dict[str, object]]] = {
     "wave": ("wave", {}),
     "wave hello": ("wave", {}),
     "wave hi": ("wave", {}),
+}
+# Exact-only aliases (never fuzzed, so "I sat down" stays chat): ASR-typical near-forms.
+ROUTER_ALIASES: dict[str, tuple[str, dict[str, object]]] = {
+    "waves": ("wave", {}),
+    "sat down": ("sit", {}),
 }
 
 # --- Brain (typed-text and voice front ends) -------------------------------

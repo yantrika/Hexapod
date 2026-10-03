@@ -133,8 +133,12 @@ NEAR_MISSES = [
     ("sat down", "command"),
     ("turn left 45", "command"),  # the number is ignored in v1
     ("waves", "command"),
-    ("sand", "command"),  # accepted ASR slack: ratio 89 against "stand"
-    ("I sat down", "chat"),
+    ("sand", "chat"),  # a single word must match exactly; ratio 89 against "stand" is ignored
+    ("wav", "chat"),
+    ("sitt", "chat"),
+    ("stan", "chat"),
+    ("walks", "chat"),
+    ("I sat down", "chat"),  # the "sat down" alias is exact-only
     ("stand out", "chat"),
     ("forward", "chat"),
     ("walk fast", "chat"),
@@ -156,8 +160,20 @@ def test_near_miss_table() -> None:
         assert result.kind == expected, (text, result)
         if expected == "command":
             assert result.score >= config.ROUTER_THRESHOLD
-        else:
+        elif len(result.normalized.split()) > 1:  # single words are exact-only; score is info
             assert result.score < config.ROUTER_THRESHOLD
+
+
+@pytest.mark.parametrize("text", ["sand", "wav", "sitt", "sip", "stan", "wave1", "wak"])
+def test_single_word_misspellings_never_fuzz_into_a_command(text: str) -> None:
+    assert route(text).is_chat
+
+
+@pytest.mark.parametrize(
+    ("text", "action"), [("waves", "wave"), ("sat down", "sit"), ("sit", "sit")]
+)
+def test_explicit_single_word_aliases_route(text: str, action: str) -> None:
+    assert command_of(text)[0] == action
 
 
 def test_the_threshold_is_read_from_config(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -5,9 +5,11 @@
 - ``stop``: a stop word anywhere in the utterance (highest priority; deliberately
   trigger-happy, "do not stop talking" still stops the robot).
 - ``command``: the utterance, after filler removal, is at most ``ROUTER_MAX_WORDS``
-  words and its ``fuzz.ratio`` against a phrase in ``ROUTER_PHRASES`` is at least
-  ``ROUTER_THRESHOLD``. (``ratio``, not ``partial_ratio``: partial matching fires on
-  ordinary sentences.)
+  words and matches a phrase in ``ROUTER_PHRASES``: a single word must match a phrase
+  EXACTLY (fuzzing one short word turns "sand" into "stand"); two or more words need a
+  ``fuzz.ratio`` of at least ``ROUTER_THRESHOLD``. (``ratio``, not ``partial_ratio``:
+  partial matching fires on ordinary sentences.) Natural near-forms of single words
+  ("waves") are explicit aliases in the table.
 - ``chat``: everything else; the original text goes to the chat model.
 
 Numbers are not parsed in v1 and the router never produces strafe or yaw.
@@ -87,8 +89,15 @@ def route(text: str) -> RouteResult:
     words = candidate.split()
     if not words or len(words) > config.ROUTER_MAX_WORDS:
         return RouteResult("chat", text, normalized=candidate)
+    alias = config.ROUTER_ALIASES.get(candidate)
+    if alias is not None:
+        return RouteResult("command", text, alias[0], dict(alias[1]), candidate, 100.0, candidate)
     phrase, score = best_phrase(candidate)
-    if score >= config.ROUTER_THRESHOLD:
+    if len(words) == 1:
+        matched = candidate in config.ROUTER_PHRASES
+    else:
+        matched = score >= config.ROUTER_THRESHOLD
+    if matched:
         action, params = config.ROUTER_PHRASES[phrase]
         return RouteResult("command", text, action, dict(params), phrase, score, candidate)
     return RouteResult("chat", text, phrase=phrase, score=score, normalized=candidate)
