@@ -139,3 +139,21 @@ def test_clear_is_idempotent_and_heartbeat_sends_do_not_matter() -> None:
     keeper.clear()
     keeper.clear()
     assert not keeper.active
+
+
+def test_a_turn_is_kept_alive_until_it_is_done() -> None:
+    keeper, clock = make()
+    keeper.on_sent(Command("turn", {"direction": "left", "angle_deg": 90.0}, 7, 0.0))
+    keeper.on_status(status("accepted", 7))
+    assert keeper.active and beats_over(keeper, clock, 3.0) >= 14  # past the 1 s watchdog
+    keeper.on_status(status("done", 7, action="turn"))
+    assert not keeper.active and beats_over(keeper, clock, 1.0) == 0
+
+
+def test_a_walk_replaces_a_held_turn_and_the_reverse() -> None:
+    keeper, _ = make()
+    keeper.on_sent(Command("turn", {}, 1, 0.0))
+    keeper.on_sent(walk(2))
+    assert keeper.held_seq == 2
+    keeper.on_sent(Command("turn", {}, 3, 0.0))
+    assert keeper.held_seq == 3

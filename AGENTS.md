@@ -40,7 +40,7 @@ Avoid committing build output, caches, models, or secrets; add them to `.gitigno
 - Manual control: `scripts/teleop.py` may only command motion through the `Controller` API (it keeps its key mapping pure and unit tested); `scripts/joint_jog.py` is a dev tuning tool that may only use the backend API (`set_joint_targets`, `advance`), so the clamp layer applies. Neither is part of the runtime.
 - Leg order is `RF, RM, RR, LR, LM, LF`; tripod A = RF, RR, LM; tripod B = RM, LR, LF.
 - IK always returns the knee-up solution and returns `None` for unreachable points.
-- `brain/motion_keeper.py` keeps a text/voice walk alive with heartbeats (injected clock, no I/O) and releases it on stop, rejection, fall, `done` or `VOICE_WALK_MAX_S`; a `stop` is always sent immediately through the bridge, never through the keeper. `scripts/brain_cli.py` is the typed-text front end (routes, sends, prints the route and the statuses).
+- `brain/motion_keeper.py` keeps a text/voice walk or turn alive with heartbeats (injected clock, no I/O) and releases it on stop, rejection, fall, `done` or `VOICE_WALK_MAX_S`; a `stop` is always sent immediately through the bridge, never through the keeper. `scripts/brain_cli.py` is the typed-text front end (routes, sends, prints the route and the statuses).
 - Router: `stop` words match anywhere; other commands need a short utterance (after filler removal) and `fuzz.ratio >= ROUTER_THRESHOLD`; everything else goes to chat.
 
 ## Build, Test, and Development Commands

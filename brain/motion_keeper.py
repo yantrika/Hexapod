@@ -1,11 +1,12 @@
-"""Keeps a text- or voice-started walk alive: the brain's half of the watchdog contract.
+"""Keeps a text- or voice-started walk or turn alive: the brain's half of the watchdog contract.
 
-A ``walk`` is continuous and the body stops it after ``WATCHDOG_TIMEOUT_S`` without a
-command or heartbeat, so a front end that sends one ``walk`` needs something sending
-heartbeats. ``MotionKeeper`` is that something: it follows what was sent and what the
-body answered, and while a walk is accepted and running it says when a heartbeat is due.
-It does no I/O and has no clock of its own (the clock is injected), so it is unit tested
-with a fake clock. ``stop`` never goes through it: front ends send stop immediately.
+A ``walk`` is continuous, and a ``turn`` runs on the same velocity until it reaches its
+angle, so the body stops either after ``WATCHDOG_TIMEOUT_S`` without a command or
+heartbeat. A front end that sends one ``walk`` or ``turn`` therefore needs something
+sending heartbeats. ``MotionKeeper`` is that something: it follows what was sent and what
+the body answered, and while the motion is accepted and running it says when a heartbeat
+is due. It does no I/O and has no clock of its own (the clock is injected), so it is unit
+tested with a fake clock. ``stop`` never goes through it: front ends send stop immediately.
 
 It sends ``heartbeat`` messages rather than repeating the ``walk``: a repeat would be
 answered ``accepted`` five times a second, and would restart a walk the body had already
@@ -21,6 +22,8 @@ import config
 from bridge import Command, Status, new_command
 
 logger = logging.getLogger(__name__)
+
+HELD_ACTIONS = ("walk", "turn")  # actions the body watchdog stops without heartbeats
 
 
 class MotionKeeper:
@@ -50,7 +53,7 @@ class MotionKeeper:
 
     def on_sent(self, command: Command) -> None:
         """A command went to the body: a walk becomes the held one, anything else ends it."""
-        if command.action == "walk":
+        if command.action in HELD_ACTIONS:  # a turn is velocity-driven too: the watchdog applies
             self._seq, self._accepted_at = command.seq, None
         elif command.action != "heartbeat":
             self.clear("superseded by " + command.action)

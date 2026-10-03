@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import subprocess
 import sys
 import time
@@ -110,6 +111,21 @@ def test_without_a_stop_the_walk_ends_at_the_max_duration(rig: Callable[..., Rig
     print(f"walk with max {max_walk_s:.0f} s: body reported done after {held_for:.2f} s")
     assert done.detail == {"action": "walk", "reason": "watchdog"}
     assert held_for >= max_walk_s  # the keeper never let it lapse early
+    assert not r.brain.keeper.active
+
+
+def test_turn_left_is_kept_alive_and_finishes_its_angle(rig: Callable[..., Rig]) -> None:
+    """Regression: a turn takes about 5 s, far past the 1 s watchdog, so it needs heartbeats."""
+    r = rig()
+    r.pump(0.3)
+    yaw0 = r.probe.get("base_yaw")
+    assert r.brain.handle_text("turn left").action == "turn"
+    r.until(lambda s: s.status == "accepted", 3.0)
+    done = r.until(lambda s: s.status == "done", 15.0)
+    turned = math.degrees(r.probe.get("base_yaw") - yaw0)
+    print(f"turn left: done {done.detail}, turned {turned:+.1f} deg")
+    assert done.detail == {"action": "turn"}  # not reason=watchdog
+    assert abs(turned - config.TURN_DEFAULT_ANGLE_DEG) < 20.0
     assert not r.brain.keeper.active
 
 
