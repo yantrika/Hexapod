@@ -79,9 +79,9 @@ SPEED_MAX = 1.0  # normalised walk speed
 TURN_ANGLE_MIN_DEG = 1.0
 TURN_ANGLE_MAX_DEG = 180.0
 TURN_DEFAULT_ANGLE_DEG = 90.0
-TURN_RATE_MAX_DEG_S = 60.0  # PLACEHOLDER
-STEP_LENGTH_MAX_M = 0.05  # PLACEHOLDER
-STEP_HEIGHT_M = 0.03  # PLACEHOLDER
+TURN_RATE_MAX_DEG_S = 20.0  # max yaw rate; PLACEHOLDER, limited by STEP_LENGTH_MAX_M
+STEP_LENGTH_MAX_M = 0.05  # max stride (stance travel per foot per step); PLACEHOLDER
+STEP_HEIGHT_M = 0.03  # swing height; PLACEHOLDER
 BODY_HEIGHT_SIT = 0.06  # m, PLACEHOLDER
 # The zero pose is the stand pose: femur horizontal, tibia vertical, so the
 # neutral foot hangs TIBIA_LENGTH below the body plane.
@@ -108,6 +108,10 @@ PHYSICS_HZ = 240.0  # PyBullet step, driven by wall-clock time
 CONTROL_HZ = 50.0  # control tick, driven by wall-clock time
 MAX_PHYSICS_CATCHUP_STEPS = 12  # caps catch-up after a stall (~50 ms of sim)
 GAIT_PERIOD_S = 1.0  # PLACEHOLDER, one full tripod cycle
+GAIT_SWING_FRACTION = 0.5  # share of the cycle a foot is in swing (0 < f <= 0.5)
+# Stance feet travel one stride in the stance share of the cycle, so the
+# fastest body speed is the max stride over the stance time.
+GAIT_MAX_SPEED_M_S = STEP_LENGTH_MAX_M / ((1.0 - GAIT_SWING_FRACTION) * GAIT_PERIOD_S)
 
 MAX_MESSAGE_AGE_S = 0.5  # older messages are dropped (a stale stop still runs)
 WATCHDOG_TIMEOUT_S = 1.0  # walking/turning with no command or heartbeat
@@ -157,6 +161,11 @@ CHAT_HISTORY_TURNS = 4
 
 # --- Test tolerances -----------------------------------------------------
 IK_TOLERANCE_M = 1e-4
+WALK_TEST_MAX_TILT_DEG = 10.0  # sim walk tests: roll and pitch must stay under this
+WALK_TEST_HEIGHT_TOL_M = 0.02  # sim walk tests: body height within this of stand height
+WALK_TEST_SPEED_TOL = 0.25  # sim walk tests: measured motion within 25 % of commanded
+WALK_TEST_POSITION_DRIFT_M = 0.05  # sim walk tests: unwanted displacement over 10 s
+WALK_TEST_HEADING_DRIFT_DEG = 5.0  # sim walk tests: unwanted heading change over 10 s
 
 
 def clamp(value: float, low: float, high: float) -> float:
