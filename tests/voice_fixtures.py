@@ -14,7 +14,11 @@ import pytest
 from voice.stt import SttError, VoskStt
 from voice.tts import PiperEngine, TtsError, read_wav, write_wav
 
-PHRASES = ["sit down", "walk forward", "I sat down for lunch", "stop", "stand up"]
+PHRASES = [
+    "sit down", "walk forward", "I sat down for lunch", "stop", "stand up", "turn left", "wave",
+    "what is the weather today", "I'll walk you through it",
+    "turn left and then walk forward for a while", "turn up the music",
+]
 
 
 @pytest.fixture(scope="session")

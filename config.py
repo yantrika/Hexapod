@@ -256,6 +256,16 @@ VOSK_MODELS = {  # short name -> directory under assets/vosk (scripts/fetch_mode
     "in": "vosk-model-small-en-in-0.4",
 }
 VOSK_MODEL_DEFAULT = "us"
+# Command grammar: a second recognizer on the same audio, limited to the router's phrases, aliases,
+# stop words and fillers plus "[unk]". It rescues commands the free-text recognizer mishears
+# ("sit" heard as "said"), but it also FORCES a match on ordinary speech, so its result is only
+# used when it passes the guards in brain/stt_decision.py. Tune the numbers with stt_check.py.
+STT_USE_GRAMMAR = True
+STT_STOP_CONF = 0.5  # a grammar stop word at least this confident stops at once (safe side)
+STT_GRAMMAR_CONF = 0.75  # mean word confidence a grammar command needs
+STT_GRAMMAR_EXTRA_WORDS = 1  # free text may have this many words more than the grammar phrase
+STT_STOP_EXTRA_WORDS = 2  # the same for a stop word (a false stop is harmless, a miss is not)
+TRANSCRIPT_LOG = LOG_DIR / "transcripts.jsonl"  # one JSON line per final result (dataset, Step 9b)
 VOSK_MODEL_PATH = VOSK_DIR / VOSK_MODELS[VOSK_MODEL_DEFAULT]
 PIPER_BINARY = PIPER_DIR / "piper" / "piper"  # standalone binary, ONE long-lived subprocess
 PIPER_MODEL_PATH = PIPER_DIR / "en_US-amy-low.onnx"

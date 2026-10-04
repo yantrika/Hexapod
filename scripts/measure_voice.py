@@ -252,20 +252,51 @@ def vosk_cpu(stt: VoskStt, samples: np.ndarray, label: str) -> None:
     stt.reset()
 
 
-def measure_stt(gui: bool) -> int:
+def proc_rss_mb() -> float:
+    return int(proc_status(os.getpid(), "VmRSS").split()[0]) / 1024
+
+
+def measure_ram(grammar: bool) -> int:
+    """Resident memory after loading the model and the recognizers (run once per setting)."""
+    base = proc_rss_mb()
+    stt = VoskStt(grammar=grammar)
+    print(f"  grammar {'on ' if grammar else 'off'}: RSS {proc_rss_mb():.0f} MB "
+          f"(+{proc_rss_mb() - base:.0f} MB over an idle interpreter), "
+          f"{'2' if grammar else '1'} recognizer(s) on one shared model")
+    del stt
+    return 0
+
+
+def measure_stt(gui: bool, latency: bool, with_piper: bool) -> int:
+    """One recognizer vs two: CPU alone, then the body's tick time. One model at a time."""
+    import gc
+    import subprocess
+
     engine = PiperEngine()
     try:
         engine.check_installed()
-        stt = VoskStt()
-    except Exception as error:  # noqa: BLE001
+    except TtsError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
     engine.start()
     clips = render_speech(engine)
-    print(f"model {stt.model_path.name}; this process nice {os.nice(0)}")
-    print("a/d. Vosk alone")
-    vosk_cpu(stt, np.zeros(10 * config.AUDIO_SAMPLE_RATE, dtype=np.int16), "silence")
-    vosk_cpu(stt, speech_mix(clips, 10.0), "speech ")
+    if not with_piper:
+        engine.close()  # Piper stays out of the way unless asked: the laptop is fragile
+    print(f"this process nice {os.nice(0)}")
+    print("RAM, one fresh process per setting")
+    for flag in ("off", "on"):
+        subprocess.run([sys.executable, __file__, "--ram", "--grammar", flag], check=False)
+
+    silence10 = np.zeros(10 * config.AUDIO_SAMPLE_RATE, dtype=np.int16)
+    mix10 = speech_mix(clips, 10.0)
+    for grammar in (False, True):
+        stt = VoskStt(grammar=grammar)
+        print(f"a/d. Vosk alone, {'2 recognizers (free + grammar)' if grammar else '1 recognizer'}")
+        vosk_cpu(stt, silence10, "silence")
+        vosk_cpu(stt, mix10, "speech ")
+        del stt
+        gc.collect()
+        time.sleep(8.0)  # let the CPU cool between runs
 
     bridge = make_bridge()
     probe = BodyProbe()
@@ -284,27 +315,32 @@ def measure_stt(gui: bool) -> int:
         bridge.send(new_command("walk", {"direction": "fwd", "speed": 0.5}))
         time.sleep(1.0)
         walking = Window(body, probe, brain)
+        silence = np.zeros(int((WINDOW_S + 4) * config.AUDIO_SAMPLE_RATE), dtype=np.int16)
         print("b1. body walking, no voice")
         walking.run(None, None, engine=None)
-        silence = np.zeros(int((WINDOW_S + 4) * config.AUDIO_SAMPLE_RATE), dtype=np.int16)
-        print("b2. body walking, Vosk running on silence")
-        walking.run(stt, silence, engine=None)
-        print("b3. body walking, Vosk on silence + Piper busy")
-        walking.run(stt, silence, engine=engine)
-        bridge.send(new_command("stop", {}))
-        time.sleep(1.5)
-        print("c. end of speech -> command sent -> first foot-target change (\"walk forward\")")
-        latencies = []
-        for trial in range(3):
-            latencies.append(latency_trial(stt, clips["walk forward"], bridge, probe, brain))
+        for grammar in (False, True):
+            stt = VoskStt(grammar=grammar)
+            print(f"b{2 if not grammar else 3}. body walking, Vosk on silence, "
+                  f"{'2 recognizers' if grammar else '1 recognizer'}")
+            walking.run(stt, silence, engine=None)
+            if grammar and with_piper:
+                print("b4. body walking, 2 recognizers on silence + Piper busy")
+                walking.run(stt, silence, engine=engine)
+            del stt
+            gc.collect()
+            time.sleep(8.0)  # cool down: the dev laptop shuts down at 87 C
+        if latency:
+            stt = VoskStt()
             bridge.send(new_command("stop", {}))
-            time.sleep(2.0)
-            print(f"  trial {trial + 1}: " + ", ".join(f"{name} {value * 1000:.0f} ms"
-                  for name, value in latencies[-1].items()))
-        for name in latencies[0]:
-            values = [trial[name] for trial in latencies]
-            print(f"  {name}: median {statistics.median(values) * 1000:.0f} ms, "
-                  f"worst {max(values) * 1000:.0f} ms")
+            time.sleep(1.5)
+            print("c. end of speech -> command sent -> first foot-target change (\"walk forward\")")
+            results = []
+            for trial in range(3):
+                results.append(latency_trial(stt, clips["walk forward"], bridge, probe, brain))
+                bridge.send(new_command("stop", {}))
+                time.sleep(2.0)
+                print(f"  trial {trial + 1}: " + ", ".join(
+                    f"{name} {value * 1000:.0f} ms" for name, value in results[-1].items()))
     finally:
         bridge.send(new_command("stop", {}))
         brain.close()
@@ -387,7 +423,11 @@ def main() -> int:
     parser.add_argument("--body", action="store_true", help="body tick time with and without Piper")
     parser.add_argument("--gui", action="store_true", help="with --body: open the PyBullet window")
     parser.add_argument("--clear", action="store_true", help="clear() latency on the real speaker")
-    parser.add_argument("--stt", action="store_true", help="Vosk cost and voice latency")
+    parser.add_argument("--stt", action="store_true", help="Vosk cost: 1 vs 2 recognizers")
+    parser.add_argument("--latency", action="store_true", help="with --stt: end-of-speech latency")
+    parser.add_argument("--with-piper", action="store_true", help="with --stt: Piper busy too")
+    parser.add_argument("--ram", action="store_true", help="(internal) RSS after loading Vosk")
+    parser.add_argument("--grammar", choices=("on", "off"), default="on", help="with --ram")
     parser.add_argument("--piper-nice", type=int, default=config.PIPER_NICE)
     parser.add_argument("--piper-cpus", default=config.PIPER_CPU_LIST, help="taskset list, e.g. 3")
     parser.add_argument("--body-cpus", help="pin the body process to these CPUs, e.g. 0,2")
@@ -395,8 +435,10 @@ def main() -> int:
     args = parser.parse_args()
     if args.clear:
         return measure_clear(args.trials)
+    if args.ram:
+        return measure_ram(args.grammar == "on")
     if args.stt:
-        return measure_stt(args.gui)
+        return measure_stt(args.gui, args.latency, args.with_piper)
     if args.body:
         cpus = {int(n) for n in args.body_cpus.split(",")} if args.body_cpus else None
         return measure_body(args.gui, args.piper_nice, args.piper_cpus, cpus)

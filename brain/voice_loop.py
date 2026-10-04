@@ -4,9 +4,11 @@
     bridge, motion keeper heartbeats, spoken acknowledgement]
 
 - Only FINAL results are routed. Exception: a stop word in a PARTIAL result sends ``stop`` at
-  once (a false stop is safe and it saves the end-of-speech wait). Commands go through the
-  bridge and the motion keeper exactly like ``scripts/brain_cli.py``; the voice side never
-  touches the controller or any joint angle.
+  once (a false stop is safe and it saves the end-of-speech wait). For a final, ``decide()``
+  (``brain/stt_decision.py``) chooses between the free-text result and the command-grammar
+  result; every final is appended to the transcript log with both texts and confidences.
+  Commands go through the bridge and the motion keeper exactly like
+  ``scripts/brain_cli.py``; the voice side never touches the controller or any joint angle.
 - Audio captured while hexa speaks is discarded (``SelfHearingGate``) and never fed to Vosk.
 - After a routed command hexa says the pre-rendered "okay" (a placeholder until Step 9, which
   speaks from body statuses). Statuses are only printed by the front end.
@@ -25,9 +27,11 @@ from dataclasses import dataclass
 import config
 from brain.brain_loop import BrainLoop
 from brain.router import RouteResult, route
+from brain.stt_decision import PATH_EARLY_STOP, decide
+from brain.transcript_log import TranscriptLog, hypothesis_record
 from voice.audio import AudioSource, EndOfAudio
 from voice.playback import Playback
-from voice.stt import SelfHearingGate, SttEngine, SttEvent
+from voice.stt import Hypothesis, SelfHearingGate, SttEngine, SttEvent
 from voice.tts import TtsError
 
 logger = logging.getLogger(__name__)
@@ -42,6 +46,10 @@ class VoiceEvent:
     timestamp: float
     route: RouteResult | None = None
     early_stop: bool = False  # a "route" that came from a partial result
+    path: str = ""  # which rule decided a final / route (see brain/stt_decision.py)
+    reason: str = ""
+    free: Hypothesis | None = None  # a "final": both recognizers' results
+    grammar: Hypothesis | None = None
 
 
 class VoiceLoop:
@@ -54,12 +62,14 @@ class VoiceLoop:
         playback: Playback | None = None,
         on_event: Callable[[VoiceEvent], None] | None = None,
         clock: Callable[[], float] = time.monotonic,
+        transcripts: TranscriptLog | None = None,
     ) -> None:
         self.source = source
         self.stt = stt
         self.brain = brain
         self.playback = playback
         self.on_event = on_event
+        self.transcripts = transcripts
         self._clock = clock
         self._gate = SelfHearingGate(speaking)
         self._events: queue.Queue[SttEvent] = queue.Queue(maxsize=config.UTTERANCE_QUEUE_MAXSIZE)
@@ -201,21 +211,45 @@ class VoiceLoop:
                 return
             result = route(event.text)
             if result.kind == "stop":  # only a stop word acts on a partial
-                self._act(result, early_stop=True)
+                self._act(result, PATH_EARLY_STOP, "stop word in a partial result", True)
                 self._stop_sent_early = True
             return
-        self._emit(VoiceEvent("final", event.text, event.timestamp))
+        self._emit(VoiceEvent("final", event.text, event.timestamp, free=event.free,
+                              grammar=event.grammar))
         already_stopped, self._stop_sent_early = self._stop_sent_early, False
-        if not event.text:
+        if not event.text and not (event.grammar and event.grammar.text):
             return
-        result = route(event.text)
-        if result.kind == "stop" and already_stopped:
+        decision = decide(event.text, event.grammar)
+        result = route(decision.text)
+        duplicate = result.kind == "stop" and already_stopped
+        self._log_final(event, decision.path, decision.reason, result, duplicate)
+        if duplicate:
             return  # the partial already stopped the robot; do not send it twice
-        self._act(result, early_stop=False)
+        self._act(result, decision.path, decision.reason, False)
 
-    def _act(self, result: RouteResult, early_stop: bool) -> None:
+    def _log_final(self, event: SttEvent, path: str, reason: str, result: RouteResult,
+                   duplicate: bool) -> None:
+        if self.transcripts is None:
+            return
+        self.transcripts.append({
+            "kind": "final",
+            "free": hypothesis_record(event.free) or {"text": event.text},
+            "grammar": hypothesis_record(event.grammar),
+            "path": path,
+            "reason": reason,
+            "route": {"kind": result.kind, "action": result.action, "phrase": result.phrase,
+                      "score": round(result.score, 1)},
+            "duplicate_of_early_stop": duplicate,
+        })
+
+    def _act(self, result: RouteResult, path: str, reason: str, early_stop: bool) -> None:
         self.brain.handle_route(result)  # a stop goes out first, before anything else
-        self._emit(VoiceEvent("route", result.text, self._clock(), result, early_stop))
+        self._emit(
+            VoiceEvent("route", result.text, self._clock(), result, early_stop, path, reason)
+        )
+        if early_stop and self.transcripts is not None:
+            self.transcripts.append({"kind": "early-stop", "free": {"text": result.text},
+                                     "path": path, "reason": reason})
         if result.kind != "chat" and self.playback is not None:
             try:
                 self.playback.say_phrase(config.VOICE_ACK_PHRASE)

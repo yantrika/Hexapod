@@ -137,3 +137,123 @@ def test_hexas_own_voice_is_ignored_and_the_same_audio_later_is_obeyed(
     assert rig.finals() == ["walk forward"]
     wait_until(lambda: rig.loop.events_handled >= rig.loop.events_published)
     assert [c.action for c in rig.bridge.drain()] == ["walk"]
+
+
+# --- Step 8b: the command grammar recognizer ------------------------------------------------
+def finals(rig: Rig) -> list[VoiceEvent]:
+    return [e for e in rig.events if e.kind == "final" and e.text]
+
+
+def routes(rig: Rig) -> list[VoiceEvent]:
+    return [e for e in rig.events if e.kind == "route" and not e.early_stop]
+
+
+@pytest.mark.parametrize(
+    ("phrase", "action", "path"),
+    [
+        ("sit down", "sit", "grammar-command"),
+        ("turn left", "turn", "grammar-command"),
+        ("wave", "wave", "grammar-command"),
+    ],
+)
+def test_commands_are_routed_by_the_grammar_path(
+    make_rig: Callable[[object], Rig], speech_wavs: dict[str, Path], phrase: str, action: str,
+    path: str,
+) -> None:
+    rig = make_rig(FileSource(speech_wavs[phrase]))
+    rig.run()
+    (final,) = finals(rig)
+    assert final.grammar is not None
+    print(f"{phrase!r}: free {final.text!r}, grammar {final.grammar.text!r} "
+          f"conf {final.grammar.mean_conf:.2f} -> {routes(rig)[0].path}")
+    (routed,) = routes(rig)
+    assert routed.path == path and routed.route is not None and routed.route.action == action
+    assert [c.action for c in rig.bridge.drain()].count(action) >= 1
+
+
+def test_stop_is_sent_once_and_the_grammar_agrees_on_the_final(
+    make_rig: Callable[[object], Rig], speech_wavs: dict[str, Path]
+) -> None:
+    """The US model's partial already says "stop", so the early stop goes first; the grammar
+    result on the final says the same thing and is not sent a second time."""
+    from brain.stt_decision import decide
+
+    rig = make_rig(FileSource(speech_wavs["stop"], realtime=True, lead_silence_s=0.3))
+    rig.run()
+    (final,) = finals(rig)
+    assert final.grammar is not None
+    assert decide(final.text, final.grammar).path == "grammar-stop"
+    assert [c.action for c in rig.bridge.drain()] == ["stop"]  # once, not twice
+    assert [e.path for e in rig.events if e.kind == "route"] == ["partial-stop"]
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    ["I sat down for lunch", "what is the weather today", "I'll walk you through it",
+     "turn up the music"],
+)
+def test_chat_sentences_never_become_commands_even_though_the_grammar_forces_a_match(
+    make_rig: Callable[[object], Rig], speech_wavs: dict[str, Path], sentence: str
+) -> None:
+    rig = make_rig(FileSource(speech_wavs[sentence]))
+    rig.run()
+    (final,) = finals(rig)
+    assert final.grammar is not None
+    print(f"{sentence!r}: the grammar was forced to {final.grammar.text!r} "
+          f"(conf {final.grammar.mean_conf:.2f}); free text {final.text!r}")
+    (routed,) = routes(rig)
+    assert routed.route is not None and routed.route.kind == "chat"
+    assert routed.path == "free"
+    assert rig.bridge.drain() == []  # nothing reached the body
+
+
+def test_a_long_chat_sentence_goes_to_chat_with_the_free_text_intact(
+    make_rig: Callable[[object], Rig], speech_wavs: dict[str, Path]
+) -> None:
+    sentence = "turn left and then walk forward for a while"
+    rig = make_rig(FileSource(speech_wavs[sentence]))
+    rig.run()
+    (final,) = finals(rig)
+    assert final.text == sentence  # the free-text recognizer's words, not the grammar's
+    assert final.grammar is not None and "turn left" in final.grammar.text  # it did find commands
+    (routed,) = routes(rig)
+    assert routed.route is not None and routed.route.kind == "chat" and routed.path == "free"
+    assert rig.bridge.drain() == []
+
+
+def test_the_indian_model_stop_is_rescued_by_the_grammar(
+    speech_wavs: dict[str, Path],
+) -> None:
+    """The Indian English model heard Piper's "stop" as "start"; the grammar still says stop."""
+    try:
+        stt = VoskStt("in")
+    except Exception as error:  # noqa: BLE001
+        pytest.skip(str(error))
+    rig = Rig(stt, FileSource(speech_wavs["stop"]))
+    try:
+        rig.run()
+        (final,) = finals(rig)
+        heard = final.grammar.text if final.grammar else None
+        print(f"Indian model: free {final.text!r}, grammar {heard!r}")
+        (routed,) = routes(rig)
+        assert routed.route is not None and routed.route.kind == "stop"
+        assert [c.action for c in rig.bridge.drain()] == ["stop"]
+    finally:
+        rig.close()
+
+
+def test_every_final_is_written_to_the_transcript_log(
+    make_rig: Callable[[object], Rig], speech_wavs: dict[str, Path], tmp_path: Path
+) -> None:
+    import json
+
+    from brain.transcript_log import TranscriptLog
+
+    rig = make_rig(FileSource(speech_wavs["sit down"]))
+    rig.loop.transcripts = TranscriptLog(tmp_path / "t.jsonl", model="us")
+    rig.run()
+    (line,) = (tmp_path / "t.jsonl").read_text().splitlines()
+    record = json.loads(line)
+    assert record["kind"] == "final" and record["path"] == "grammar-command"
+    assert record["free"]["text"] == "sit down" and record["grammar"]["text"] == "sit down"
+    assert record["free"]["words"][0][0] == "sit" and record["route"]["action"] == "sit"

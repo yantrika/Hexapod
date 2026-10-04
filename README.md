@@ -121,3 +121,22 @@ nice -n 19 python scripts/measure_voice.py --stt     # Vosk cost, body ticks wit
 Say "walk forward", "sit down", "stand up", "turn left", "wave", "stop". After a command hexa says "okay" (a placeholder; speech from body statuses is Step 9) and the microphone is ignored while it speaks and for `SPEAK_TAIL_S` after. Tests (no microphone or speaker): `pytest tests/test_status_hub.py tests/test_audio.py tests/test_stt_gate.py` (fake recognizer), `pytest tests/test_voice_loop.py` (real Vosk on Piper-rendered speech, skipped without models), `nice -n 19 pytest tests/test_voice_body.py` (end to end with a headless body; run alone).
 
 Dev laptop numbers (they move with background load): Vosk uses about 15-25 % of a core, real-time factor 0.07-0.11 decoding speech; it adds about 1-2 ms to the body's mean tick. Spoken "walk forward" is sent about 0.85 s after you stop talking (Vosk waits for silence) and the first foot target moves about 0.25 s later. Piper busy at the same time is still the expensive part (see Speech above).
+
+### Command grammar and the hot laptop (Step 8b)
+
+Vosk now runs two recognizers on one model: free text, and a grammar limited to the router's phrases. The grammar rescues commands the free recognizer mishears ("sit" heard as "said"), but it also forces a match on ordinary speech, so its answer is only used when it passes the guards in `brain/stt_decision.py`. Thresholds are in `config.py` (`STT_STOP_CONF`, `STT_GRAMMAR_CONF`, ...). Every final result goes to `logs/transcripts.jsonl`.
+
+```bash
+python scripts/stt_check.py --model us --mic 8     # 3 repeats per phrase, level check first
+python scripts/stt_check.py --model in
+python scripts/stt_check.py --replay logs/stt_check-us.jsonl   # re-judge with the current thresholds
+```
+
+**The dev laptop overheats**: it idles near 59 C and powers off at 87 C (`journalctl -b -1` shows `HARDWARE PROTECTION shutdown (Temperature too high)`). Run heavy commands through the guard, which waits until the machine is cool and kills the job before the hardware shutdown, and keep runs short:
+
+```bash
+python scripts/cool_run.py -- nice -n 19 pytest tests/test_voice_loop.py
+python scripts/cool_run.py --start-below 62 --kill-at 80 -- nice -n 19 python scripts/measure_voice.py --stt
+```
+
+Measured (headless, walking): one recognizer 13 % of a core on silence and 19 % on speech, two recognizers 21 % and 23 %; decode real-time factor 0.07-0.10 for one, 0.11-0.16 for two; body mean tick 7.3 ms with no voice, 7.0 ms with one recognizer and 6.6 ms with two (no measurable cost); RSS 178 MB with either (one shared model).
