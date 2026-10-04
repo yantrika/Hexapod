@@ -140,7 +140,10 @@ The Pi 5 runs Ubuntu 24.04 (Python 3.12) with no PyBullet, so it uses the **dry-
 | Get the ARM Piper (only what is missing) | `scripts/fetch_models.sh` |
 | Run it | `.venv/bin/python main.py --backend dryrun --no-mic --no-speak --chat fake` |
 | Run it with the phone page | `HEXA_WEB_PIN=424242 .venv/bin/python main.py --backend dryrun --lan --no-mic --no-speak --chat fake`, then open the printed address (or `http://hexa.local:8765/`) |
-| Run the tests | `.venv/bin/python scripts/cool_run.py --unguarded -- .venv/bin/python -m pytest -q` |
+| **Start in tmux** (page + PIN on the LAN, survives ssh closing) | `ssh hexa-pi`, then `cd ~/hexa && scripts/pi_dryrun.sh start 424242` (PIN optional; omit for a random one). It prints the PIN and the page address. |
+| Watch what the gait would send to the servos | `cd ~/hexa && scripts/pi_dryrun.sh log` (same as `tail -f logs/dryrun.log`; Ctrl-C leaves it running) |
+| Status, live console, stop cleanly | `scripts/pi_dryrun.sh status`, `scripts/pi_dryrun.sh attach` (detach: Ctrl-b d), `scripts/pi_dryrun.sh stop` |
+| Run the tests | `.venv/bin/python scripts/cool_run.py --unguarded -- .venv/bin/python -m pytest -q` (logs the temperature only) |
 | Measure | `scripts/measure_voice.py --body`, `--stt --latency`, `scripts/measure_e2e.py`, `scripts/measure_web.py`, and from another machine `scripts/measure_lan.py --url ws://hexa.local:8765 --pin 424242` |
 
 Rules: nothing uses `sudo` from Claude, only `~/hexa` is touched, nothing starts at boot, and there is no servo code until stage 11e is approved. Set `HEXA_BACKEND=dryrun` so every script uses the dry-run body. The systemd unit `deploy/hexa.service` is written but not installed. Still to do on the Pi: the real microphone and speaker checks (`mic_check.py`, `say.py`) and the Ollama timing. See `plan.md`, stage 11a.
