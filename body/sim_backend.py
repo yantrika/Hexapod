@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import numpy as np
@@ -32,8 +32,15 @@ class SimBackend(HexapodBackend):
         urdf_path: Path | None = None,
         show_panel: bool = False,
         window_size: tuple[int, int] | None = None,
+        max_force_nm: float | None = None,
+        velocity_gain: float | None = None,
     ) -> None:
         super().__init__()
+        # Measurement tools raise the torque cap (scripts/torque_report.py) so that a saturated
+        # joint does not hide the torque a real servo would need.
+        self.max_force_nm = config.JOINT_MAX_FORCE_NM if max_force_nm is None else max_force_nm
+        self.velocity_gain = config.JOINT_VELOCITY_GAIN if velocity_gain is None else velocity_gain
+        self.on_step: Callable[[], None] | None = None  # called after every physics step
         if gui is None:
             gui = not config.SIM_HEADLESS
         urdf = Path(urdf_path) if urdf_path is not None else config.URDF_PATH
@@ -101,10 +108,10 @@ class SimBackend(HexapodBackend):
                 joint_id,
                 pybullet.POSITION_CONTROL,
                 targetPosition=float(angle),
-                force=config.JOINT_MAX_FORCE_NM,
+                force=self.max_force_nm,
                 maxVelocity=config.JOINT_MAX_VELOCITY_RAD_S,
                 positionGain=config.JOINT_POSITION_GAIN,
-                velocityGain=config.JOINT_VELOCITY_GAIN,
+                velocityGain=self.velocity_gain,
             )
 
     def get_joint_angles(self) -> JointArray:
@@ -114,6 +121,15 @@ class SimBackend(HexapodBackend):
     def get_joint_velocities(self) -> JointArray:
         states = self._pb.getJointStates(self._robot, self._joint_ids)
         return np.array([s[1] for s in states], dtype=np.float64)
+
+    def joint_states(self) -> tuple[JointArray, JointArray, JointArray]:
+        """Angles (rad), velocities (rad/s) and applied motor torques (N*m), each ``(18,)``."""
+        states = self._pb.getJointStates(self._robot, self._joint_ids)
+        return (
+            np.array([s[0] for s in states], dtype=np.float64),
+            np.array([s[1] for s in states], dtype=np.float64),
+            np.array([s[3] for s in states], dtype=np.float64),
+        )
 
     def get_base_pose(self) -> BasePose:
         position, orientation = self._pb.getBasePositionAndOrientation(self._robot)
@@ -136,8 +152,13 @@ class SimBackend(HexapodBackend):
         else:
             self._time_debt -= steps * self._physics_dt
         for _ in range(steps):
-            self._pb.stepSimulation()
+            self._step()
         return steps * self._physics_dt
+
+    def _step(self) -> None:
+        self._pb.stepSimulation()
+        if self.on_step is not None:
+            self.on_step()
 
     def update_view(self) -> None:
         """Follow camera: re-centre on the body at ``GUI_CAMERA_HZ``, keeping the user's angle."""
@@ -175,7 +196,7 @@ class SimBackend(HexapodBackend):
     def run_for(self, seconds: float) -> None:
         """Step exactly ``round(seconds * PHYSICS_HZ)`` physics steps (uncapped; tests/offline)."""
         for _ in range(round(seconds * config.PHYSICS_HZ)):
-            self._pb.stepSimulation()
+            self._step()
 
     def reset_joint_angles(self, angles: ArrayLike) -> None:
         """Teleport the joints to *angles* (no dynamics), clamped to the hard limits."""

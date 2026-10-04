@@ -77,6 +77,7 @@ Legend: **STUB** = placeholder, not built yet. **DEV** = developer tool, not par
 |---|---|---|
 | `scripts/voice_cli.py` | Runs the whole loop: talk to the robot (microphone to body). | You change the demo. |
 | `scripts/measure_chat.py` | Times the real Ollama model: first token, tokens per second, memory, temperature, body tick time (`--with-voice` adds Vosk and Piper). **DEV** (heats the laptop) | You add a measurement. |
+| `scripts/torque_report.py` | Servo sizing from the sim: peak and RMS torque and speed per joint type for stand, sit, wave, walk, strafe, turn; sensitivity to mass and height; writes `docs/TORQUE_REPORT.md`. | You change masses, geometry or gait, or want to size servos. |
 | `scripts/measure_ptt.py` | Vosk CPU and body tick time with push-to-talk idle, listening and always-on. | You want the numbers again (e.g. on the Pi). |
 | `scripts/stt_check.py` | Measures how well Vosk hears **your** voice; saves results; `--replay` re-judges them. | You add test phrases. |
 | `scripts/mic_check.py` | Lists microphones, records 3 seconds, shows the level. | Rarely. |
@@ -115,6 +116,7 @@ Legend: **STUB** = placeholder, not built yet. **DEV** = developer tool, not par
 | `docs/HOW_TO.md` | Recipes: change a model, a phrase, a threshold, the robot size, the pins. |
 | `docs/HARDWARE.md` | Servos, pins, calibration, power. Honest about what is not built yet. |
 | `docs/CONFIG.md` | A map of `config.py`: which setting does what. |
+| `docs/TORQUE_REPORT.md` | The generated torque and speed report (tables in N*m and kg*cm), with its limits and the placeholders to replace. |
 | `docs/ARCHITECTURE.md` | How the pieces fit together, with pictures. |
 | `docs/COMMANDS.md` | Every command you can run, and the safe way to run it. |
 | `docs/TROUBLESHOOTING.md` | Problems we hit and what fixed them. |
@@ -155,6 +157,7 @@ Run one file at a time on the dev laptop (see `COMMANDS.md`).
 | `tests/test_barge_in.py` | Recognizers get no audio when ptt is off; barge-in; always mode unchanged; clean shutdown. |
 | `tests/test_filler.py` | The instant filler: one for a slow reply, none for a fast one, cancelled by barge-in. |
 | `tests/test_app.py` | `HexaApp` with fakes: start, sit, chat, clean shutdown, no orphans. |
+| `tests/test_torque_report.py` | The torque report: unit conversion, statistics, parsing, rendering (no sim) and one short sim run. |
 | `tests/test_main_smoke.py` | `main.py` as a real process: sit + fake chat reply from an audio file, exit 0; SIGTERM/SIGINT. |
 | `tests/test_startup.py` | The startup checks and `main` exit codes. |
 | `tests/test_logsetup.py` | Log rotation. |

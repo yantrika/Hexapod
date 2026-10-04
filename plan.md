@@ -370,6 +370,12 @@ Each step is small, ends green (`pytest`, `ruff check .`, `mypy .`), and waits f
 - **Docs**: README quickstart, `docs/ARCHITECTURE.md` (data flow, the safety rules, the measured numbers, known limits).
 - **Release**: full suite in batches through the guard, tag `v0.1-sim`. Then wait for the owner's word on Step 11.
 
+### Step 10c — Servo and power sizing from the sim
+- **Goal**: numbers to choose servos and a supply. No servo or hardware code.
+- **Files**: `scripts/torque_report.py`, `tests/test_torque_report.py`, `docs/TORQUE_REPORT.md` (generated), power method and BOM checklist in `docs/HARDWARE.md`. `config.py`: masses marked PLACEHOLDER, `TOTAL_MASS_KG`, `TORQUE_SAFETY_FACTOR = 2.0`. `SimBackend` gained `max_force_nm`, `velocity_gain`, `on_step` and `joint_states()` (measurement hooks; behaviour unchanged by default).
+- **Method**: stand, sit, wave (through the real `Controller`), walk, strafe and turn at the maximum command (gait loop); applied motor torque sampled at every physics step; each motion run with the force cap raised to 30 N*m (the real need) and with the normal 3 N*m cap (does anything saturate). Per joint type: peak, RMS, p99, peak speed, angle range; kg*cm and the safety factor; seconds per 60 degrees; sensitivity to mass (0.7x, 1.0x, 1.3x) and body height; joints near peak at the same time; the walk again with velocity gain 1.0.
+- **Limits stated in the report**: no gear friction or backlash, lowered sim velocity gain (understates the peak), placeholder masses, flat floor.
+
 ### Step 11 — Real hardware on the Pi 5
 - **Goal**: `ServoBackend` drives the real robot with no other code changed.
 - **Files**: `body/servo_backend.py` (with its calibration table: per-joint centre, sign, offset, channel, pulse range), `requirements-pi.txt`, `scripts/calibrate_servos.py`, `tests/test_servo_backend.py` (against a fake driver).

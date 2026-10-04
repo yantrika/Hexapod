@@ -101,13 +101,25 @@ FALL_CLEAR_TILT_DEG = 25.0  # a fallen body counts as upright again below this (
 
 # --- Simulation model (URDF and PyBullet; PLACEHOLDER values) -------------
 BODY_THICKNESS_M = 0.04
-BODY_MASS_KG = 0.6
 LINK_RADIUS_M = 0.008
-LINK_MASS_KG = {"coxa": 0.03, "femur": 0.05, "tibia": 0.05, "foot": 0.01}
+# MASSES ARE PLACEHOLDERS, NOT MEASURED: weigh the real body (battery, Pi, boards, wiring) and
+# every servo + bracket + printed part, then replace these numbers. Every torque and power
+# figure from scripts/torque_report.py scales with them (see docs/TORQUE_REPORT.md).
+BODY_MASS_KG = 0.6  # PLACEHOLDER: plate, Pi 5, battery, PCA9685 boards, wiring
+LINK_MASS_KG = {  # PLACEHOLDER, per link, including the servo that moves it
+    "coxa": 0.03,
+    "femur": 0.05,
+    "tibia": 0.05,
+    "foot": 0.01,
+}
+# Total robot mass (PLACEHOLDER while the masses above are): body plus six legs.
+TOTAL_MASS_KG = BODY_MASS_KG + len(LEG_NAMES) * sum(LINK_MASS_KG.values())
+# Servo sizing: the rated (stall) torque must be at least the simulated peak times this factor.
+TORQUE_SAFETY_FACTOR = 2.0
 FOOT_RADIUS_M = 0.01  # contact sphere; its lowest point is the foot target
 GROUND_FRICTION = 1.0
 FOOT_FRICTION = 1.0
-JOINT_MAX_FORCE_NM = 3.0  # servo torque limit
+JOINT_MAX_FORCE_NM = 3.0  # servo torque limit; PLACEHOLDER, not a real servo spec
 JOINT_MAX_VELOCITY_RAD_S = 6.0  # servo speed limit
 JOINT_POSITION_GAIN = 0.3
 JOINT_VELOCITY_GAIN = 0.3  # low sim damping: real servos do not resist their own motion

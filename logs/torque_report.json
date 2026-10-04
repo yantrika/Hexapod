@@ -1,0 +1,568 @@
+{
+  "nominal_cap_nm": 3.0,
+  "raised_cap_nm": 30.0,
+  "velocity_gain": 0.3,
+  "velocity_cap_rad_s": 6.0,
+  "total_mass_kg": 1.44,
+  "safety_factor": 2.0,
+  "motions": [
+    {
+      "motion": "stand",
+      "seconds": 2.5166666666666666,
+      "raised": {
+        "coxa": {
+          "peak_nm": 0.1581329122472727,
+          "rms_nm": 0.04397377433380514,
+          "p99_nm": 0.12528536589442163,
+          "peak_speed_rad_s": 0.019482930443231124,
+          "angle_min_deg": -0.009561511613212146,
+          "angle_max_deg": 0.016534057242993814,
+          "at_cap_fraction": 0.0
+        },
+        "femur": {
+          "peak_nm": 0.346077091165235,
+          "rms_nm": 0.12336246526593636,
+          "p99_nm": 0.2930070804993834,
+          "peak_speed_rad_s": 1.293477403388578,
+          "angle_min_deg": -0.017936199782081386,
+          "angle_max_deg": 47.750678105686944,
+          "at_cap_fraction": 0.0
+        },
+        "tibia": {
+          "peak_nm": 0.24676107481878376,
+          "rms_nm": 0.0790470747907914,
+          "p99_nm": 0.20672643699633123,
+          "peak_speed_rad_s": 0.9713633927082965,
+          "angle_min_deg": -34.64121622375467,
+          "angle_max_deg": 0.05331500065622936,
+          "at_cap_fraction": 0.0
+        }
+      },
+      "nominal": {
+        "coxa": {
+          "peak_nm": 0.1581329122472727,
+          "rms_nm": 0.04397377433380514,
+          "p99_nm": 0.12528536589442163,
+          "peak_speed_rad_s": 0.019482930443231124,
+          "angle_min_deg": -0.009561511613212146,
+          "angle_max_deg": 0.016534057242993814,
+          "at_cap_fraction": 0.0
+        },
+        "femur": {
+          "peak_nm": 0.346077091165235,
+          "rms_nm": 0.12336246526593636,
+          "p99_nm": 0.2930070804993834,
+          "peak_speed_rad_s": 1.293477403388578,
+          "angle_min_deg": -0.017936199782081386,
+          "angle_max_deg": 47.750678105686944,
+          "at_cap_fraction": 0.0
+        },
+        "tibia": {
+          "peak_nm": 0.24676107481878376,
+          "rms_nm": 0.0790470747907914,
+          "p99_nm": 0.20672643699633123,
+          "peak_speed_rad_s": 0.9713633927082965,
+          "angle_min_deg": -34.64121622375467,
+          "angle_max_deg": 0.05331500065622936,
+          "at_cap_fraction": 0.0
+        }
+      },
+      "near_peak": {
+        "max_vs_peak": 5,
+        "p95_vs_peak": 2,
+        "max_vs_p99": 8,
+        "p95_vs_p99": 4
+      }
+    },
+    {
+      "motion": "sit",
+      "seconds": 2.5166666666666666,
+      "raised": {
+        "coxa": {
+          "peak_nm": 0.1523087155797011,
+          "rms_nm": 0.03509729813044562,
+          "p99_nm": 0.11366244585844959,
+          "peak_speed_rad_s": 0.03298430824840486,
+          "angle_min_deg": -0.022912042118799488,
+          "angle_max_deg": 0.011521669930586518,
+          "at_cap_fraction": 0.0
+        },
+        "femur": {
+          "peak_nm": 0.3087783798615752,
+          "rms_nm": 0.12195637483372264,
+          "p99_nm": 0.20351459743763006,
+          "peak_speed_rad_s": 1.2968817480321797,
+          "angle_min_deg": -0.001844854139505425,
+          "angle_max_deg": 47.75925379308341,
+          "at_cap_fraction": 0.0
+        },
+        "tibia": {
+          "peak_nm": 0.22547546837743723,
+          "rms_nm": 0.07141504907470701,
+          "p99_nm": 0.17581662213689922,
+          "peak_speed_rad_s": 0.9791339256378042,
+          "angle_min_deg": -34.65132901050877,
+          "angle_max_deg": 0.028827288225126434,
+          "at_cap_fraction": 0.0
+        }
+      },
+      "nominal": {
+        "coxa": {
+          "peak_nm": 0.1523087155797011,
+          "rms_nm": 0.03509729813044562,
+          "p99_nm": 0.11366244585844959,
+          "peak_speed_rad_s": 0.03298430824840486,
+          "angle_min_deg": -0.022912042118799488,
+          "angle_max_deg": 0.011521669930586518,
+          "at_cap_fraction": 0.0
+        },
+        "femur": {
+          "peak_nm": 0.3087783798615752,
+          "rms_nm": 0.12195637483372264,
+          "p99_nm": 0.20351459743763006,
+          "peak_speed_rad_s": 1.2968817480321797,
+          "angle_min_deg": -0.001844854139505425,
+          "angle_max_deg": 47.75925379308341,
+          "at_cap_fraction": 0.0
+        },
+        "tibia": {
+          "peak_nm": 0.22547546837743723,
+          "rms_nm": 0.07141504907470701,
+          "p99_nm": 0.17581662213689922,
+          "peak_speed_rad_s": 0.9791339256378042,
+          "angle_min_deg": -34.65132901050877,
+          "angle_max_deg": 0.028827288225126434,
+          "at_cap_fraction": 0.0
+        }
+      },
+      "near_peak": {
+        "max_vs_peak": 9,
+        "p95_vs_peak": 1,
+        "max_vs_p99": 11,
+        "p95_vs_p99": 6
+      }
+    },
+    {
+      "motion": "wave",
+      "seconds": 4.0,
+      "raised": {
+        "coxa": {
+          "peak_nm": 2.0878963391034615,
+          "rms_nm": 0.289377751274025,
+          "p99_nm": 1.1935132994671567,
+          "peak_speed_rad_s": 6.002096396565743,
+          "angle_min_deg": -25.120867006114924,
+          "angle_max_deg": 25.121771242754225,
+          "at_cap_fraction": 0.0
+        },
+        "femur": {
+          "peak_nm": 1.2938970220232602,
+          "rms_nm": 0.17862179611174397,
+          "p99_nm": 0.6097856407383468,
+          "peak_speed_rad_s": 4.9194371392167255,
+          "angle_min_deg": -0.02295303688703012,
+          "angle_max_deg": 60.04522300701386,
+          "at_cap_fraction": 0.0
+        },
+        "tibia": {
+          "peak_nm": 0.6081919574893114,
+          "rms_nm": 0.09718939017679556,
+          "p99_nm": 0.30897006277408934,
+          "peak_speed_rad_s": 1.7282242284336182,
+          "angle_min_deg": -0.043964892483631966,
+          "angle_max_deg": 20.176020096987777,
+          "at_cap_fraction": 0.0
+        }
+      },
+      "nominal": {
+        "coxa": {
+          "peak_nm": 2.0878963391034615,
+          "rms_nm": 0.289377751274025,
+          "p99_nm": 1.1935132994671567,
+          "peak_speed_rad_s": 6.002096396565743,
+          "angle_min_deg": -25.120867006114924,
+          "angle_max_deg": 25.121771242754225,
+          "at_cap_fraction": 0.0
+        },
+        "femur": {
+          "peak_nm": 1.2938970220232602,
+          "rms_nm": 0.17862179611174397,
+          "p99_nm": 0.6097856407383468,
+          "peak_speed_rad_s": 4.9194371392167255,
+          "angle_min_deg": -0.02295303688703012,
+          "angle_max_deg": 60.04522300701386,
+          "at_cap_fraction": 0.0
+        },
+        "tibia": {
+          "peak_nm": 0.6081919574893114,
+          "rms_nm": 0.09718939017679556,
+          "p99_nm": 0.30897006277408934,
+          "peak_speed_rad_s": 1.7282242284336182,
+          "angle_min_deg": -0.043964892483631966,
+          "angle_max_deg": 20.176020096987777,
+          "at_cap_fraction": 0.0
+        }
+      },
+      "near_peak": {
+        "max_vs_peak": 3,
+        "p95_vs_peak": 0,
+        "max_vs_p99": 6,
+        "p95_vs_p99": 2
+      }
+    },
+    {
+      "motion": "walk",
+      "seconds": 8.0,
+      "raised": {
+        "coxa": {
+          "peak_nm": 0.724633296513569,
+          "rms_nm": 0.22708344205838793,
+          "p99_nm": 0.5832620708775228,
+          "peak_speed_rad_s": 2.2228548309163236,
+          "angle_min_deg": -10.364306291564327,
+          "angle_max_deg": 10.419146901662366,
+          "at_cap_fraction": 0.0
+        },
+        "femur": {
+          "peak_nm": 0.7544095662767529,
+          "rms_nm": 0.23392345747175372,
+          "p99_nm": 0.5528330310805778,
+          "peak_speed_rad_s": 4.476684854496863,
+          "angle_min_deg": -1.2734870901069406,
+          "angle_max_deg": 19.53221097514531,
+          "at_cap_fraction": 0.0
+        },
+        "tibia": {
+          "peak_nm": 0.6953174360812067,
+          "rms_nm": 0.16520917428810264,
+          "p99_nm": 0.6300919086718287,
+          "peak_speed_rad_s": 4.293872253000606,
+          "angle_min_deg": -19.393757038156817,
+          "angle_max_deg": 11.357160963950214,
+          "at_cap_fraction": 0.0
+        }
+      },
+      "nominal": {
+        "coxa": {
+          "peak_nm": 0.724633296513569,
+          "rms_nm": 0.22708344205838793,
+          "p99_nm": 0.5832620708775228,
+          "peak_speed_rad_s": 2.2228548309163236,
+          "angle_min_deg": -10.364306291564327,
+          "angle_max_deg": 10.419146901662366,
+          "at_cap_fraction": 0.0
+        },
+        "femur": {
+          "peak_nm": 0.7544095662767529,
+          "rms_nm": 0.23392345747175372,
+          "p99_nm": 0.5528330310805778,
+          "peak_speed_rad_s": 4.476684854496863,
+          "angle_min_deg": -1.2734870901069406,
+          "angle_max_deg": 19.53221097514531,
+          "at_cap_fraction": 0.0
+        },
+        "tibia": {
+          "peak_nm": 0.6953174360812067,
+          "rms_nm": 0.16520917428810264,
+          "p99_nm": 0.6300919086718287,
+          "peak_speed_rad_s": 4.293872253000606,
+          "angle_min_deg": -19.393757038156817,
+          "angle_max_deg": 11.357160963950214,
+          "at_cap_fraction": 0.0
+        }
+      },
+      "near_peak": {
+        "max_vs_peak": 3,
+        "p95_vs_peak": 1,
+        "max_vs_p99": 6,
+        "p95_vs_p99": 4
+      }
+    },
+    {
+      "motion": "strafe",
+      "seconds": 8.0,
+      "raised": {
+        "coxa": {
+          "peak_nm": 0.7162720473419688,
+          "rms_nm": 0.2278884326560946,
+          "p99_nm": 0.5922672252012385,
+          "peak_speed_rad_s": 1.9614392387189628,
+          "angle_min_deg": -9.890505153199229,
+          "angle_max_deg": 9.88702092866579,
+          "at_cap_fraction": 0.0
+        },
+        "femur": {
+          "peak_nm": 0.8454757159525306,
+          "rms_nm": 0.23812882803678742,
+          "p99_nm": 0.5681217272172772,
+          "peak_speed_rad_s": 4.474547176050646,
+          "angle_min_deg": -1.5944581828285538,
+          "angle_max_deg": 19.53411242271796,
+          "at_cap_fraction": 0.0
+        },
+        "tibia": {
+          "peak_nm": 0.9003272262137573,
+          "rms_nm": 0.16648549177517022,
+          "p99_nm": 0.6824240509532441,
+          "peak_speed_rad_s": 4.530121771366056,
+          "angle_min_deg": -20.058145067393138,
+          "angle_max_deg": 12.938806808622699,
+          "at_cap_fraction": 0.0
+        }
+      },
+      "nominal": {
+        "coxa": {
+          "peak_nm": 0.7162720473419688,
+          "rms_nm": 0.2278884326560946,
+          "p99_nm": 0.5922672252012385,
+          "peak_speed_rad_s": 1.9614392387189628,
+          "angle_min_deg": -9.890505153199229,
+          "angle_max_deg": 9.88702092866579,
+          "at_cap_fraction": 0.0
+        },
+        "femur": {
+          "peak_nm": 0.8454757159525306,
+          "rms_nm": 0.23812882803678742,
+          "p99_nm": 0.5681217272172772,
+          "peak_speed_rad_s": 4.474547176050646,
+          "angle_min_deg": -1.5944581828285538,
+          "angle_max_deg": 19.53411242271796,
+          "at_cap_fraction": 0.0
+        },
+        "tibia": {
+          "peak_nm": 0.9003272262137573,
+          "rms_nm": 0.16648549177517022,
+          "p99_nm": 0.6824240509532441,
+          "peak_speed_rad_s": 4.530121771366056,
+          "angle_min_deg": -20.058145067393138,
+          "angle_max_deg": 12.938806808622699,
+          "at_cap_fraction": 0.0
+        }
+      },
+      "near_peak": {
+        "max_vs_peak": 2,
+        "p95_vs_peak": 1,
+        "max_vs_p99": 7,
+        "p95_vs_p99": 3
+      }
+    },
+    {
+      "motion": "turn",
+      "seconds": 8.0,
+      "raised": {
+        "coxa": {
+          "peak_nm": 0.6935698992356719,
+          "rms_nm": 0.2737060581893157,
+          "p99_nm": 0.6058477356538972,
+          "peak_speed_rad_s": 2.019164204321887,
+          "angle_min_deg": -9.47679084925201,
+          "angle_max_deg": 9.250070084647055,
+          "at_cap_fraction": 0.0
+        },
+        "femur": {
+          "peak_nm": 0.9953943843258791,
+          "rms_nm": 0.2825614045529504,
+          "p99_nm": 0.8325787623234125,
+          "peak_speed_rad_s": 4.026642416361076,
+          "angle_min_deg": -0.0638379503476608,
+          "angle_max_deg": 19.466009506906442,
+          "at_cap_fraction": 0.0
+        },
+        "tibia": {
+          "peak_nm": 0.36532970402042486,
+          "rms_nm": 0.08938254115371799,
+          "p99_nm": 0.3076312229743412,
+          "peak_speed_rad_s": 3.4292879645559204,
+          "angle_min_deg": -17.19082646740035,
+          "angle_max_deg": 0.8785167244375106,
+          "at_cap_fraction": 0.0
+        }
+      },
+      "nominal": {
+        "coxa": {
+          "peak_nm": 0.6935698992356719,
+          "rms_nm": 0.2737060581893157,
+          "p99_nm": 0.6058477356538972,
+          "peak_speed_rad_s": 2.019164204321887,
+          "angle_min_deg": -9.47679084925201,
+          "angle_max_deg": 9.250070084647055,
+          "at_cap_fraction": 0.0
+        },
+        "femur": {
+          "peak_nm": 0.9953943843258791,
+          "rms_nm": 0.2825614045529504,
+          "p99_nm": 0.8325787623234125,
+          "peak_speed_rad_s": 4.026642416361076,
+          "angle_min_deg": -0.0638379503476608,
+          "angle_max_deg": 19.466009506906442,
+          "at_cap_fraction": 0.0
+        },
+        "tibia": {
+          "peak_nm": 0.36532970402042486,
+          "rms_nm": 0.08938254115371799,
+          "p99_nm": 0.3076312229743412,
+          "peak_speed_rad_s": 3.4292879645559204,
+          "angle_min_deg": -17.19082646740035,
+          "angle_max_deg": 0.8785167244375106,
+          "at_cap_fraction": 0.0
+        }
+      },
+      "near_peak": {
+        "max_vs_peak": 6,
+        "p95_vs_peak": 3,
+        "max_vs_p99": 10,
+        "p95_vs_p99": 6
+      }
+    }
+  ],
+  "sensitivity": [
+    {
+      "label": "mass x0.7",
+      "total_mass_kg": 1.008,
+      "body_height_m": 0.13,
+      "peak_nm": {
+        "coxa": 0.5072433075601083,
+        "femur": 0.5280866956258058,
+        "tibia": 0.4867222052594872
+      },
+      "rms_nm": {
+        "coxa": 0.15895840944081663,
+        "femur": 0.16374642022769872,
+        "tibia": 0.11564642200390889
+      },
+      "ik_scaled_ticks": 0
+    },
+    {
+      "label": "mass x1",
+      "total_mass_kg": 1.44,
+      "body_height_m": 0.13,
+      "peak_nm": {
+        "coxa": 0.724633296513569,
+        "femur": 0.7544095662767529,
+        "tibia": 0.6953174360812067
+      },
+      "rms_nm": {
+        "coxa": 0.22708344205838793,
+        "femur": 0.23392345747175372,
+        "tibia": 0.16520917428810264
+      },
+      "ik_scaled_ticks": 0
+    },
+    {
+      "label": "mass x1.3",
+      "total_mass_kg": 1.8719999999999999,
+      "body_height_m": 0.13,
+      "peak_nm": {
+        "coxa": 0.9420232854678378,
+        "femur": 0.980732436508946,
+        "tibia": 0.903912666906955
+      },
+      "rms_nm": {
+        "coxa": 0.2952084746759449,
+        "femur": 0.30410049471454664,
+        "tibia": 0.21477192657313773
+      },
+      "ik_scaled_ticks": 0
+    },
+    {
+      "label": "height 0.10 m",
+      "total_mass_kg": 1.44,
+      "body_height_m": 0.1,
+      "peak_nm": {
+        "coxa": 0.6821467608762231,
+        "femur": 0.7445543462619668,
+        "tibia": 0.6386128410507939
+      },
+      "rms_nm": {
+        "coxa": 0.21489853633383518,
+        "femur": 0.2411615378594913,
+        "tibia": 0.16323331413734907
+      },
+      "ik_scaled_ticks": 0
+    },
+    {
+      "label": "height 0.16 m",
+      "total_mass_kg": 1.44,
+      "body_height_m": 0.16,
+      "peak_nm": {
+        "coxa": 0.7205430568037108,
+        "femur": 0.7068950656877525,
+        "tibia": 0.6429812371381972
+      },
+      "rms_nm": {
+        "coxa": 0.22930053425123767,
+        "femur": 0.22543944752033357,
+        "tibia": 0.14853602842250885
+      },
+      "ik_scaled_ticks": 0
+    }
+  ],
+  "gain_walk": {
+    "motion": "walk",
+    "seconds": 8.0,
+    "raised": {
+      "coxa": {
+        "peak_nm": 0.9799363125939669,
+        "rms_nm": 0.22833685105378532,
+        "p99_nm": 0.780447313461493,
+        "peak_speed_rad_s": 2.553654514386002,
+        "angle_min_deg": -10.11842751953484,
+        "angle_max_deg": 10.117220666898765,
+        "at_cap_fraction": 0.0
+      },
+      "femur": {
+        "peak_nm": 0.9101687688066412,
+        "rms_nm": 0.24849040570963418,
+        "p99_nm": 0.7264539037743318,
+        "peak_speed_rad_s": 5.188774700821634,
+        "angle_min_deg": -1.1482142554678598,
+        "angle_max_deg": 19.31943526908379,
+        "at_cap_fraction": 0.0
+      },
+      "tibia": {
+        "peak_nm": 1.074207208178345,
+        "rms_nm": 0.17129732001443554,
+        "p99_nm": 0.8326023775030235,
+        "peak_speed_rad_s": 4.914121206889149,
+        "angle_min_deg": -19.232430459681545,
+        "angle_max_deg": 10.892652979019152,
+        "at_cap_fraction": 0.0
+      }
+    },
+    "nominal": {
+      "coxa": {
+        "peak_nm": 0.9799363125939669,
+        "rms_nm": 0.22833685105378532,
+        "p99_nm": 0.780447313461493,
+        "peak_speed_rad_s": 2.553654514386002,
+        "angle_min_deg": -10.11842751953484,
+        "angle_max_deg": 10.117220666898765,
+        "at_cap_fraction": 0.0
+      },
+      "femur": {
+        "peak_nm": 0.9101687688066412,
+        "rms_nm": 0.24849040570963418,
+        "p99_nm": 0.7264539037743318,
+        "peak_speed_rad_s": 5.188774700821634,
+        "angle_min_deg": -1.1482142554678598,
+        "angle_max_deg": 19.31943526908379,
+        "at_cap_fraction": 0.0
+      },
+      "tibia": {
+        "peak_nm": 1.074207208178345,
+        "rms_nm": 0.17129732001443554,
+        "p99_nm": 0.8326023775030235,
+        "peak_speed_rad_s": 4.914121206889149,
+        "angle_min_deg": -19.232430459681545,
+        "angle_max_deg": 10.892652979019152,
+        "at_cap_fraction": 0.0
+      }
+    },
+    "near_peak": {
+      "max_vs_peak": 4,
+      "p95_vs_peak": 2,
+      "max_vs_p99": 7,
+      "p95_vs_p99": 3
+    }
+  }
+}

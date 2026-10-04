@@ -104,3 +104,11 @@ python scripts/cool_run.py -- nice -n 19 pytest tests/test_router.py -q     # on
 Tests that use the real Vosk model or Piper skip themselves if the models are missing: run `scripts/fetch_models.sh`.
 
 Before commit: `ruff check .`, `mypy .`, and the test files for what you changed.
+
+## Servo sizing
+
+```bash
+python scripts/torque_report.py --markdown docs/TORQUE_REPORT.md --json logs/torque_report.json   # full report, about 1-2 min
+python scripts/torque_report.py --motions walk --seconds 3 --no-sensitivity                        # quick look
+python scripts/torque_report.py --render logs/torque_report.json                                   # print a saved report, no sim
+```

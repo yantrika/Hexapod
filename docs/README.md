@@ -9,6 +9,7 @@ hexa is a six-legged robot you can talk to. It listens (Vosk), understands (a si
 | Know what every file does and which to edit | [FILES.md](FILES.md) |
 | Change a model, a phrase, a threshold, the robot size | [HOW_TO.md](HOW_TO.md) |
 | Change servo pins, channels or calibration | [HARDWARE.md](HARDWARE.md) |
+| Choose servos and size the power supply | [HARDWARE.md](HARDWARE.md), [TORQUE_REPORT.md](TORQUE_REPORT.md) |
 | Find which setting in `config.py` does what | [CONFIG.md](CONFIG.md) |
 | Understand how the parts connect | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Run something, or run tests safely | [COMMANDS.md](COMMANDS.md) |
