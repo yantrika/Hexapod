@@ -1,3 +1,9 @@
+# Raspberry Pi 5 (Ubuntu 24.04, Python 3.12, aarch64): everything the robot needs EXCEPT pybullet.
+# Run with: python main.py --backend dryrun   (the servo driver is added at Step 11e)
+# Wheels only: nothing is ever built on the Pi. srt (a vosk dependency, source-only on PyPI) comes
+# from wheelhouse/, built on the laptop by scripts/build_wheelhouse.sh and sent by sync_to_pi.sh.
+--only-binary=:all:
+--find-links wheelhouse
 -r requirements.txt
-# Servo driver goes here at the hardware step, e.g.
-# adafruit-circuitpython-servokit>=1.3
+srt==3.5.3
+pytest>=8.0

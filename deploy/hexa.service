@@ -1,0 +1,35 @@
+# systemd unit for hexa on the Raspberry Pi. WRITTEN, NOT INSTALLED, NOT ENABLED.
+#
+# RULE (AGENTS.md): a unit with a hardware backend must NEVER be enabled at boot until the kill
+# switch and the servo calibration steps (plan.md 11e/11f) are done. This copy runs the DRY-RUN
+# backend, which moves nothing. Installing it is the owner's job, in the owner's own session:
+#   sudo cp ~/hexa/deploy/hexa.service /etc/systemd/system/hexa.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl start hexa        # try it; "enable" only when the rules above are met
+[Unit]
+Description=hexa hexapod robot (dry-run backend)
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hexa
+Group=hexa
+SupplementaryGroups=audio
+WorkingDirectory=/home/hexa/hexa
+Environment=HEXA_BACKEND=dryrun
+# no microphone or speaker needed to start; remove --no-mic/--no-speak once the USB audio is set up
+ExecStart=/home/hexa/hexa/.venv/bin/python main.py --backend dryrun --chat fake --no-mic --no-speak
+Restart=on-failure
+RestartSec=5
+Nice=5
+# SIGTERM is a clean shutdown (stop, silence, join threads); wait for it
+TimeoutStopSec=15
+KillSignal=SIGTERM
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/home/hexa/hexa/logs
+
+[Install]
+# Deliberately empty of enabling advice: do NOT enable this unit with a hardware backend.
+WantedBy=multi-user.target

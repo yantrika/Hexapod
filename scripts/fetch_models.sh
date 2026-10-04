@@ -26,6 +26,9 @@ VOICE_BASE="https://huggingface.co/rhasspy/piper-voices/resolve/main/${VOICE_PAT
 piper_dir="${root}/assets/piper"
 voice_file="$(basename "${VOICE_PATH}")"
 
+# Real asset names of the PIPER_RELEASE page (checked against the GitHub release, not guessed):
+# piper_linux_x86_64.tar.gz (26.5 MB), piper_linux_aarch64.tar.gz (26.0 MB, the Pi 5).
+# Only the archive for THIS machine is ever downloaded, and only if the binary is missing.
 case "$(uname -m)" in
   x86_64) ;;
   aarch64) PIPER_ARCHIVE="piper_linux_aarch64.tar.gz" ;;
@@ -65,7 +68,12 @@ for model in ${models}; do
   else
     echo "vosk: downloading ${model}"
     curl -fsSL --retry 3 -o "${vosk_dir}/${model}.zip" "https://alphacephei.com/vosk/models/${model}.zip"
-    unzip -q -o "${vosk_dir}/${model}.zip" -d "${vosk_dir}"
+    if command -v unzip >/dev/null; then
+      unzip -q -o "${vosk_dir}/${model}.zip" -d "${vosk_dir}"
+    else  # the Pi has no unzip (and no sudo is used): python's zipfile does the same
+      python3 -c "import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" \
+        "${vosk_dir}/${model}.zip" "${vosk_dir}"
+    fi
     rm -f "${vosk_dir}/${model}.zip"
   fi
 done

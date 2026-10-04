@@ -12,3 +12,5 @@ assets/piper/*.onnx.json
 assets/piper/piper/
 assets/phrases/*.wav
 logs/*.jsonl
+wheelhouse/
+.tmp/

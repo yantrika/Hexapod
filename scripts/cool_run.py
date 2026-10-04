@@ -7,6 +7,11 @@
     python scripts/cool_run.py --unguarded -- pytest ...   # only when the owner asks, same message
     python scripts/cool_run.py --pause-at 78 --resume-below 68 -- pytest tests/test_audio.py
 
+On a Raspberry Pi (device-tree model) the limits are the Pi's: the sensor is ``cpu-thermal`` in
+``/sys/class/thermal``, the kernel's critical trip is 110 C but the firmware starts throttling the
+clock at 80 C (soft) and 85 C, so the default kill limit is 78 C and the job starts below 62 C.
+Throttling is also reported at the end when ``vcgencmd get_throttled`` is available.
+
 Before starting it waits until the temperature is below ``--start-below``. While the command
 runs it checks every second: at ``--kill-at`` it kills the command (exit 3) so the hardware
 protection never trips. With ``--pause-at`` it instead freezes the command (SIGSTOP) until the
@@ -25,7 +30,27 @@ import subprocess
 import sys
 import time
 
-CRITICAL_C = 87.0
+LAPTOP_LIMITS = {"critical": 87.0, "start_below": 64.0, "kill_at": 82.0, "resume_below": 70.0}
+PI_LIMITS = {"critical": 85.0, "start_below": 62.0, "kill_at": 78.0, "resume_below": 68.0}
+CRITICAL_C = LAPTOP_LIMITS["critical"]
+
+
+def is_raspberry_pi() -> bool:
+    try:
+        with open("/proc/device-tree/model", "rb") as handle:
+            return b"Raspberry Pi" in handle.read()
+    except OSError:
+        return False
+
+
+def throttle_report() -> str | None:
+    """``vcgencmd get_throttled`` (Pi only): None if it is unavailable."""
+    try:
+        out = subprocess.run(["vcgencmd", "get_throttled"], capture_output=True, text=True,
+                             timeout=5).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out or None
 
 
 def _cpu_sensor_paths() -> list[str]:
@@ -66,11 +91,15 @@ def wait_until_below(limit_c: float, poll_s: float = 2.0) -> None:
 
 
 def main() -> int:
+    limits = PI_LIMITS if is_raspberry_pi() else LAPTOP_LIMITS
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--start-below", type=float, default=64.0, help="wait to start (C)")
-    parser.add_argument("--kill-at", type=float, default=82.0, help="kill the command (C)")
+    parser.add_argument("--start-below", type=float, default=limits["start_below"],
+                        help="wait to start (C, default %(default)s)")
+    parser.add_argument("--kill-at", type=float, default=limits["kill_at"],
+                        help="kill the command (C, default %(default)s)")
     parser.add_argument("--pause-at", type=float, default=None, help="freeze the command (C)")
-    parser.add_argument("--resume-below", type=float, default=70.0, help="unfreeze (C)")
+    parser.add_argument("--resume-below", type=float, default=limits["resume_below"],
+                        help="unfreeze (C)")
     parser.add_argument("--poll", type=float, default=1.0, help="seconds between checks")
     parser.add_argument("--unguarded", action="store_true",
                         help="ONLY when the owner asked for it in that message: no waiting, no "
@@ -80,8 +109,9 @@ def main() -> int:
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
     if not command:
         parser.error("give a command after --")
-    if not args.unguarded and args.kill_at >= CRITICAL_C - 2:
-        parser.error(f"--kill-at must stay well under the {CRITICAL_C:.0f} C hardware limit")
+    critical = limits["critical"]
+    if not args.unguarded and args.kill_at >= critical - 2:
+        parser.error(f"--kill-at must stay well under the {critical:.0f} C hardware limit")
 
     if args.unguarded:
         args.kill_at, args.pause_at, args.poll = float("inf"), None, 2.0
@@ -119,6 +149,9 @@ def main() -> int:
         os.killpg(process.pid, signal.SIGINT)
         process.wait()
     print(f"cool_run: peak {peak:.0f} C", file=sys.stderr)
+    if is_raspberry_pi() and (throttle := throttle_report()):
+        print(f"cool_run: {throttle} (0x0 = no throttling or under-voltage since boot)",
+              file=sys.stderr)
     return process.returncode or 0
 
 

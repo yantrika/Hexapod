@@ -51,6 +51,7 @@ def test_the_command_is_killed_when_it_gets_too_hot(monkeypatch: pytest.MonkeyPa
 def test_it_waits_for_the_machine_to_cool_before_starting(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(cool_run, "is_raspberry_pi", lambda: False)  # same limits everywhere
     readings = iter([80.0, 75.0, 60.0, 60.0, 60.0])
     monkeypatch.setattr(cool_run, "read_temperature_c", lambda: next(readings, 60.0))
     monkeypatch.setattr(cool_run.time, "sleep", lambda seconds: None)
@@ -72,3 +73,13 @@ def test_a_guard_limit_close_to_the_hardware_limit_is_refused() -> None:
         capture_output=True, text=True, timeout=30,
     )
     assert result.returncode == 2 and "hardware limit" in result.stderr
+
+
+def test_the_pi_profile_kills_below_the_firmware_throttle(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert cool_run.PI_LIMITS["kill_at"] < 80.0 < cool_run.PI_LIMITS["critical"]
+    assert cool_run.PI_LIMITS["start_below"] < cool_run.PI_LIMITS["kill_at"]
+    monkeypatch.setattr(cool_run, "is_raspberry_pi", lambda: True)
+    monkeypatch.setattr(sys, "argv", ["cool_run", "--kill-at", "84", "--", "true"])
+    with pytest.raises(SystemExit) as refused:  # 84 C is within 2 C of the Pi's 85 C limit
+        cool_run.main()
+    assert refused.value.code == 2
