@@ -6,6 +6,13 @@
     python scripts/voice_cli.py --chat off       no chat (anything that is not a command is ignored)
     python scripts/voice_cli.py --no-speak       no Piper: replies are printed as "[hexa] ..."
     python scripts/voice_cli.py --gui            with the PyBullet window (needs the Mesa override)
+    python scripts/voice_cli.py --listen always  listen all the time (default: config.LISTEN_MODE)
+
+Push-to-talk (the default): press Enter to start listening, speak, press Enter again to stop (a
+terminal has no key-release events; true hold-to-talk comes with the phone page, Step 12). Pressing
+Enter while hexa talks interrupts it. The terminal shows LISTENING / IDLE. SAFETY: in ptt mode a
+voice "stop" only works while LISTENING; type `stop` + Enter, or use the control window STOP
+button / Space, for a stop that always works.
 
 Prints each partial and final text, the route result, every body status, the chat reply and,
 per chat utterance, the time from the final result to the first token, the first sentence and
@@ -42,6 +49,7 @@ from commandline import format_status  # noqa: E402
 from scripts.brain_cli import describe  # noqa: E402
 from voice.audio import MicSource  # noqa: E402
 from voice.playback import Playback, SoundDeviceSink  # noqa: E402
+from voice.ptt import PushToTalk, make_ptt  # noqa: E402
 from voice.stt import SttError, VoskStt  # noqa: E402
 from voice.tts import PiperEngine, TtsError  # noqa: E402
 
@@ -69,7 +77,7 @@ class ConsolePlayback:
         print(f"[hexa] {config.TTS_PHRASES[name]}", flush=True)
         return 0
 
-    def clear(self) -> None:
+    def clear(self, skip_tail: bool = False) -> None:
         pass
 
 
@@ -91,8 +99,8 @@ class PrintingPlayback:
         print(f"[hexa] {config.TTS_PHRASES.get(name, name)}", flush=True)
         return self._playback.say_phrase(name)
 
-    def clear(self) -> None:
-        self._playback.clear()
+    def clear(self, skip_tail: bool = False) -> None:
+        self._playback.clear(skip_tail)
 
 
 def print_timing(timing: ChatTiming) -> None:
@@ -103,6 +111,23 @@ def print_timing(timing: ChatTiming) -> None:
     flag = " (failed)" if timing.failed else ""
     print(f"chat timing from the final result: first token {show('first_token')}, first sentence "
           f"{show('first_sentence')}, first audio {show('first_audio')}{flag}", flush=True)
+
+
+def read_keys(ptt: PushToTalk, bridge: object, done: threading.Event) -> None:
+    """Terminal keys for push-to-talk: Enter toggles listening; `stop` sends stop at once."""
+    for line in sys.stdin:
+        if done.is_set():
+            return
+        if line.strip().lower() in ("stop", "s"):
+            bridge.send(new_command("stop"))  # type: ignore[attr-defined]
+            print("stop sent", flush=True)
+        else:
+            ptt.toggle()
+
+
+def print_indicator(state: str) -> None:
+    print("\n>>> LISTENING (press Enter when done)" if state == "listening"
+          else ">>> IDLE (press Enter to talk)", flush=True)
 
 
 def make_backend(kind: str, model: str | None) -> ChatBackend | None:
@@ -141,6 +166,8 @@ def main() -> int:
     parser.add_argument("--device", type=int, default=config.MIC_DEVICE, help="input device index")
     parser.add_argument("--chat", choices=("ollama", "fake", "off"), default="ollama",
                         help="chat backend (fake = scripted, for the slow dev laptop)")
+    parser.add_argument("--listen", choices=("ptt", "always"), default=config.LISTEN_MODE,
+                        help="ptt = push-to-talk (Enter toggles), always = listen all the time")
     parser.add_argument("--ollama-model", default=None, help="override config.OLLAMA_MODEL")
     args = parser.parse_args()
     logging.basicConfig(level=logging.WARNING, format="%(name)s %(levelname)s %(message)s")
@@ -178,8 +205,9 @@ def main() -> int:
             if backend is not None else None)
     if real_playback is not None and chat is not None:
         real_playback.on_start = lambda utterance: chat.note_audio_start(utterance.group)
+    ptt = make_ptt(args.listen)
     voice = VoiceLoop(MicSource(device=args.device), stt, brain, speaking, voice_out,  # type: ignore[arg-type]
-                      print_event, chat=chat)
+                      print_event, chat=chat, ptt=ptt)
     done = threading.Event()
     threading.Thread(target=print_statuses, args=(hub, done), daemon=True).start()
     try:
@@ -187,9 +215,18 @@ def main() -> int:
             print("the body process did not start", file=sys.stderr)
             return 1
         voice.start()
-        print(f"listening (model {stt.model_path.name}, chat {args.chat}). Say 'walk forward', "
-              "'sit down', 'stand up', 'turn left', 'wave', 'stop', or just talk. Ctrl-C quits.",
-              flush=True)
+        commands = "'walk forward', 'sit down', 'stand up', 'turn left', 'wave', 'stop'"
+        if ptt is not None:
+            ptt.add_change_listener(print_indicator)
+            threading.Thread(target=read_keys, args=(ptt, bridge, done), daemon=True).start()
+            print(f"PUSH-TO-TALK (model {stt.model_path.name}, chat {args.chat}). Press Enter, say "
+                  f"{commands} or just talk, press Enter again. Enter while hexa talks "
+                  "interrupts it.\nSAFETY: a voice 'stop' works ONLY while LISTENING. Type "
+                  "`stop` + Enter, or use the control window STOP button / Space, for a stop "
+                  "that always works. Ctrl-C quits.\n>>> IDLE (press Enter to talk)", flush=True)
+        else:
+            print(f"listening ALWAYS (model {stt.model_path.name}, chat {args.chat}). Say "
+                  f"{commands}, or just talk. Deaf while hexa speaks. Ctrl-C quits.", flush=True)
         while True:
             time.sleep(0.5)
     except KeyboardInterrupt:

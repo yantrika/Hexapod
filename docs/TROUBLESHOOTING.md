@@ -21,6 +21,10 @@ The tests that use real Vosk or Piper skip themselves when the models are missin
 4. Try the other model: `--model in`. It was slower on this laptop but better on some words.
 5. Quiet room, speak normally, and wait for the end of the sentence (about one second of silence) before expecting a result.
 
+## Nothing happens when I talk
+
+In push-to-talk mode (the default) hexa only listens between two presses of Enter (the terminal shows LISTENING). Press Enter, talk, press Enter. For the old always-listening behaviour use `--listen always` or set `LISTEN_MODE = "always"`. A voice "stop" works only while listening: type `stop` + Enter, or use the control window STOP button / Space.
+
 ## The robot obeys its own voice
 
 It should not: audio is dropped while it speaks and a little after (`SPEAK_TAIL_S`). If it happens, raise `SPEAK_TAIL_S` in `config.py` a little, lower the speaker volume, or move the microphone away from the speaker. Test with `python scripts/voice_cli.py` and watch that the "okay" does not appear as `heard:`.

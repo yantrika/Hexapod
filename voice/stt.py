@@ -222,6 +222,11 @@ class SelfHearingGate:
         self._speaking_at_last_block = False
         self._discarding = False
 
+    def forget(self) -> None:
+        """A new push-to-talk utterance starts: what was heard before it does not count."""
+        self._speaking_at_last_block = False
+        self._discarding = False
+
     def check(self) -> GateDecision:
         """Call once per arriving block."""
         speaking = self._speaking.is_set()

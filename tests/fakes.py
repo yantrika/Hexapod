@@ -165,8 +165,11 @@ class FakeStt:
         self,
         script: dict[int, list[tuple[str, str]]] | None = None,
         fail_on_calls: tuple[int, ...] = (),
+        flush_events: list[tuple[str, str]] | None = None,
     ) -> None:
         self.script = script or {}
+        self.flush_events = flush_events or []  # what flush() returns (push-to-talk release)
+        self.flushes = 0
         self.fail_on_calls = fail_on_calls
         self.fed: list[int] = []  # marker of every block that reached the recognizer
         self.calls = 0
@@ -184,6 +187,10 @@ class FakeStt:
     def reset(self) -> None:
         self.resets += 1
 
+    def flush(self) -> list[SttEvent]:
+        self.flushes += 1
+        return [SttEvent(kind, text, time.monotonic()) for kind, text in self.flush_events]
+
 
 def marker_block(value: int, size: int = 100) -> np.ndarray:
     return np.full(size, value, dtype=np.int16)
@@ -197,6 +204,7 @@ class StubPlayback:
         self.said: list[tuple[float, str]] = []  # (monotonic time, sentence)
         self.phrases: list[str] = []
         self.clears: list[float] = []
+        self.skip_tail_clears = 0
         self.pending = 0
         self._group = 0
         self._lock = threading.Lock()
@@ -214,9 +222,10 @@ class StubPlayback:
             self.phrases.append(name)
             return self._group
 
-    def clear(self) -> None:
+    def clear(self, skip_tail: bool = False) -> None:
         with self._lock:
             self.clears.append(time.monotonic())
+            self.skip_tail_clears += 1 if skip_tail else 0
             self.pending = 0
 
     @property

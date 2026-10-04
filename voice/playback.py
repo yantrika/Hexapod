@@ -184,6 +184,7 @@ class Playback:
         self._generation = 0
         self._playing = False
         self._tail_deadline: float | None = None
+        self._no_tail = False
         self._stopping = False
         self._group = 0
         self._pending = 0  # utterances accepted and not yet played, dropped or failed
@@ -264,13 +265,20 @@ class Playback:
         return True
 
     # -- clear -------------------------------------------------------------------------------
-    def clear(self) -> None:
-        """Cancel the sound in progress and drop everything queued. Any thread; idle is a no-op."""
+    def clear(self, skip_tail: bool = False) -> None:
+        """Cancel the sound in progress and drop everything queued. Any thread; idle is a no-op.
+
+        ``skip_tail=True`` (barge-in) also ends the speaking tail at once, so the microphone is
+        open the moment the user starts talking: hexa's voice is cut, nothing is left to hear."""
         with self._lock:
             self._generation += 1
             dropped = self._drain(self._text_q) + self._drain(self._audio_q)
             if self._playing:
                 self.sink.abort()
+            if skip_tail:
+                self._no_tail = self._playing  # the clip just aborted must not start a tail
+                self._tail_deadline = None
+                self.speaking.clear()
         if dropped:
             self._finished(dropped)
 
@@ -399,7 +407,10 @@ class Playback:
 
     def _begin_tail(self) -> None:
         """Called with the lock held when audio stops: speaking ends after the tail."""
-        if self.tail_s <= 0:
+        if self._no_tail:  # barge-in: the user is already talking
+            self._no_tail = False
+            self.speaking.clear()
+        elif self.tail_s <= 0:
             self.speaking.clear()
         else:
             self._tail_deadline = self.clock.now() + self.tail_s

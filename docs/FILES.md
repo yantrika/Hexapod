@@ -63,6 +63,7 @@ Legend: **STUB** = placeholder, not built yet. **DEV** = developer tool, not par
 |---|---|---|
 | `voice/audio.py` | **The only file that touches the microphone.** `MicSource` (mic), `FileSource` (WAV file), `QueueSource` (tests), device list. | You change input handling. |
 | `voice/stt.py` | Vosk speech recognition: one model, two recognizers (free text and command grammar). Also the self-hearing gate. | You change the recognizer. |
+| `voice/ptt.py` | Push-to-talk: the state machine (`ptt_step`) and the thread-safe `PushToTalk` (`press()`, `release()`). Decides when the microphone is listened to. | You change the tail, add a new button (phone page, GPIO). |
 | `voice/tts.py` | Piper text-to-speech as one long-lived process. Splits text into sentences. Loads pre-rendered phrases. | You change the voice engine. |
 | `voice/playback.py` | **The only file that touches the speaker.** A queue you can cancel (`clear()`), prefetching the next sentence, the `speaking` flag. | You change playback. |
 | `voice/__init__.py` | Marks the folder as a package. | Never. |
@@ -73,6 +74,7 @@ Legend: **STUB** = placeholder, not built yet. **DEV** = developer tool, not par
 |---|---|---|
 | `scripts/voice_cli.py` | Runs the whole loop: talk to the robot (microphone to body). | You change the demo. |
 | `scripts/measure_chat.py` | Times the real Ollama model: first token, tokens per second, memory, temperature, body tick time (`--with-voice` adds Vosk and Piper). **DEV** (heats the laptop) | You add a measurement. |
+| `scripts/measure_ptt.py` | Vosk CPU and body tick time with push-to-talk idle, listening and always-on. | You want the numbers again (e.g. on the Pi). |
 | `scripts/stt_check.py` | Measures how well Vosk hears **your** voice; saves results; `--replay` re-judges them. | You add test phrases. |
 | `scripts/mic_check.py` | Lists microphones, records 3 seconds, shows the level. | Rarely. |
 | `scripts/say.py` | Type text, hear it spoken. | Rarely. |
@@ -146,6 +148,9 @@ Run one file at a time on the dev laptop (see `COMMANDS.md`).
 | `tests/test_chat.py` | Chat backends (stub HTTP server, `FakeChat`) and the reply streamer: first sentence early, cancel, history, errors. |
 | `tests/test_dialogue.py` | Status to phrase table, throttle, "already sitting". |
 | `tests/test_chat_voice.py` | Chat in the voice loop: only while the body is idle; motion and stop cancel it. |
+| `tests/test_ptt.py` | Push-to-talk state machine with a fake clock, thread safety, mode switch. |
+| `tests/test_barge_in.py` | Recognizers get no audio when ptt is off; barge-in; always mode unchanged; clean shutdown. |
+| `tests/test_filler.py` | The instant filler: one for a slow reply, none for a fast one, cancelled by barge-in. |
 | `tests/test_chat_llm.py` | One real-LLM check (only with `pytest -m llm`). |
 | `tests/test_tts.py` | Piper wrapper against a fake Piper (crash, hang, orphans). |
 | `tests/test_playback.py` | Playback queue, `clear()`, speaking flag, prefetch gaps. |

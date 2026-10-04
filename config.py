@@ -223,6 +223,15 @@ STT_ERROR_BACKOFF_S = 0.5  # pause after a source or recognizer error, then carr
 SPEAKER_DEVICE: int | None = None
 SPEAK_TAIL_S = 0.4  # STT stays gated this long after TTS ends
 UTTERANCE_QUEUE_MAXSIZE = 8
+# Listening mode. "ptt": push-to-talk, the recognizers get audio only between press() and
+# release() (a voice "stop" works only while listening). "always": listen all the time, deaf
+# while hexa speaks.
+LISTEN_MODE = "ptt"
+PTT_TAIL_S = 0.5  # after release the recognizer keeps listening this long, then the utterance ends
+# Instant filler: no sentence ready this long after a chat question goes to the LLM -> play ONE
+# pre-rendered filler (the next of these, in turn) so the user never waits in silence.
+FILLER_DELAY_S = 0.8
+FILLER_PHRASES = ("hmm", "let_me_think", "one_moment")
 TTS_QUEUE_MAXSIZE = 8  # utterances waiting to be synthesized
 TTS_PREFETCH_SIZE = 1  # synthesized clips waiting for the speaker: sentence N+1 renders during N
 TTS_CLEAR_MAX_S = 0.1  # playback.clear() returns within this

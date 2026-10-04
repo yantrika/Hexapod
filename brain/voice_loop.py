@@ -15,6 +15,12 @@
   the body is idle (no walk, turn or transition); otherwise hexa says "tell me after I stop" and
   the LLM is not called. Any motion command or stop cancels a chat reply in progress, so the
   microphone is free for "stop". The LLM is never in the command path: the router decides.
+- Listening mode (``config.LISTEN_MODE``): with a ``PushToTalk`` the recognizers are fed ONLY
+  between press and release (plus a short tail); other blocks are read and dropped, so Vosk spends
+  no CPU, and the end of the utterance flushes the recognizer. A press is barge-in: hexa is
+  silenced at once (``playback.clear(skip_tail=True)``) and the chat reply is cancelled. Without
+  one ("always") every block is fed, as in Step 8. In ptt mode a voice "stop" works only while
+  listening; the control window STOP button and Space are the always-available stop.
 - A source or recognizer error is logged and the loop keeps running.
 """
 
@@ -35,6 +41,7 @@ from brain.stt_decision import PATH_EARLY_STOP, decide
 from brain.transcript_log import TranscriptLog, hypothesis_record
 from voice.audio import AudioSource, EndOfAudio
 from voice.playback import Playback
+from voice.ptt import PushToTalk
 from voice.stt import Hypothesis, SelfHearingGate, SttEngine, SttEvent
 from voice.tts import TtsError
 
@@ -68,6 +75,7 @@ class VoiceLoop:
         clock: Callable[[], float] = time.monotonic,
         transcripts: TranscriptLog | None = None,
         chat: ChatResponder | None = None,
+        ptt: PushToTalk | None = None,
     ) -> None:
         self.source = source
         self.stt = stt
@@ -76,6 +84,9 @@ class VoiceLoop:
         self.on_event = on_event
         self.transcripts = transcripts
         self.chat = chat
+        self.ptt = ptt
+        if ptt is not None:
+            ptt.add_press_listener(self.barge_in)
         self._last_busy_notice = float("-inf")
         self._clock = clock
         self._gate = SelfHearingGate(speaking)
@@ -85,6 +96,8 @@ class VoiceLoop:
         self._stop_sent_early = False
         self.blocks_seen = 0  # every block read, fed or discarded
         self.blocks_discarded = 0
+        self.blocks_idle = 0  # dropped because push-to-talk was not listening
+        self.barge_ins = 0
         self.errors = 0
         self.events_published = 0  # STT results queued / handled by the worker (for tests)
         self.events_handled = 0
@@ -111,6 +124,15 @@ class VoiceLoop:
                 logger.warning("%s did not end within %.1f s", thread.name, timeout)
         self._threads = []
 
+    def barge_in(self) -> None:
+        """The user wants the floor: cancel the chat reply, silence hexa, open the microphone.
+        Any thread (it runs on the thread that pressed). A cancelled reply is not remembered."""
+        self.barge_ins += 1
+        if self.chat is not None:
+            self.chat.cancel()  # first, so no sentence of the old reply is queued after the clear
+        if self.playback is not None:
+            self.playback.clear(skip_tail=True)
+
     def wait_idle(self, timeout: float) -> bool:
         """For file sources: True once the whole file was recognised and its commands sent."""
         return self.idle.wait(timeout)
@@ -136,9 +158,12 @@ class VoiceLoop:
                     self.errors += 1
                     self._stop.wait(config.STT_ERROR_BACKOFF_S)
                     continue
+                if block is not None:
+                    self.blocks_seen += 1
+                if self.ptt is not None and not self._ptt_gate(block):
+                    continue
                 if block is None:
                     continue
-                self.blocks_seen += 1
                 decision = self._gate.check()
                 if not decision.accept:
                     self.blocks_discarded += 1  # hexa's own voice: never decoded
@@ -160,6 +185,27 @@ class VoiceLoop:
         finally:
             self.source.stop()
             self.stt_finished.set()
+
+    def _ptt_gate(self, block: object) -> bool:
+        """Push-to-talk bookkeeping for one read (a block or a timeout). True: process the block."""
+        assert self.ptt is not None
+        poll = self.ptt.poll()
+        try:
+            if poll.finished:  # released and the tail is over: end the utterance now
+                self._flush()
+                self.stt.reset()
+            if poll.started:  # a fresh utterance: nothing heard before it may leak in
+                self._gate.forget()
+                self.stt.reset()
+                self._publish(SttEvent("reset", "", self._clock()))
+        except Exception:  # noqa: BLE001
+            logger.exception("push-to-talk could not reset the recognizer")
+            self.errors += 1
+        if not poll.feed:
+            if block is not None:
+                self.blocks_idle += 1  # nobody is listening: never decoded, no Vosk CPU
+            return False
+        return block is not None
 
     def _flush(self) -> None:
         flush = getattr(self.stt, "flush", None)

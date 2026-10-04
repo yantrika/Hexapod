@@ -9,6 +9,8 @@ sentence to the playback queue as soon as it is complete (``brain/sentences.py``
 history, and can be cancelled at any moment (it closes the stream and calls ``playback.clear()``).
 A cancelled reply is not added to the history. If the backend fails, the pre-rendered "I can't
 think right now" is spoken and the loop carries on: chat never blocks the microphone or the body.
+If no sentence is ready within ``FILLER_DELAY_S`` of the question, ONE pre-rendered filler ("hmm")
+is played so the user is not left in silence; a cancel (barge-in) drops it with the rest.
 """
 
 from __future__ import annotations
@@ -269,6 +271,8 @@ class _Request:
     lock: threading.Lock = field(default_factory=threading.Lock)
     first_group: int = 0
     announced: bool = False
+    filler_timer: threading.Timer | None = None
+    filler_played: bool = False
 
 
 class ChatResponder:
@@ -283,12 +287,17 @@ class ChatResponder:
         clock: Callable[[], float] = time.monotonic,
         on_timing: Callable[[ChatTiming], None] | None = None,
         fallback_phrase: str = "cant_think",
+        filler_delay_s: float = config.FILLER_DELAY_S,
+        fillers: tuple[str, ...] = config.FILLER_PHRASES,
     ) -> None:
         self.backend = backend
         self.playback = playback
         self.system_prompt = system_prompt
         self.fallback_phrase = fallback_phrase
         self.on_timing = on_timing
+        self.filler_delay_s = filler_delay_s
+        self.fillers = fillers
+        self.fillers_played = 0  # for the reports and the tests
         self._clock = clock
         self._history: deque[tuple[str, str]] = deque(maxlen=max(0, history_turns))
         self._state = threading.Lock()  # guards _current and _thread
@@ -310,12 +319,33 @@ class ChatResponder:
         self.cancel()
         timing = ChatTiming(started_at if started_at is not None else self._clock())
         request = _Request(text, timing)
+        if self.filler_delay_s > 0 and self.fillers:
+            request.filler_timer = threading.Timer(
+                self.filler_delay_s, self._filler, args=(request,)
+            )
+            request.filler_timer.daemon = True  # made BEFORE the reply thread: it may cancel it
         with self._state:
             self._current = request
             self._thread = threading.Thread(
                 target=self._run, args=(request,), name="chat-reply", daemon=True
             )
             self._thread.start()
+            if request.filler_timer is not None:
+                request.filler_timer.start()  # a timer cancelled before this starts never fires
+
+    def _filler(self, request: _Request) -> None:
+        """No sentence is ready yet: say ONE pre-rendered filler (at most once per reply)."""
+        with request.lock:
+            if (request.cancelled or request.filler_played
+                    or request.timing.first_sentence is not None):
+                return
+            request.filler_played = True
+            name = self.fillers[self.fillers_played % len(self.fillers)]
+            try:
+                self.playback.say_phrase(name)
+                self.fillers_played += 1
+            except Exception as error:  # noqa: BLE001 - a missing filler must not hurt the reply
+                logger.error("could not say the filler: %s", error)
 
     def cancel(self) -> None:
         """Stop the reply in progress: close the stream and clear its speech. Any thread.
@@ -328,7 +358,9 @@ class ChatResponder:
         if request is None:
             return
         streaming = thread is not None and thread.is_alive()
-        with request.lock:  # no sentence can be queued after this returns
+        if request.filler_timer is not None:
+            request.filler_timer.cancel()
+        with request.lock:  # no sentence (or filler) can be queued after this returns
             request.cancelled = True
             if streaming:
                 request.timing.cancelled = True
@@ -370,9 +402,18 @@ class ChatResponder:
             if request.timing.first_sentence is None:
                 request.timing.first_sentence = self._clock()
                 request.first_group = group
+                if request.filler_timer is not None:
+                    request.filler_timer.cancel()
         return True
 
     def _run(self, request: _Request) -> None:
+        try:
+            self._stream_reply(request)
+        finally:  # the stream is over: a filler now would only talk over the end of the reply
+            if request.filler_timer is not None:
+                request.filler_timer.cancel()
+
+    def _stream_reply(self, request: _Request) -> None:
         splitter = SentenceSplitter()
         reply: list[str] = []
         failed = False

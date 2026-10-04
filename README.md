@@ -120,7 +120,9 @@ python scripts/voice_cli.py --model in       # other model;  --no-speak: no Pipe
 nice -n 19 python scripts/measure_voice.py --stt     # Vosk cost, body ticks with Vosk, voice latency
 ```
 
-Say "walk forward", "sit down", "stand up", "turn left", "wave", "stop". After a command hexa says "okay" (a placeholder; speech from body statuses is Step 9) and the microphone is ignored while it speaks and for `SPEAK_TAIL_S` after. Tests (no microphone or speaker): `pytest tests/test_status_hub.py tests/test_audio.py tests/test_stt_gate.py` (fake recognizer), `pytest tests/test_voice_loop.py` (real Vosk on Piper-rendered speech, skipped without models), `nice -n 19 pytest tests/test_voice_body.py` (end to end with a headless body; run alone).
+**Push-to-talk is the default** (`LISTEN_MODE = "ptt"`): press Enter, say "walk forward", "sit down", "stand up", "turn left", "wave" or "stop", press Enter again (a terminal has no key-release events; true hold-to-talk comes with the phone page, Step 12, which calls `press()` / `release()`). The terminal shows LISTENING / IDLE and no audio reaches Vosk while it is idle. Pressing Enter while hexa talks interrupts it (barge-in: speech is cut, a chat reply is cancelled, listening starts at once). `--listen always` listens all the time instead (deaf while hexa speaks). After a command hexa answers from the body's status. If a chat answer is slow, hexa says "hmm" once (`FILLER_DELAY_S`).
+
+**Safety: in ptt mode a voice "stop" only works WHILE LISTENING.** The control window STOP button and Space are the always-available stop (`voice_cli` also takes a typed `stop` + Enter).
 
 Dev laptop numbers (they move with background load): Vosk uses about 15-25 % of a core, real-time factor 0.07-0.11 decoding speech; it adds about 1-2 ms to the body's mean tick. Spoken "walk forward" is sent about 0.85 s after you stop talking (Vosk waits for silence) and the first foot target moves about 0.25 s later. Piper busy at the same time is still the expensive part (see Speech above).
 
