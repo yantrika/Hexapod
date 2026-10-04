@@ -116,6 +116,102 @@ Joint meaning: **coxa** turns the leg left/right (about the vertical axis); **fe
 - Add a physical power switch. It is the emergency stop.
 - Servo brown-outs or a Pi reset are listed as a risk in `plan.md`.
 
+## Pin and wiring locations (Raspberry Pi 5 to PCA9685 to servos)
+
+Nothing here is wired by the software yet; this is where each wire goes so you can build it and report real numbers. Servo code is not written until you say the hardware is on the bench (`plan.md`, stage 11e).
+
+### The Pi's 40-pin header
+
+Pin 1 is at the end of the header nearest the SD card slot, in the inner row (the row closer to the middle of the board); pin 2 is next to it in the outer row. Odd pins are the inner row, even pins the outer row. Confirm with the pin-number markings on the board (or the official Raspberry Pi pinout) BEFORE you connect anything, and wire with the Pi powered off.
+
+| Pi pin | Name | Use |
+|---|---|---|
+| **1** | 3V3 | PCA9685 **VCC** (logic only, a few mA) |
+| **3** | GPIO2 / **SDA1** | PCA9685 **SDA** (the I2C data wire, device `/dev/i2c-1`) |
+| **5** | GPIO3 / **SCL1** | PCA9685 **SCL** (the I2C clock wire) |
+| **6** | GND | PCA9685 **GND** (common ground; pins 9, 14, 20, 25, 30, 34, 39 are also GND) |
+| 2 and 4 | 5 V | **Not used.** Never power servos from the Pi's 5 V pins |
+
+Both PCA9685 boards share the same four wires (VCC, GND, SDA, SCL) in parallel. The Pi's own pins carry no servo current.
+
+### One PCA9685 board
+
+| Board pin / terminal | Connect to |
+|---|---|
+| **VCC** (6-pin header) | Pi pin 1 (3V3) |
+| **GND** (6-pin header) | Pi pin 6 (GND) and the servo supply ground (common ground) |
+| **SDA**, **SCL** | Pi pin 3, Pi pin 5 |
+| **OE** (output enable, active low) | Leave it unconnected or tied to GND = outputs enabled. A later option is a Pi GPIO to OE as a software disable; that is NOT the kill switch (the physical switch in the servo power line is) |
+| **V+ / GND screw terminal** | The servo supply, **through the fuse and the kill switch**. Never the Pi |
+| **Channel 0-15** (3 pins each) | One servo per channel: signal (PWM) pin to the servo's signal wire, middle pin V+ (red), outer pin GND (brown or black). On an MG995 the wires are brown (GND), red (V+), orange (signal) |
+| **A0-A5 solder pads** | Close A0 on the second board to make its address `0x41`; the first board keeps `0x40` |
+
+### Proposed channel assignment (you confirm or change it; it only becomes code at stage 11e)
+
+Joint order is `config.JOINT_NAMES` (leg by leg: coxa, femur, tibia). One board per side keeps each supply rail to nine servos:
+
+| Board | Address | Channels 0-8 | Channels 9-15 |
+|---|---|---|---|
+| Right side | `0x40` | 0 RF_coxa, 1 RF_femur, 2 RF_tibia, 3 RM_coxa, 4 RM_femur, 5 RM_tibia, 6 RR_coxa, 7 RR_femur, 8 RR_tibia | spare |
+| Left side | `0x41` | 0 LR_coxa, 1 LR_femur, 2 LR_tibia, 3 LM_coxa, 4 LM_femur, 5 LM_tibia, 6 LF_coxa, 7 LF_femur, 8 LF_tibia | spare |
+
+Check on the Pi (owner-run, see HOW_TO.md): `i2cdetect -y 1` must show `40` (and `41` for two boards).
+
+## Hardware numbers I need from you (minimum, centre, maximum)
+
+Measure these on the bench (one servo at a time, horn removed, supply behind the kill switch, see `plan.md` day-1 checklist) and send me the filled tables. I will put them ONLY into the calibration table in `body/servo_backend.py`.
+
+### Per servo type (one row for the MG995 you have)
+
+| Item | Your value |
+|---|---|
+| Servo model and how many you have | |
+| Supply voltage you will use (V) | |
+| PWM frequency (Hz) the datasheet allows (the PCA9685 is set to 50 by default) | |
+| **Minimum** pulse that is safe, no stall (us) | |
+| **Centre** pulse (us, measured, not assumed 1500) | |
+| **Maximum** pulse that is safe, no stall (us) | |
+| Travel between min and max (degrees, measured with a protractor) | |
+| Stall torque at your voltage (kg*cm) and stall current (A) | |
+| No-load current and loaded running current (A) | |
+
+### Per joint (18 rows; the first two columns are the proposed wiring above)
+
+| Joint | Board / channel | Min pulse (us) | Centre pulse (us) | Max pulse (us) | Direction (+1 / -1) | Mechanical min / max angle (deg) |
+|---|---|---|---|---|---|---|
+| RF_coxa | 0x40 / 0 | | | | | |
+| RF_femur | 0x40 / 1 | | | | | |
+| RF_tibia | 0x40 / 2 | | | | | |
+| RM_coxa | 0x40 / 3 | | | | | |
+| RM_femur | 0x40 / 4 | | | | | |
+| RM_tibia | 0x40 / 5 | | | | | |
+| RR_coxa | 0x40 / 6 | | | | | |
+| RR_femur | 0x40 / 7 | | | | | |
+| RR_tibia | 0x40 / 8 | | | | | |
+| LR_coxa | 0x41 / 0 | | | | | |
+| LR_femur | 0x41 / 1 | | | | | |
+| LR_tibia | 0x41 / 2 | | | | | |
+| LM_coxa | 0x41 / 3 | | | | | |
+| LM_femur | 0x41 / 4 | | | | | |
+| LM_tibia | 0x41 / 5 | | | | | |
+| LF_coxa | 0x41 / 6 | | | | | |
+| LF_femur | 0x41 / 7 | | | | | |
+| LF_tibia | 0x41 / 8 | | | | | |
+
+"Mechanical min / max angle" is the angle the leg can really reach before it hits the frame or another leg, measured in the clean frame (0 = the neutral stand). It must stay inside the hard limits of `-90` to `+90` degrees, or I tighten the table.
+
+### Power and frame (also asked in `plan.md`)
+
+| Item | Your value |
+|---|---|
+| Servo supply type (battery chemistry and cells, or mains) and voltage | |
+| Supply continuous and peak current (A) | |
+| Fuse rating and type; kill switch current and voltage rating | |
+| Wire gauge on the servo rails | |
+| Coxa, femur and tibia lengths (mm); body radius (mm) | |
+| Leg mount angles if they differ from `config.py` (RF 30, RM 90, RR 150, LR 210, LM 270, LF 330 degrees) | |
+| Total robot weight with battery (g) | |
+
 ## Safe bring-up order (from `plan.md`, Step 11)
 
 1. Write the table and the backend; run its tests (a fake driver, no robot).

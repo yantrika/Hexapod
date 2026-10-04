@@ -146,7 +146,7 @@ The Pi 5 runs Ubuntu 24.04 (Python 3.12) with no PyBullet, so it uses the **dry-
 | Run the tests | `.venv/bin/python scripts/cool_run.py --unguarded -- .venv/bin/python -m pytest -q` (logs the temperature only) |
 | Measure | `scripts/measure_voice.py --body`, `--stt --latency`, `scripts/measure_e2e.py`, `scripts/measure_web.py`, and from another machine `scripts/measure_lan.py --url ws://hexa.local:8765 --pin 424242` |
 
-Rules: nothing uses `sudo` from Claude, only `~/hexa` is touched, nothing starts at boot, and there is no servo code until stage 11e is approved. Set `HEXA_BACKEND=dryrun` so every script uses the dry-run body. The systemd unit `deploy/hexa.service` is written but not installed. Still to do on the Pi: the real microphone and speaker checks (`mic_check.py`, `say.py`) and the Ollama timing. See `plan.md`, stage 11a.
+Rules: nothing uses `sudo` from Claude, only `~/hexa` is touched, nothing starts at boot, and there is no servo code until stage 11e is approved. Set `HEXA_BACKEND=dryrun` so every script uses the dry-run body. The systemd unit `deploy/hexa.service` is written but not installed. Still to do on the Pi: Ollama (install, pull, timing), the full test run and the real microphone and speaker checks: step by step in [HOW_TO.md](HOW_TO.md), "Work on the Raspberry Pi". Changing the Pi's Wi-Fi is in the same section. Pin locations and the hardware numbers to report are in [HARDWARE.md](HARDWARE.md).
 
 ## If something goes wrong
 

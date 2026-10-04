@@ -7,6 +7,8 @@ hexa is a six-legged robot you can talk to. It listens (Vosk), understands (a si
 | I want to... | Read |
 |---|---|
 | Run the robot, the GUI, the phone page, the models | [RUNNING.md](RUNNING.md) |
+| Work on the Raspberry Pi: start/stop, Ollama, full tests, change its Wi-Fi | [HOW_TO.md](HOW_TO.md), section "Work on the Raspberry Pi" |
+| Where the wires go (Pi pins, PCA9685, servos) and the numbers to measure | [HARDWARE.md](HARDWARE.md), section "Pin and wiring locations" |
 | Know what every file does and which to edit | [FILES.md](FILES.md) |
 | Change a model, a phrase, a threshold, the robot size | [HOW_TO.md](HOW_TO.md) |
 | Change servo pins, channels or calibration | [HARDWARE.md](HARDWARE.md) |

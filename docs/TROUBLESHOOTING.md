@@ -76,3 +76,15 @@ By design: chat does not run while the robot is walking, turning or changing pos
 ## Docker CPU limit
 
 If Ollama seems slow, `docker inspect -f 'NanoCpus={{.HostConfig.NanoCpus}}' ollama` shows 0 for no limit. `docker update --cpus 0` is ignored by Docker; use `docker update --cpus 4 ollama` (the machine's core count) to remove a cap.
+
+## On the Pi: Ollama is not reachable, or the chat says "I can't think right now"
+
+Ollama on the Pi is started by hand (it is not a service). Check: `tmux ls` (is there an `ollama` session? else `tmux new-session -d -s ollama '~/ollama/bin/ollama serve'`), `curl -s http://127.0.0.1:11434/api/version`, `~/ollama/bin/ollama list` (is the model there?). Steps: [HOW_TO.md](HOW_TO.md), "Ollama on the Pi".
+
+## On the Pi: I cannot reach `hexa.local` or the page after changing the Wi-Fi
+
+The Pi has a new address. Make sure the laptop is on the same network, try `ssh hexa-pi` again (mDNS can take a minute), else read the address on the Pi with `ip -br a show wlan0` and use `ssh hexa@<address>`. If the Pi is not on any network, see "Change the Wi-Fi the Pi uses" in [HOW_TO.md](HOW_TO.md): `netplan try` undoes a bad change by itself after 120 s, and a backup of the file is in `~/netplan-backup.yaml`. The page address changes too: `scripts/pi_dryrun.sh status`.
+
+## On the Pi: `pi_dryrun.sh start` says "already running", or the page does not open
+
+`scripts/pi_dryrun.sh status`, then `scripts/pi_dryrun.sh stop` and start again. `scripts/pi_dryrun.sh attach` shows the console (the PIN and the address are printed at the top; Ctrl-b then d leaves it running). Use the address printed for `--lan` (plain `http://`, same network as the Pi).
