@@ -106,6 +106,7 @@ Legend: **STUB** = placeholder, not built yet. **DEV** = developer tool, not par
 | `scripts/walk_demo.py` | Walk forward, turn, strafe in the simulation. **DEV** | Rarely. |
 | `scripts/generate_urdf.py` | Rewrites `assets/urdf/hexapod.urdf` from `config.py` (`--check` only verifies). | After changing robot sizes. |
 | `deploy/hexa.service` | systemd unit for the Pi (dry-run backend). Written, NOT installed or enabled. | Step 11f, with a hardware backend. |
+| `scripts/pi_dryrun.sh` | On the Pi: start, watch (`log`), check and cleanly stop hexa in a tmux session (dry-run body, page on the LAN). | The Pi run options change. |
 | `scripts/sync_to_pi.sh` | Copies the project (and with `--assets` the models) to `~/hexa` on the Pi over ssh. `--dry-run` shows what it would do. | The Pi host or what to copy changes. |
 | `scripts/build_wheelhouse.sh` | Builds the wheels PyPI lacks for the Pi (srt) on this machine into the gitignored `wheelhouse/`. | A Pi dependency has no wheel. |
 | `scripts/fetch_models.sh` | Downloads Piper, its voice and the Vosk models; then renders the fixed phrases. Safe to re-run. | You change a model. See `HOW_TO.md`. |
