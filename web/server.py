@@ -8,7 +8,9 @@ gait or a backend (``tests/test_web_server.py`` enforces it).
 ``websockets`` answers plain HTTP too (``process_request``), so no second web framework is needed.
 The WebSocket handshake carries the PIN (``/ws?pin=...``) and is refused with 401 (wrong PIN),
 429 (locked out), 403 (foreign Origin) or 409 (someone else is in control). Plain HTTP on a LAN:
-use it only on a network you trust (HTTPS arrives with Step 12b).
+use it only on a network you trust. Step 12b adds hold-to-talk with the ROBOT's microphone (no
+audio ever comes from the page, so no HTTPS) and typed text; brain events (heard, route, said,
+listening) reach the page through a bounded drop-oldest ``EventHub`` subscription.
 """
 
 from __future__ import annotations
@@ -32,11 +34,12 @@ from websockets.datastructures import Headers
 from websockets.http11 import Request, Response
 
 import config
+from brain.event_hub import EventHub
 from brain.status_hub import StatusHub
 from bridge import Bridge, Status, new_command
 from scripts.control_logic import next_state_label
 from web.protocol import ProtocolError, parse_message
-from web.session import PinGuard, WebControl
+from web.session import NO_VOICE, PinGuard, Refused, VoiceControls, WebControl
 
 logger = logging.getLogger(__name__)
 
@@ -113,15 +116,20 @@ class WebServer:
         host: str = "127.0.0.1",
         port: int = config.WEB_PORT,
         clock: Callable[[], float] = time.monotonic,
+        voice: VoiceControls = NO_VOICE,
+        events: EventHub | None = None,
     ) -> None:
         self._bridge = bridge
         self._hub = hub
+        self._voice = voice
+        self._events = events if events is not None else EventHub()
+        self._event_subscription = self._events.subscribe("web")
         self.host = host
         self._port = port
         self._clock = clock
         self._page = PAGE_PATH.read_bytes()
         self._guard = PinGuard(pin, clock)
-        self._control = WebControl(self._send_command, clock)
+        self._control = WebControl(self._send_command, clock, voice=voice)
         self._subscription = hub.subscribe("web")
         self._sent: collections.OrderedDict[int, str] = collections.OrderedDict()
         self._label = "standing"
@@ -171,6 +179,7 @@ class WebServer:
             if thread.is_alive():
                 logger.warning("web server did not stop within %.1f s", timeout)
         self._hub.unsubscribe(self._subscription)
+        self._events.unsubscribe(self._event_subscription)
 
     def _run(self) -> None:
         try:
@@ -199,6 +208,7 @@ class WebServer:
         finally:
             pump.cancel()
             self._send_command("stop", {})  # first, not after the closes: the robot never
+            self._control.release_listening()  # and listening ends with the page
             server.close(close_connections=True)  # outlives the page (each handler stops too)
             await server.wait_closed()
             logger.info("web server stopped")
@@ -250,7 +260,13 @@ class WebServer:
         logger.info("web: controller connected from %s", connection.remote_address)
         writer = asyncio.create_task(self._write(client))
         client.post({"type": "hello", "state": self._label, "send_hz": config.WEB_CLIENT_SEND_HZ,
-                     "deadman_s": config.WEB_DEADMAN_S})
+                     "deadman_s": config.WEB_DEADMAN_S,
+                     "ptt": {"available": not self._voice.ptt_unavailable,
+                             "reason": self._voice.ptt_unavailable,
+                             "max_s": config.WEB_PTT_MAX_S},
+                     "say": {"available": not self._voice.say_unavailable,
+                             "reason": self._voice.say_unavailable,
+                             "max_chars": config.WEB_SAY_MAX_CHARS}})
         try:
             async for raw in connection:
                 self._on_message(client, raw)
@@ -274,7 +290,13 @@ class WebServer:
             client.invalid += 1
             client.post({"type": "error", "reason": str(error)})
             return
-        self._control.handle(client, request)
+        try:
+            self._control.handle(client, request)
+        except Refused as error:
+            client.post({"type": "error", "reason": str(error)})
+        except Exception:  # noqa: BLE001 - the voice side failed; the page is told, nothing else
+            logger.exception("web: %s failed", request.action)
+            client.post({"type": "error", "reason": f"{request.action} failed"})
 
     @staticmethod
     async def _write(client: _Client) -> None:
@@ -291,8 +313,13 @@ class WebServer:
             client = self._client
             if self._control.tick() and client is not None:
                 client.post({"type": "deadman"})
+            if self._control.expire_listening() and client is not None:
+                client.post({"type": "ptt_timeout", "max_s": config.WEB_PTT_MAX_S})
             for status in self._subscription.get_all():
                 self._relay(client, status)
+            for event in self._event_subscription.get_all():  # always drained: none go stale
+                if client is not None:
+                    client.post(event)
 
     def _relay(self, client: _Client | None, status: Status) -> None:
         self._label = next_state_label(self._label, status, self._sent)

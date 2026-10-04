@@ -257,11 +257,16 @@ WEB_CLIENT_SEND_HZ = 10.0  # the page repeats a held move at this rate (the serv
 WEB_WALK_SPEED = 0.5  # `speed` of a walk when the page sends none
 WEB_TICK_S = 0.05  # server loop: deadman check and status relay
 WEB_MIN_FORWARD_S = 0.05  # an unchanged move is forwarded as a heartbeat at most this often
-WEB_MAX_MESSAGE_BYTES = 256  # larger messages close the connection
+WEB_MAX_MESSAGE_BYTES = 1024  # larger messages close the connection (room for a full `say`)
 WEB_MAX_INVALID = 20  # this many rejected messages close the connection
 WEB_PING_S = 5.0  # WebSocket keepalive ping (a vanished phone is noticed, then `stop`)
 WEB_CLOSE_S = 1.0  # a client that ignores the close handshake is dropped after this
 WEB_SENT_MEMORY = 64  # command seqs remembered to label statuses
+# --- Phone page: hold-to-talk with the robot's microphone (Step 12b) -------
+WEB_PTT_MAX_S = 10.0  # the SERVER releases push-to-talk after this long, whatever the page does
+WEB_SAY_MAX_CHARS = 120  # longest typed `say` text
+WEB_SAY_MIN_INTERVAL_S = 0.3  # at most one typed `say` per this (a flood is refused)
+WEB_EVENT_QUEUE_SIZE = 64  # events waiting for the phone: the oldest is dropped when full
 TTS_QUEUE_MAXSIZE = 8  # utterances waiting to be synthesized
 TTS_PREFETCH_SIZE = 1  # synthesized clips waiting for the speaker: sentence N+1 renders during N
 TTS_CLEAR_MAX_S = 0.1  # playback.clear() returns within this

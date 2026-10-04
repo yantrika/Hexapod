@@ -7,6 +7,12 @@ and enforces the deadman on the SERVER: a moving robot gets ``stop`` when no mov
 within ``deadman_s`` (the page's own stop on blur/hidden/cancel is only a second line), and a
 disconnect always sends ``stop``. ``stop`` is never rate-limited or merged: it goes out at once
 (the ``Bridge`` puts it on the ``stop_event`` fast path).
+
+Step 12b adds hold-to-talk and typed text. ``ptt_press`` / ``ptt_release`` / ``say`` are NOT
+bridge messages: they go to ``VoiceControls`` (``HexaApp.set_listening`` and the same routing as
+spoken text). The server owns the safety: a press is forced to release after ``ptt_max_s``; a
+disconnect and every ``stop`` message (the page sends one on blur and when hidden) release too;
+only the controller may press, and only a press made here is ever released here.
 """
 
 from __future__ import annotations
@@ -14,12 +20,35 @@ from __future__ import annotations
 import hmac
 import threading
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 import config
 from web.protocol import POSTURE_ACTIONS, Request, walk_params
 
 Sender = Callable[[str, dict[str, Any]], "int | None"]
+
+
+class Refused(Exception):
+    """A valid request that cannot be done now; ``str(error)`` is the reason shown on the page."""
+
+
+@dataclass(frozen=True)
+class VoiceControls:
+    """What the page may do with the voice side (``HexaApp`` provides it).
+
+    ``ptt_unavailable`` / ``say_unavailable`` are the reason it cannot be used (None: it can),
+    shown on the page, e.g. "the server runs with --no-mic".
+    """
+
+    set_listening: Callable[[bool], None]
+    say: Callable[[str], None]
+    ptt_unavailable: str | None = None
+    say_unavailable: str | None = None
+
+
+NO_VOICE = VoiceControls(
+    lambda on: None, lambda text: None, "voice is not enabled", "voice is not enabled")
 _MAX_TRACKED_HOSTS = 256
 
 
@@ -83,8 +112,17 @@ class WebControl:
         clock: Callable[[], float],
         deadman_s: float = config.WEB_DEADMAN_S,
         min_forward_s: float = config.WEB_MIN_FORWARD_S,
+        voice: VoiceControls = NO_VOICE,
+        ptt_max_s: float = config.WEB_PTT_MAX_S,
+        say_min_interval_s: float = config.WEB_SAY_MIN_INTERVAL_S,
     ) -> None:
         self._send = send
+        self._voice = voice
+        self._ptt_max_s = ptt_max_s
+        self._say_min_interval_s = say_min_interval_s
+        self._ptt_lock = threading.RLock()  # apart from _lock: a slow press never delays a stop
+        self._listening_since: float | None = None
+        self._last_say_at = float("-inf")
         self._clock = clock
         self._deadman_s = deadman_s
         self._min_forward_s = min_forward_s
@@ -103,6 +141,11 @@ class WebControl:
     def moving(self) -> bool:
         return self._moving
 
+    @property
+    def listening(self) -> bool:
+        """True while a web press is held (and not yet released or forced to release)."""
+        return self._listening_since is not None
+
     def claim(self, client: object) -> bool:
         """Take the controller slot; False if another client holds it."""
         with self._lock:
@@ -118,10 +161,18 @@ class WebControl:
                 return False
             self._controller = None
             self._halt()
-            return True
+        self.release_listening()
+        return True
 
     def handle(self, client: object, request: Request) -> bool:
-        """Act on a validated request. False if *client* is not the controller (ignored)."""
+        """Act on a validated request. False if *client* is not the controller (ignored). Raises
+        ``Refused`` for a hold-to-talk or ``say`` that cannot be done now."""
+        with self._lock:
+            if self._controller is not client:
+                return False
+        if request.action in ("ptt_press", "ptt_release", "say"):
+            self._voice_request(request)
+            return True
         with self._lock:
             if self._controller is not client:
                 return False
@@ -133,7 +184,9 @@ class WebControl:
                 self._send(request.action, {})
             else:
                 self._walk(request)
-            return True
+        if request.action == "stop":
+            self.release_listening()  # after the stop is out: STOP also ends listening
+        return True
 
     def tick(self) -> bool:
         """The deadman. True if it just fired (sent ``stop``)."""
@@ -142,6 +195,49 @@ class WebControl:
                 return False
             self._halt()
             return True
+
+    def expire_listening(self) -> bool:
+        """The listening limit. True if it just forced a release."""
+        with self._ptt_lock:
+            since = self._listening_since
+            if since is None or self._clock() - since < self._ptt_max_s:
+                return False
+            self.release_listening()
+            return True
+
+    # --- voice (hold-to-talk and typed text) ------------------------------------------
+    def _voice_request(self, request: Request) -> None:
+        if request.action == "ptt_release":
+            self.release_listening()  # always allowed: letting go is never refused
+            return
+        if request.action == "ptt_press":
+            if self._voice.ptt_unavailable:
+                raise Refused(self._voice.ptt_unavailable)
+            with self._ptt_lock:
+                if self._listening_since is None:  # a repeat press must not extend the limit
+                    self._listening_since = self._clock()
+                    try:
+                        self._voice.set_listening(True)
+                    except Exception:
+                        self._listening_since = None
+                        raise
+            return
+        if self._voice.say_unavailable:
+            raise Refused(self._voice.say_unavailable)
+        now = self._clock()
+        with self._ptt_lock:
+            if now - self._last_say_at < self._say_min_interval_s:
+                raise Refused("too fast: wait a moment")
+            self._last_say_at = now
+        self._voice.say(request.text)
+
+    def release_listening(self) -> None:
+        """Stop listening if the web started it. Idempotent."""
+        with self._ptt_lock:
+            if self._listening_since is None:
+                return
+            self._listening_since = None
+            self._voice.set_listening(False)
 
     # --- internals (the lock is held) ------------------------------------------------
     def _halt(self) -> None:

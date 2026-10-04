@@ -1,23 +1,28 @@
 """Messages from the phone page: strict validation and the bridge parameters they become.
 
 Pure functions, no I/O and no clock. The page may send only ``walk`` (one combined message for
-every held move button), ``stop``, ``stand``, ``sit`` and ``wave``. Numbers are clamped to
-[-1, 1]; anything else (an unknown action or field, a bool, a string, NaN, a nested value, bad
-JSON) is rejected and never reaches the bridge. The page never sends joint data.
+every held move button), ``stop``, ``stand``, ``sit`` and ``wave``; since Step 12b also
+``ptt_press`` / ``ptt_release`` (hold-to-talk with the robot's microphone) and ``say`` (typed
+text). Those three never become bridge messages. Numbers are clamped to [-1, 1]; anything
+else (an unknown action or field, a bool, a string, NaN, a nested value, bad JSON) is rejected
+and never reaches the bridge. The page never sends joint data.
 """
 
 from __future__ import annotations
 
 import json
 import math
+import unicodedata
 from dataclasses import dataclass
 from typing import Any
 
 import config
 
 POSTURE_ACTIONS = ("stand", "sit", "wave")
-CLIENT_ACTIONS = ("walk", "stop", *POSTURE_ACTIONS)
+PTT_ACTIONS = ("ptt_press", "ptt_release")
+CLIENT_ACTIONS = ("walk", "stop", *POSTURE_ACTIONS, *PTT_ACTIONS, "say")
 _WALK_FIELDS = frozenset({"action", "forward", "strafe", "yaw", "speed"})
+_SAY_FIELDS = frozenset({"action", "text"})
 
 
 class ProtocolError(ValueError):
@@ -33,6 +38,7 @@ class Request:
     strafe: float = 0.0  # +1 left
     yaw: float = 0.0  # +1 counter-clockwise (turn left)
     speed: float = config.WEB_WALK_SPEED
+    text: str = ""  # for ``say``: stripped, 1 to WEB_SAY_MAX_CHARS characters
 
     @property
     def moving(self) -> bool:
@@ -52,6 +58,19 @@ def _number(message: dict[str, Any], key: str, low: float, high: float, default:
     return float(config.clamp(float(value), low, high))
 
 
+def _say_text(value: Any) -> str:
+    if not isinstance(value, str):
+        raise ProtocolError("text must be a string")
+    text = " ".join(value.split())  # trims and folds every kind of whitespace, newlines too
+    if not text:
+        raise ProtocolError("text is empty")
+    if len(text) > config.WEB_SAY_MAX_CHARS:
+        raise ProtocolError(f"text is longer than {config.WEB_SAY_MAX_CHARS} characters")
+    if any(unicodedata.category(char) in ("Cc", "Cf", "Cs", "Co", "Cn") for char in text):
+        raise ProtocolError("text has control characters")
+    return text
+
+
 def parse_message(raw: str | bytes) -> Request:
     """Validate one client message. Raises ``ProtocolError`` with the reason."""
     if len(raw) > config.WEB_MAX_MESSAGE_BYTES:
@@ -67,6 +86,10 @@ def parse_message(raw: str | bytes) -> Request:
     action = message.get("action")
     if not isinstance(action, str) or action not in CLIENT_ACTIONS:
         raise ProtocolError("unknown action")
+    if action == "say":
+        if not set(message) <= _SAY_FIELDS:
+            raise ProtocolError("unknown field")
+        return Request("say", text=_say_text(message.get("text")))
     if action != "walk":
         if set(message) != {"action"}:
             raise ProtocolError("unknown field")
