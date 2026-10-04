@@ -384,11 +384,43 @@ Each step is small, ends green (`pytest`, `ruff check .`, `mypy .`), and waits f
 - **Rules for working on the Pi (owner, Step 11)**:
   - Claude NEVER uses `sudo` on the Pi. Anything that needs it: give the owner the exact command and they run it in their own session.
   - Claude touches only `~/hexa` on the Pi. No changes to `/boot/firmware`, I2C, services, `ufw` or users from Claude. Nothing is enabled at boot (no systemd unit, no cron `@reboot`) until the owner asks for it in a later stage.
-  - Dev-laptop run rules are unchanged (default `cool_run.py` guard there). On the Pi, one process at a time, and read `vcgencmd measure_temp` or `/sys/class/thermal` before and after heavy runs.
+  - Run rule (owner, stage 2): no heat guard on the laptop or on the Pi; log the temperature with `cool_run.py --unguarded`. On the Pi, one process at a time, and read `vcgencmd measure_temp` or `/sys/class/thermal` before and after heavy runs.
 
-#### Stage 11a: software bring-up on the Pi, simulated body only
-- Copy or clone the repo into `~/hexa`, create `.venv` with the Pi's `python3`, `pip install -r requirements-pi.txt` (plus PyBullet if the headless body needs it there), run the tests that need no audio, `main.py --headless --no-speak --no-mic --chat fake`. System packages (`python3-venv`, `build-essential` if needed, `libportaudio2`) are owner-run `sudo apt` commands that Claude lists.
-- **Done when**: the non-`audio`/`timing`/`llm` suite passes on the Pi, the headless body walks and stops through the bridge, and the idle CPU and temperature are reported.
+#### Stage 11a: software bring-up on the Pi, simulated body only (BUILT; real mic/speaker tests and Ollama timing deferred)
+- **As built** (Ubuntu 24.04.5, kernel 6.8 raspi, Python 3.12.3, 4 x Cortex-A76, 7.8 GiB, Wi-Fi only):
+  - Owner-run apt packages (verified read-only with `dpkg -s`): `python3.12-venv python3-dev build-essential alsa-utils libportaudio2 portaudio19-dev libsndfile1 ffmpeg`. No `unzip` on the Pi: `fetch_models.sh` falls back to Python's `zipfile`.
+  - `scripts/sync_to_pi.sh [--dry-run] [--assets]`: rsync to `~/hexa` (no `--delete`; excludes `.git`, `.venv`, `assets/`, `logs/`, `wheelhouse/`, `.tmp/`, caches, wav/log/jsonl). `--assets` also sends, over the LAN, the default Vosk model, the Piper voice `.onnx`/`.json`, `assets/phrases` and `assets/urdf` (never the x86 Piper binary). `wheelhouse/*.whl` is always sent.
+  - `body/dryrun_backend.py` (`DryRunBackend`: same clamp layer, no physics, no hardware, logs joint targets, a summary every `DRYRUN_LOG_PERIOD_S`) and `main.py --backend sim|dryrun` (`HEXA_BACKEND` sets the default; `--gui` with dryrun, or `sim` without pybullet, are startup errors). `body/process.py::make_backend` imports lazily, so the body starts without pybullet (`tests/test_dryrun_backend.py` proves it in a subprocess). This is NOT servo code.
+  - `requirements-pi.txt`: no pybullet, `--only-binary=:all:`, `--find-links wheelhouse`, `srt==3.5.3`. `srt` (a Vosk dependency) has no wheel on PyPI: `scripts/build_wheelhouse.sh` builds it ON THE LAPTOP (`pip wheel srt==3.5.3 --no-deps`, py3-none-any) into the gitignored `wheelhouse/` and `sync_to_pi.sh` sends it. sha256 `ef8936f0c7d6c3623e7d748ecf71a72bf2b525ebd4c062202f3019a045d8d9b3` (`srt-3.5.3-py3-none-any.whl`). pip on the Pi runs with `TMPDIR=~/hexa/.tmp` so nothing lands in `/tmp`. Every other dependency has an aarch64 cp312 wheel (numpy 2.5.3 15.7 MB, vosk 0.3.45 2.4 MB, rapidfuzz 3.14.6 1.4 MB, websockets 17.2, pytest 9.1.1, ...: about 22 MB).
+  - `scripts/fetch_models.sh` is architecture-aware: it downloads only what is missing and only the Piper archive for this machine; the real asset name on the 2023.11.14-2 release is `piper_linux_aarch64.tar.gz` (26.0 MB), checked against the release page.
+  - Tests: the six test files that import pybullet skip cleanly without it (`pytest.importorskip`), three physics tests carry `@pytest.mark.pybullet` (skipped when pybullet is missing), and without pybullet `tests/conftest.py` sets `HEXA_BACKEND=dryrun` so the app/web tests run on the dry-run body. The `llm` tests skip with "no Ollama" (`pytest -m llm`: 7 skipped).
+  - `scripts/cool_run.py` knows the Pi (device-tree model): sensor `cpu-thermal` from `/sys/class/thermal`, **kill limit 78 C** (the firmware starts throttling at 80 C and again at 85 C; kernel critical 110 C), start below 62 C, and `vcgencmd get_throttled` is printed at the end. Per the owner (stage 2) the Pi is NOT run under the guard either: the Pi measurements and the second Pi test run above were made guarded BEFORE that message; from now on use `--unguarded` (log only). The 78 C profile stays in the script for whenever it is wanted.
+  - `deploy/hexa.service`: a systemd unit (dry-run backend) that is written, NOT installed and NOT enabled. A unit with a hardware backend must never be enabled at boot until the kill switch and calibration (11e/11f) are done.
+  - New measuring scripts: `scripts/measure_e2e.py` (end of a spoken "sit down" WAV to the first joint change) and `scripts/measure_lan.py` (phone-page latency from another machine over the Wi-Fi).
+- **Test counts (junit XML)**: Pi 969 collected, **959 passed, 10 skipped (pybullet/llm), 0 failed**, 12 deselected (timing/audio/llm markers); peak 48 C, no throttling. Laptop (unguarded batches): 1042 passed in four batches plus one docs-listing failure that was fixed and re-run (17 passed); `ruff` and `mypy` clean; peaks 84-90 C.
+- **Measured on the Pi 5 (dry-run body, guarded, `get_throttled=0x0` after every run) against the dev laptop (Core i3 M380)**:
+
+| Measurement | Pi 5 | Dev laptop |
+|---|---|---|
+| Body tick work, standing / walking (mean, worst) | 0.10 ms (0.3) / 0.45 ms (0.7) at 50.0 ticks/s | 7-8 ms with the simulator (not comparable: the Pi has no physics) |
+| Body tick work while Piper is busy, standing / walking | 0.79 ms (worst 7.2) / 1.49 ms (worst 13.1), 50 ticks/s held | 22 / 30 ms, ticks fell to 31-37 per s |
+| Piper real-time factor, time to first audio | 0.12, median 0.29 s (worst 0.39 s) | 0.6-1.0, 0.6 s for one word, 1.8 s for a short sentence |
+| Piper CPU / RAM while busy | 374 % of one core, 152 MB peak | about 2 cores |
+| Vosk alone, 1 recognizer: silence / speech | 8 % / 14 % of a core; decode real-time factor 0.04 / 0.08 | 15-22 % of a core; 0.07-0.11 |
+| Vosk, 2 recognizers (free + grammar): silence / speech | 13 % / 18 %; decode factor 0.07 / 0.11; RSS 172 MB | 21-23 %; 178 MB |
+| Vosk with the body: ptt idle / ptt listening / always (process CPU) | 0 % / 22 % / 11 % of a core; tick 0.10-0.35 ms | 1 % / 37 % / 23 %; tick 6-8 ms |
+| End of speech to command sent ("walk forward", `measure_voice --stt --latency`, 3 trials) | 0.75-1.01 s; command to first foot-target change 0.19 s; total 0.94-1.20 s | 0.86 s; 0.26 s; 1.12 s |
+| End to end: "sit down" WAV end to first joint change (`measure_e2e.py`, 5 trials) | median 868 ms, max 878 ms | not measured |
+| Phone page on the Pi, localhost: press to first joint change (20) | median 39.4 ms, p95 39.8 ms | not recorded in this form |
+| Phone page from the laptop over Wi-Fi (`measure_lan.py`, 20 trials): button to answer | median 51 ms, p95 53 ms, max 53 ms; connect + handshake 131 ms; ping avg 10 ms (max 41 ms) | n/a |
+| Release (`ptt_release`) to command sent, fake STT (20) | median 701 ms (500 ms of it is `PTT_TAIL_S`) | see 12b |
+| Server idle CPU: nobody connected / one idle client | web thread 0.00 % / 0.00 %, whole brain process 0.3 % | n/a |
+| Idle temperature / peaks | idle 43-44 C; peak 67 C (Piper busy); fan trips 50/60/67.5/75 C | idle 59 C, peaks 84-90 C |
+
+  The Pi is far faster than the laptop on every voice number; the end-to-end delay after you stop speaking (about 0.9 s) is dominated by Vosk's wait for silence, not by compute. The Pi's Wi-Fi address changed once (10.159.38.235 to .234): use `hexa.local` or read the URL `--lan` prints.
+- **Deferred (owner has no fast Wi-Fi yet), with the same numbers to record later**: install Ollama (owner-run: the official arm64 script also enables a boot service, which conflicts with "nothing at boot": choose the manual tarball or Docker), pull `qwen2.5:0.5b` and `qwen2.5:1.5b`, then run `pytest -m llm` and `scripts/measure_chat.py` on the Pi for tokens/s, first-token time, RAM and temperature (bar: 3 tokens/s and a first token within 5 s). Until then chat stays on `FakeChat` (`--chat fake`).
+- **Deferred (needs the owner present with USB devices; none was plugged in, `arecord -l` lists no capture device and `aplay -l` only the two HDMI outputs)**: `scripts/mic_check.py`, `scripts/say.py` and the real-speaker checks of 11b.
+- **Done when**: the non-`audio`/`timing`/`llm` suite passes on the Pi (done), the headless dry-run body starts, walks and stops through the bridge (done: `main.py --backend dryrun`, the web page over the LAN, `measure_e2e.py`), and the idle CPU and temperature are reported (done).
 
 #### Stage 11b: voice on the Pi (still the simulated body)
 - `scripts/fetch_models.sh` for the ARM Piper and the Vosk models, `scripts/mic_check.py`, `stt_check.py`, `voice_cli.py`, then `main.py` with the real microphone and speaker in ptt and always mode. Barge-in and the self-hearing gate are judged with the real speaker and microphone positions.

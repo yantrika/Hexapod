@@ -21,7 +21,7 @@ Legend: **STUB** = placeholder, not built yet. **DEV** = developer tool, not par
 | `requirements.txt` | Python packages the robot needs (numpy, vosk, sounddevice, rapidfuzz, requests). | You add a package. |
 | `requirements-dev.txt` | `requirements.txt` plus pytest, ruff, mypy. | A dev tool changes. |
 | `requirements-sim.txt` | `requirements.txt` plus PyBullet (the simulation). | The simulator changes. |
-| `requirements-pi.txt` | `requirements.txt` plus the servo driver for the Raspberry Pi (not chosen yet). | Step 11, when you pick the servo board. |
+| `requirements-pi.txt` | `requirements.txt` plus pytest, without PyBullet (the Raspberry Pi); the servo driver comes at Step 11e. | Step 11, when you pick the servo board. |
 | `.gitignore` | Files git must not store: `.venv`, caches, models, generated audio, logs. | You add a new generated file type. |
 
 ## `body/` : the program that moves the legs
@@ -35,6 +35,7 @@ Legend: **STUB** = placeholder, not built yet. **DEV** = developer tool, not par
 | `body/kinematics.py` | Leg maths: foot position to joint angles (and back). Picks the knee-up solution. | Leg geometry type changes. |
 | `body/poses.py` | The fixed stand and sit poses, worked out from kinematics. | You change a pose. |
 | `body/backend.py` | The **backend contract** (`HexapodBackend`): set 18 joint angles, advance time, read the pose. Holds the one hard-limit clamp. | You add a backend method. |
+| `body/dryrun_backend.py` | A body with no physics and no hardware: logs the joint targets (`main.py --backend dryrun`; the Pi before the servos). | You want it to log differently. |
 | `body/sim_backend.py` | The simulated robot in PyBullet (window or headless). | You change the simulation. |
 | `body/servo_backend.py` | **STUB.** The real servo driver for the Pi. This is where the servo **pins/channels and calibration** will live (see `HARDWARE.md`). | Step 11 (hardware), and whenever you re-wire or recalibrate. |
 | `body/urdf.py` | Builds the robot model file from `config.py` sizes. | The model description changes. |
@@ -104,8 +105,13 @@ Legend: **STUB** = placeholder, not built yet. **DEV** = developer tool, not par
 | `scripts/sim_demo.py` | Hold stand/sit or run a short scripted sequence in the simulation. **DEV** | Rarely. |
 | `scripts/walk_demo.py` | Walk forward, turn, strafe in the simulation. **DEV** | Rarely. |
 | `scripts/generate_urdf.py` | Rewrites `assets/urdf/hexapod.urdf` from `config.py` (`--check` only verifies). | After changing robot sizes. |
+| `deploy/hexa.service` | systemd unit for the Pi (dry-run backend). Written, NOT installed or enabled. | Step 11f, with a hardware backend. |
+| `scripts/sync_to_pi.sh` | Copies the project (and with `--assets` the models) to `~/hexa` on the Pi over ssh. `--dry-run` shows what it would do. | The Pi host or what to copy changes. |
+| `scripts/build_wheelhouse.sh` | Builds the wheels PyPI lacks for the Pi (srt) on this machine into the gitignored `wheelhouse/`. | A Pi dependency has no wheel. |
 | `scripts/fetch_models.sh` | Downloads Piper, its voice and the Vosk models; then renders the fixed phrases. Safe to re-run. | You change a model. See `HOW_TO.md`. |
 | `scripts/prerender_phrases.py` | Renders `config.TTS_PHRASES` to WAV files so they play instantly. | Rarely (it reads config). |
+| `scripts/measure_e2e.py` | End-to-end latency: end of a spoken "sit down" to the first joint change (real Vosk, fake chat). | You want a different phrase or trial count. |
+| `scripts/measure_lan.py` | Phone-page latency from another machine over the Wi-Fi (button to answer, connect time). | You want other measurements. |
 | `scripts/measure_voice.py` | Measures Piper and Vosk speed, body timing with voice running, `clear()` delay. **DEV** | You add a measurement. |
 | `scripts/cool_run.py` | Runs a command but waits for the laptop to cool and kills it before it overheats. **DEV** | Rarely. |
 | `scripts/__init__.py` | Lets the tests import the scripts. | Never. |
@@ -144,6 +150,7 @@ Run one file at a time on the dev laptop (see `COMMANDS.md`).
 | `tests/test_config.py` | Settings are symmetric and complete. |
 | `tests/test_kinematics.py` | Leg maths: forward and back, knee-up, unreachable points. |
 | `tests/test_backend.py` | The backend contract and the hard-limit clamp. |
+| `tests/test_dryrun_backend.py` | The dry-run backend (clamp, log, starts without PyBullet). |
 | `tests/test_sim_backend.py` | The PyBullet backend (headless). |
 | `tests/test_urdf.py` | The robot model file matches `config.py`. |
 | `tests/test_gait.py` | The walking planner (pure). |

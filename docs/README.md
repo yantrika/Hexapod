@@ -6,6 +6,7 @@ hexa is a six-legged robot you can talk to. It listens (Vosk), understands (a si
 
 | I want to... | Read |
 |---|---|
+| Run the robot, the GUI, the phone page, the models | [RUNNING.md](RUNNING.md) |
 | Know what every file does and which to edit | [FILES.md](FILES.md) |
 | Change a model, a phrase, a threshold, the robot size | [HOW_TO.md](HOW_TO.md) |
 | Change servo pins, channels or calibration | [HARDWARE.md](HARDWARE.md) |
