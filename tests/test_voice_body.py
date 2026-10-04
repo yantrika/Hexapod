@@ -82,6 +82,7 @@ def test_saying_sit_down_makes_the_body_sit(setup: Setup, speech_wavs: dict[str,
     assert done.detail["action"] == "sit"
 
 
+@pytest.mark.pybullet
 def test_saying_walk_forward_keeps_walking_until_stop_is_said(
     setup: Setup, speech_wavs: dict[str, Path]
 ) -> None:

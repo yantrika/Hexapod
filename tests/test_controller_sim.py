@@ -12,11 +12,13 @@ from collections.abc import Iterator
 import numpy as np
 import pytest
 
-import config
-from body import poses
-from body.controller import Controller, State
-from body.sim_backend import SimBackend
-from tests.fakes import FakeClock
+pytest.importorskip("pybullet")  # the simulator is not installed on the Pi
+
+import config  # noqa: E402
+from body import poses  # noqa: E402
+from body.controller import Controller, State  # noqa: E402
+from body.sim_backend import SimBackend  # noqa: E402
+from tests.fakes import FakeClock  # noqa: E402
 
 DT = 1.0 / config.CONTROL_HZ
 MAX_V = config.GAIT_MAX_SPEED_M_S

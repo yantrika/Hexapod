@@ -46,6 +46,7 @@ class StartupError(RuntimeError):
 @dataclass
 class AppOptions:
     gui: bool = False
+    backend: str = config.BACKEND_DEFAULT  # "sim" | "dryrun" (config.BACKENDS)
     listen: str = config.LISTEN_MODE  # "ptt" | "always"
     chat: str = "ollama"  # "ollama" | "fake" | "off"
     no_speak: bool = False
@@ -177,9 +178,11 @@ class HexaApp:
             self._playback_inner.start()
         self.speech = LoggedPlayback(self._playback_inner, self._on_said)
 
-        self.body = BodyProcess(self.bridge, headless=not options.gui, probe=self._probe)
+        self.body = BodyProcess(self.bridge, headless=not options.gui, probe=self._probe,
+                                backend=options.backend)
         self.body.start()
-        logger.info("body process pid %s (%s)", self.body.pid, "gui" if options.gui else "headless")
+        logger.info("body process pid %s (%s, %s)", self.body.pid, options.backend,
+                    "gui" if options.gui else "headless")
         if not self.body.wait_ready():
             raise StartupError("the body process did not start (see the log above)")
         self.hub = StatusHub(self.bridge)

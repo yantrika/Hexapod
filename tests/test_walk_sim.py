@@ -11,10 +11,12 @@ from collections.abc import Iterator
 
 import pytest
 
-import config
-from body.gait import BodyVelocity
-from body.sim_backend import SimBackend
-from tests.walk_harness import WalkStats, run_walk
+pytest.importorskip("pybullet")  # the simulator is not installed on the Pi
+
+import config  # noqa: E402
+from body.gait import BodyVelocity  # noqa: E402
+from body.sim_backend import SimBackend  # noqa: E402
+from tests.walk_harness import WalkStats, run_walk  # noqa: E402
 
 SECONDS = 10.0
 MAX_SPEED = config.GAIT_MAX_SPEED_M_S

@@ -148,6 +148,9 @@ TELEOP_SPEED_SCALE_STEP = 0.1
 # --- Timing and bridge ---------------------------------------------------
 PHYSICS_HZ = 240.0  # PyBullet step, driven by wall-clock time
 CONTROL_HZ = 50.0  # control tick, driven by wall-clock time
+BACKENDS = ("sim", "dryrun")  # body backends main.py can start (the servo backend comes at 11e)
+BACKEND_DEFAULT = os.environ.get("HEXA_BACKEND", "sim")  # the Pi build sets dryrun (no pybullet)
+DRYRUN_LOG_PERIOD_S = 2.0  # the dry-run backend logs a summary of the joint targets this often
 MAX_PHYSICS_CATCHUP_STEPS = 12  # caps catch-up after a stall (~50 ms of sim)
 GAIT_PERIOD_S = 1.0  # PLACEHOLDER, one full tripod cycle
 GAIT_SWING_FRACTION = 0.5  # share of the cycle a foot is in swing (0 < f <= 0.5)

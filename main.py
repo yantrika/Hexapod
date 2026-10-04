@@ -3,6 +3,7 @@
 
     python main.py                          headless body, push-to-talk, Ollama chat, speech on
     python main.py --gui --chat fake        PyBullet window, scripted chat (the slow dev laptop)
+    python main.py --backend dryrun         no PyBullet, no hardware: logs the joint targets
     python main.py --listen always          listen all the time instead of push-to-talk
     python main.py --no-speak --no-mic      no audio devices at all (tests, systemd without sound)
     python main.py --web                    phone control page on 127.0.0.1 (PIN printed at start)
@@ -42,6 +43,9 @@ def build_parser() -> argparse.ArgumentParser:
     view = parser.add_mutually_exclusive_group()
     view.add_argument("--gui", action="store_true", help="PyBullet window (needs a display)")
     view.add_argument("--headless", action="store_true", help="no window (the default)")
+    parser.add_argument("--backend", choices=config.BACKENDS, default=config.BACKEND_DEFAULT,
+                        help="sim = PyBullet (needs pybullet), dryrun = no physics, no hardware: "
+                             "logs the joint targets (the Pi before the servos)")
     parser.add_argument("--listen", choices=("ptt", "always"), default=config.LISTEN_MODE,
                         help="ptt = push-to-talk, always = listen all the time")
     parser.add_argument("--chat", choices=("fake", "ollama", "off"), default="ollama",
@@ -98,6 +102,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     problems = run_checks(CheckOptions(
         model=args.model, no_speak=args.no_speak, no_mic=args.no_mic or args.audio_file is not None,
         chat=args.chat, ollama_model=args.ollama_model, mic_device=args.device))
+    if args.backend == "dryrun" and args.gui:
+        problems.append("--gui needs the simulator: drop --gui or use --backend sim")
+    if args.backend == "sim":
+        from importlib.util import find_spec
+
+        if find_spec("pybullet") is None:
+            problems.append("pybullet is not installed: use --backend dryrun, or "
+                            "pip install -r requirements-sim.txt")
     if args.audio_file is not None and not args.audio_file.is_file():
         problems.append(f"audio file not found: {args.audio_file}")
     if problems:
@@ -115,8 +127,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     signal.signal(signal.SIGTERM, on_signal)
 
     app = HexaApp(AppOptions(
-        gui=args.gui, listen=args.listen, chat=args.chat, no_speak=args.no_speak,
-        no_mic=args.no_mic, audio_file=args.audio_file, model=args.model,
+        gui=args.gui, backend=args.backend, listen=args.listen, chat=args.chat,
+        no_speak=args.no_speak, no_mic=args.no_mic, audio_file=args.audio_file, model=args.model,
         ollama_model=args.ollama_model, mic_device=args.device,
         web=args.web or args.lan, lan=args.lan, web_port=args.web_port))
     code = EXIT_OK

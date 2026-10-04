@@ -230,9 +230,16 @@ class BodyRunner:
         self._previous_angles = angles.copy()
 
 
-def make_backend(headless: bool) -> HexapodBackend:
-    """The simulated hexapod, DIRECT (headless) or with the PyBullet window."""
-    from body.sim_backend import SimBackend  # lazy: the Pi build loads the servo backend instead
+def make_backend(headless: bool, kind: str = config.BACKEND_DEFAULT) -> HexapodBackend:
+    """The body's backend: the simulated hexapod (DIRECT, or with the PyBullet window) or the
+    dry-run backend (no physics, no hardware). Imports are lazy: the Pi has no pybullet."""
+    if kind == "dryrun":
+        from body.dryrun_backend import DryRunBackend
+
+        return DryRunBackend()
+    if kind != "sim":
+        raise ValueError(f"unknown backend {kind!r} (choose from {', '.join(config.BACKENDS)})")
+    from body.sim_backend import SimBackend
 
     return SimBackend(gui=not headless)
 
@@ -243,6 +250,7 @@ def run_body(
     probe: BodyProbe | None = None,
     tip_event: Any = None,
     parent_pid: int | None = None,
+    backend_kind: str = config.BACKEND_DEFAULT,
 ) -> None:
     """Child-process entry point. Returns when shut down or when the parent dies."""
     logging.basicConfig(
@@ -254,12 +262,12 @@ def run_body(
     if probe is not None:
         probe.set("blas_threads", float(os.environ.get("OPENBLAS_NUM_THREADS", "-1")))
 
-    backend = make_backend(headless)
+    backend = make_backend(headless, backend_kind)
     runner = BodyRunner(bridge, backend, probe=probe)
     loop = FixedRateLoop(config.CONTROL_HZ)
     stepper = FixedStepper(config.CONTROL_HZ)
     bridge.mark_ready()
-    logger.info("body ready (%s)", "headless" if headless else "gui")
+    logger.info("body ready (%s, %s)", backend_kind, "headless" if headless else "gui")
     count = 0
     try:
         while not bridge.shutdown_requested() and not terminated:
@@ -293,9 +301,10 @@ class BodyProcess:
         headless: bool = True,
         probe: BodyProbe | None = None,
         tip_event: Any = None,
+        backend: str = config.BACKEND_DEFAULT,
     ) -> None:
         self.bridge = bridge
-        self._args = (bridge, headless, probe, tip_event, os.getpid())
+        self._args = (bridge, headless, probe, tip_event, os.getpid(), backend)
         self._process: Any = None
 
     def start(self) -> None:

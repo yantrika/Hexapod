@@ -8,9 +8,11 @@ from collections.abc import Iterator
 import numpy as np
 import pytest
 
-import config
-from body import kinematics, poses
-from body.sim_backend import SimBackend
+pytest.importorskip("pybullet")  # the simulator is not installed on the Pi
+
+import config  # noqa: E402
+from body import kinematics, poses  # noqa: E402
+from body.sim_backend import SimBackend  # noqa: E402
 
 
 @pytest.fixture

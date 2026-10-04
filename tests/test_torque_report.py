@@ -11,9 +11,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-import config
-from body.sim_backend import SimBackend
-from scripts import torque_report as tr
+pytest.importorskip("pybullet")  # the simulator is not installed on the Pi
+
+import config  # noqa: E402
+from body.sim_backend import SimBackend  # noqa: E402
+from scripts import torque_report as tr  # noqa: E402
 
 
 # --- units -----------------------------------------------------------------------------------

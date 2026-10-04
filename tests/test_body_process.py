@@ -282,6 +282,7 @@ def test_walk_while_sitting_is_rejected_and_busy_during_a_transition(body: Body)
     assert (rejected.status, rejected.detail["reason"]) == ("rejected", "invalid_state")
 
 
+@pytest.mark.pybullet
 def test_fallen_is_emitted_exactly_once_when_tipped(fresh: Callable[..., Body]) -> None:
     body = fresh(tip=True)
     assert body.tip_event is not None

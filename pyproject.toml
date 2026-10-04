@@ -18,5 +18,6 @@ addopts = "-m 'not timing and not audio and not llm'"
 markers = [
     "timing: wall-clock bound tests, sensitive to machine load (run with: pytest -m timing)",
     "audio: need the real Piper binary and voice (run with: pytest -m audio)",
+    "pybullet: build the simulated body (skipped where pybullet is not installed)",
     "llm: need a running Ollama with the model pulled (run with: pytest -m llm -s)",
 ]

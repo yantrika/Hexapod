@@ -115,6 +115,7 @@ def test_without_a_stop_the_walk_ends_at_the_max_duration(rig: Callable[..., Rig
     assert not r.brain.keeper.active
 
 
+@pytest.mark.pybullet
 def test_turn_left_is_kept_alive_and_finishes_its_angle(rig: Callable[..., Rig]) -> None:
     """Regression: a turn takes about 5 s, far past the 1 s watchdog, so it needs heartbeats."""
     r = rig()

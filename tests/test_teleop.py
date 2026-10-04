@@ -7,11 +7,13 @@ from pathlib import Path
 
 import pytest
 
-import config
-from body.controller import Controller, State
-from body.gait import BodyVelocity
-from scripts import teleop
-from tests.fakes import FakeBackend, FakeClock
+pytest.importorskip("pybullet")  # the simulator is not installed on the Pi
+
+import config  # noqa: E402
+from body.controller import Controller, State  # noqa: E402
+from body.gait import BodyVelocity  # noqa: E402
+from scripts import teleop  # noqa: E402
+from tests.fakes import FakeBackend, FakeClock  # noqa: E402
 
 MAX_V = config.GAIT_MAX_SPEED_M_S
 MAX_W = math.radians(config.TURN_RATE_MAX_DEG_S)

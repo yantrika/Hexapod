@@ -5,9 +5,12 @@ from __future__ import annotations
 import math
 
 import numpy as np
+import pytest
 
-import config
-from scripts import joint_jog
+pytest.importorskip("pybullet")  # the simulator is not installed on the Pi
+
+import config  # noqa: E402
+from scripts import joint_jog  # noqa: E402
 
 
 def test_slider_labels_are_short_and_unique() -> None:
