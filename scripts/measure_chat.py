@@ -71,16 +71,40 @@ class Thermometer(threading.Thread):
             self.stop_flag.wait(0.5)
 
 
+def process_memory(comm: str = "ollama") -> str:
+    """RSS of the processes named *comm* (the Pi runs Ollama directly, with no container)."""
+    total_kb, count = 0, 0
+    try:
+        for entry in os.scandir("/proc"):
+            if not entry.name.isdigit():
+                continue
+            try:
+                with open(f"/proc/{entry.name}/comm") as handle:
+                    if handle.read().strip() != comm:
+                        continue
+                with open(f"/proc/{entry.name}/status") as handle:
+                    for line in handle:
+                        if line.startswith("VmRSS:"):
+                            total_kb += int(line.split()[1])
+                            count += 1
+            except (OSError, ValueError):
+                continue
+    except OSError:
+        return "unavailable"
+    return f"{total_kb / 1024:.0f} MiB RSS in {count} process(es)" if count else "unavailable"
+
+
 def container_memory(name: str) -> str:
+    """The Docker container's memory, or (no Docker, as on the Pi) the ollama processes' RSS."""
     try:
         out = subprocess.run(
             ["docker", "stats", "--no-stream", "--format",
              "{{.MemUsage}} (cpu {{.CPUPerc}})", name],
             capture_output=True, text=True, timeout=20, check=False,
         )
-        return out.stdout.strip() or "unavailable"
+        return out.stdout.strip() or process_memory()
     except (OSError, subprocess.TimeoutExpired):
-        return "unavailable"
+        return process_memory()
 
 
 def ask(url: str, model: str, wanted: int, timeout_s: float) -> Reply:

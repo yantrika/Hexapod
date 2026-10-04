@@ -5,6 +5,9 @@
 #
 # Usage (on the Pi, in ~/hexa):
 #   scripts/pi_dryrun.sh start [PIN]   start it (PIN: 4-12 digits; default a random 6-digit one)
+#       HEXA_CHAT=ollama [HEXA_OLLAMA_MODEL=qwen2.5:1.5b] scripts/pi_dryrun.sh start
+#                                      the same with the real chat model (Ollama must be running;
+#                                      default chat is the scripted one, model qwen2.5:0.5b)
 #   scripts/pi_dryrun.sh log           watch logs/dryrun.log (what the gait would send to the servos)
 #   scripts/pi_dryrun.sh status        is it running, and the page address(es)
 #   scripts/pi_dryrun.sh stop          clean stop (Ctrl-C inside tmux: stop, silence, join, exit 0)
@@ -20,10 +23,14 @@ case "${1:-}" in
     tmux has-session -t "${session}" 2>/dev/null && { echo "already running (status / stop)"; exit 1; }
     pin="${2:-$(( RANDOM % 900000 + 100000 ))}"
     [[ "${pin}" =~ ^[0-9]{4,12}$ ]] || { echo "PIN must be 4-12 digits" >&2; exit 2; }
+    chat="${HEXA_CHAT:-fake}"
+    [[ "${chat}" == fake || "${chat}" == ollama || "${chat}" == off ]] || { echo "HEXA_CHAT: fake, ollama or off" >&2; exit 2; }
+    chat_args="--chat ${chat}"
+    [[ "${chat}" == ollama ]] && chat_args+=" --ollama-model ${HEXA_OLLAMA_MODEL:-qwen2.5:0.5b}"
     : > logs/dryrun.log
     tmux new-session -d -s "${session}" \
       "cd '${root}' && TMPDIR='${root}/.tmp' HEXA_WEB_PIN='${pin}' \
-       .venv/bin/python main.py --backend dryrun --lan --no-mic --no-speak --chat fake; \
+       .venv/bin/python main.py --backend dryrun --lan --no-mic --no-speak ${chat_args}; \
        echo; echo 'hexa has stopped (press Enter to close)'; read -r _"
     sleep 4
     echo "PIN: ${pin}"
@@ -38,11 +45,12 @@ case "${1:-}" in
   stop)
     tmux has-session -t "${session}" 2>/dev/null || { echo "not running"; exit 0; }
     tmux send-keys -t "${session}" C-c   # SIGINT: a clean shutdown, the body is stopped first
-    for _ in $(seq 1 20); do
-      tmux capture-pane -p -t "${session}" | grep -q "hexa has stopped" && break
+    for _ in $(seq 1 20); do  # the session ends by itself when Ctrl-C also closes the prompt
+      tmux has-session -t "${session}" 2>/dev/null || break
+      tmux capture-pane -p -t "${session}" 2>/dev/null | grep -q "hexa has stopped" && break
       sleep 0.5
     done
     tmux kill-session -t "${session}" 2>/dev/null || true
     echo "stopped" ;;
-  *) sed -n '2,13p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  *) sed -n '2,17p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac
