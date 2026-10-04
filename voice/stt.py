@@ -101,7 +101,7 @@ class SttEvent:
     ``text`` is always the free-text recognizer's. A final also carries both hypotheses with
     confidences (``grammar`` is None when the grammar recognizer is off)."""
 
-    kind: str  # "partial" | "final" | "reset"
+    kind: str  # "partial" | "final" | "reset" | "typed" (text from the phone page, no audio)
     text: str
     timestamp: float  # clock time when the result was produced
     free: Hypothesis | None = None

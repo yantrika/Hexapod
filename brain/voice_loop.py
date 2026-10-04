@@ -21,6 +21,10 @@
   silenced at once (``playback.clear(skip_tail=True)``) and the chat reply is cancelled. Without
   one ("always") every block is fed, as in Step 8. In ptt mode a voice "stop" works only while
   listening; the control window STOP button and Space are the always-available stop.
+- Typed text (the phone page's ``say``, Step 12b) enters through ``submit_text()``: it is queued on
+  the same worker as a spoken final and routed and acted on identically (a stop goes out first,
+  chat only while the body is idle, else "tell me after I stop"). It does not need listening, so
+  a typed "stop" always works. Like a press it silences hexa and cancels a chat reply first.
 - A source or recognizer error is logged and the loop keeps running.
 """
 
@@ -132,6 +136,11 @@ class VoiceLoop:
             self.chat.cancel()  # first, so no sentence of the old reply is queued after the clear
         if self.playback is not None:
             self.playback.clear(skip_tail=True)
+
+    def submit_text(self, text: str) -> None:
+        """Typed text takes the same route as a spoken final result. Any thread; never blocks."""
+        self.barge_in()
+        self._publish(SttEvent("typed", text, self._clock()))
 
     def wait_idle(self, timeout: float) -> bool:
         """For file sources: True once the whole file was recognised and its commands sent."""
@@ -259,6 +268,11 @@ class VoiceLoop:
     def _handle(self, event: SttEvent) -> None:
         if event.kind == "reset":  # a new utterance starts: an earlier early stop is history
             self._stop_sent_early = False
+            return
+        if event.kind == "typed":
+            self._emit(VoiceEvent("final", event.text, event.timestamp))
+            self._act(route(event.text), "typed", "typed on the phone page", False,
+                      event.timestamp)
             return
         if event.kind == "partial":
             self._emit(VoiceEvent("partial", event.text, event.timestamp))

@@ -14,6 +14,7 @@ import logging
 import os
 import sys
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -22,6 +23,7 @@ from body.process import BodyProbe, BodyProcess
 from brain.brain_loop import BrainLoop
 from brain.chat import ChatBackend, ChatResponder, FakeChat, OllamaChat
 from brain.dialogue import Dialogue
+from brain.event_hub import EventHub
 from brain.status_hub import StatusHub
 from brain.voice_loop import VoiceEvent, VoiceLoop
 from bridge import make_bridge, new_command
@@ -32,6 +34,7 @@ from voice.ptt import PushToTalk, make_ptt
 from voice.stt import SttEngine, VoskStt
 from voice.tts import PiperEngine
 from web.server import WebServer, lan_addresses, resolve_pin
+from web.session import VoiceControls
 
 logger = logging.getLogger(__name__)
 
@@ -61,19 +64,26 @@ class LoggedPlayback:
     """What the dialogue, the chat and the voice loop speak through: every phrase is logged, and
     handed to the real ``Playback`` unless speech is off (``--no-speak``)."""
 
-    def __init__(self, inner: Playback | None) -> None:
+    def __init__(self, inner: Playback | None,
+                 on_say: Callable[[str], None] | None = None) -> None:
         self.inner = inner
+        self._on_say = on_say  # the phone page's log of what hexa said
+
+    def _said(self, text: str) -> None:
+        logger.info("hexa says: %s", text)
+        if self._on_say is not None:
+            self._on_say(text)
 
     @property
     def pending(self) -> int:
         return self.inner.pending if self.inner is not None else 0
 
     def say(self, text: str) -> int:
-        logger.info("hexa says: %s", text)
+        self._said(text)
         return self.inner.say(text) if self.inner is not None else 0
 
     def say_phrase(self, name: str) -> int:
-        logger.info("hexa says: %s", config.TTS_PHRASES.get(name, name))
+        self._said(config.TTS_PHRASES.get(name, name))
         return self.inner.say_phrase(name) if self.inner is not None else 0
 
     def clear(self, skip_tail: bool = False) -> None:
@@ -121,7 +131,8 @@ class HexaApp:
         self.source: AudioSource | None = None
         self.web: WebServer | None = None
         self.web_pin: str | None = None
-        self.speech = LoggedPlayback(None)
+        self.events = EventHub()  # heard / route / said / listening, for the phone page
+        self.speech = LoggedPlayback(None, self._on_said)
         self._engine: PiperEngine | None = None
         self._log_stop = threading.Event()
         self._log_thread: threading.Thread | None = None
@@ -164,7 +175,7 @@ class HexaApp:
             if not self._own_playback:
                 self.speaking = self._playback_inner.speaking
             self._playback_inner.start()
-        self.speech = LoggedPlayback(self._playback_inner)
+        self.speech = LoggedPlayback(self._playback_inner, self._on_said)
 
         self.body = BodyProcess(self.bridge, headless=not options.gui, probe=self._probe)
         self.body.start()
@@ -180,9 +191,6 @@ class HexaApp:
         self._log_thread = threading.Thread(target=self._log_statuses, name="status-log",
                                             daemon=True)
         self._log_thread.start()
-
-        if options.web or options.lan:
-            self._start_web()
 
         backend = self._chat_backend or make_chat_backend(options.chat, options.ollama_model)
         if backend is not None:
@@ -202,7 +210,13 @@ class HexaApp:
         self.voice = VoiceLoop(self.source, self._stt, self.brain, self.speaking,
                                self.speech, self._on_voice_event,  # type: ignore[arg-type]
                                chat=self.chat, ptt=self.ptt)
+        if self.ptt is not None:
+            self.ptt.add_change_listener(
+                lambda state: self.events.publish(
+                    {"type": "listening", "on": state == "listening"}))
         self.voice.start()
+        if options.web or options.lan:
+            self._start_web()
         logger.info("hexa is ready (listen=%s, chat=%s, speech=%s)", listen, options.chat,
                     "off" if options.no_speak else "on")
 
@@ -217,7 +231,10 @@ class HexaApp:
             pin, generated = resolve_pin(config.WEB_PIN, dict(os.environ))
         self.web_pin = pin
         host = "0.0.0.0" if options.lan else "127.0.0.1"
-        self.web = WebServer(self.bridge, self.hub, pin, host=host, port=options.web_port)
+        voice = VoiceControls(
+            self.set_listening, self.submit_text, self._ptt_unavailable(), self._say_unavailable())
+        self.web = WebServer(self.bridge, self.hub, pin, host=host, port=options.web_port,
+                             voice=voice, events=self.events)
         self.web.start()
         port = self.web.port
         urls = [f"http://{address}:{port}/" for address in lan_addresses()] if options.lan else []
@@ -231,6 +248,17 @@ class HexaApp:
         print(f"web PIN: {shown}", file=sys.stderr)
         if options.lan:
             print("web page is plain HTTP: use it only on a network you trust", file=sys.stderr)
+
+    def _ptt_unavailable(self) -> str | None:
+        """Why the phone's hold-to-talk button cannot work here (None: it can)."""
+        if self.options.no_mic:
+            return "the robot runs with --no-mic: it has no microphone to hold"
+        if self.ptt is None:
+            return "the robot listens all the time (--listen always): there is nothing to hold"
+        return None
+
+    def _say_unavailable(self) -> str | None:
+        return None if self.voice is not None else "voice is not running"
 
     def _make_source(self) -> AudioSource:
         if self._source is not None:
@@ -251,14 +279,20 @@ class HexaApp:
                 logger.info("status %s", format_status(status))
         self.hub.unsubscribe(subscription)
 
-    @staticmethod
-    def _on_voice_event(event: VoiceEvent) -> None:
+    def _on_voice_event(self, event: VoiceEvent) -> None:
         if event.kind == "final":
             logger.info("heard %r", event.text)
+            if event.text:
+                self.events.publish({"type": "heard", "text": event.text})
         elif event.kind == "route" and event.route is not None:
             route = event.route
             logger.info("route %s action=%s text=%r%s", route.kind, route.action, route.text,
                         " (early stop)" if event.early_stop else "")
+            self.events.publish({"type": "route", "route": route.kind, "action": route.action,
+                                 "text": route.text, "early_stop": event.early_stop})
+
+    def _on_said(self, text: str) -> None:
+        self.events.publish({"type": "said", "text": text})
 
     # -- running -------------------------------------------------------------------------------
     def set_listening(self, on: bool) -> None:
@@ -269,6 +303,12 @@ class HexaApp:
             self.ptt.press()
         else:
             self.ptt.release()
+
+    def submit_text(self, text: str) -> None:
+        """Typed text (the phone page) takes the same route as a spoken final result."""
+        if self.voice is None:
+            raise RuntimeError("voice is not running")
+        self.voice.submit_text(text)
 
     def toggle_listening(self) -> bool:
         return self.ptt.toggle() if self.ptt is not None else True
