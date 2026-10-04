@@ -26,6 +26,19 @@ def test_a_command_runs_and_its_exit_code_is_passed_on(monkeypatch: pytest.Monke
     assert cool_run.main() == 7
 
 
+def test_an_unguarded_run_is_not_killed_but_still_reports_the_peak(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(cool_run, "read_temperature_c", lambda: 88.0)
+    monkeypatch.setattr(
+        sys, "argv", ["cool_run", "--unguarded", "--", sys.executable, "-c",
+                      "import time; time.sleep(2.5)"],
+    )
+    assert cool_run.main() == 0  # 88 C would have been killed (and never started) when guarded
+    err = capsys.readouterr().err
+    assert "UNGUARDED" in err and "peak 88 C" in err
+
+
 def test_the_command_is_killed_when_it_gets_too_hot(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cool_run, "read_temperature_c", lambda: 85.0)
     monkeypatch.setattr(

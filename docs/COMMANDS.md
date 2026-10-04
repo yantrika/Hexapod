@@ -42,6 +42,7 @@ docker stop ollama                  # frees the CPU when you are not chatting
 
 | Command | What it does |
 |---|---|
+| `python main.py [--gui] [--listen always] [--chat fake]` | THE entrypoint: the whole robot, startup checks, rotating log, clean shutdown on Ctrl-C / SIGTERM. |
 | `python scripts/voice_cli.py` | The whole loop, push-to-talk: press Enter, say "walk forward", press Enter (headless body). |
 | `python scripts/voice_cli.py --listen always` | Listen all the time instead of push-to-talk (the default: Enter starts and stops listening, `stop` + Enter stops the robot). |
 | `python scripts/voice_cli.py --chat fake` | Scripted chat: use this on the slow dev laptop. |

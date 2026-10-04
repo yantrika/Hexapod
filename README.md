@@ -15,6 +15,25 @@ model. No cloud services and no paid tools.
 - `brain/` — command routing and the LLM fallback.
 - `bridge.py` — the message contract between voice/brain and body.
 
+## Quickstart
+
+```bash
+git clone <this repository> hexa && cd hexa
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt -r requirements-sim.txt -r requirements-dev.txt
+scripts/fetch_models.sh                 # Vosk model, Piper and its voice, then the fixed phrases
+python main.py --chat fake              # headless body, push-to-talk: press Enter, talk, press Enter
+```
+
+`main.py` is the one entrypoint. Useful flags: `--gui` (PyBullet window), `--listen always`,
+`--chat fake|ollama|off`, `--no-speak`, `--no-mic`, `--audio-file x.wav`, `--log-level DEBUG`.
+It checks everything first and prints one line per problem (missing model, Piper, phrases, no
+microphone or speaker, Ollama not reachable) and exits 1. Ctrl-C or SIGTERM stops the robot and
+exits 0. The log is `logs/hexa.log` (rotated by size). For a stop that always works in
+push-to-talk mode use the control window STOP button, Space, or type `stop` + Enter; a voice
+"stop" works only while listening. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the
+data flow, the measured numbers and the known limits.
+
 ## Running the simulator
 
 ```bash

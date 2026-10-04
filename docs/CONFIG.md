@@ -16,6 +16,7 @@ Values marked PLACEHOLDER in the file are guesses to tune. Settings that take ef
 | **Timing and bridge** | `PHYSICS_HZ` (240), `CONTROL_HZ` (50), `GAIT_PERIOD_S`, `MAX_MESSAGE_AGE_S`, `WATCHDOG_TIMEOUT_S` (1 s), `HEARTBEAT_HZ` (5), queue sizes, `GUI_*` camera, `SIM_HEADLESS` | Change loop speed, safety timing, the viewer. |
 | **Router** | `ROUTER_PHRASES`, `ROUTER_ALIASES`, `STOP_WORDS`, `ROUTER_FILLERS`, `ROUTER_THRESHOLD`, `ROUTER_MAX_WORDS` | Change the words the robot understands. |
 | **Brain** | `VOICE_WALK_MAX_S`, `DIALOGUE_SPEAK_DONE`, `DIALOGUE_THROTTLE_S`, `VOICE_PUMP_S`, status queue sizes | How long a voiced walk is kept alive; whether "Done." is spoken; how often the same phrase may repeat. |
+| **Logging** | `LOG_FILE`, `LOG_LEVEL`, `LOG_MAX_BYTES`, `LOG_BACKUP_COUNT` | Where the log goes, how detailed, when it rotates. |
 | **Listening** | `LISTEN_MODE` (`"ptt"` or `"always"`), `PTT_TAIL_S`, `FILLER_DELAY_S`, `FILLER_PHRASES` | Choose push-to-talk or always-listening; how long listening goes on after release; when and what the instant filler says. |
 | **Audio** | `AUDIO_SAMPLE_RATE` (16000), `AUDIO_BLOCKSIZE`, `MIC_DEVICE`, `SPEAKER_DEVICE`, `SPEAK_TAIL_S`, `TTS_*` timeouts and queue sizes, `PHRASES_DIR`, `TTS_PHRASES` | Pick audio devices, change what is pre-recorded, change speech timeouts. |
 | **Models** | `VOSK_MODELS`, `VOSK_MODEL_DEFAULT`, `STT_*` thresholds, `STT_USE_GRAMMAR`, `PIPER_BINARY`, `PIPER_VOICE`, `PIPER_MODEL_PATH`, `PIPER_NICE`, `PIPER_CPU_LIST`, `TRANSCRIPT_LOG` | Change a model; tune recognition. |

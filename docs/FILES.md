@@ -12,7 +12,7 @@ Legend: **STUB** = placeholder, not built yet. **DEV** = developer tool, not par
 | `config.py` | Every number and setting in one place (sizes, limits, speeds, timing, router words, audio, model names, thresholds). | You want to change any value. See `CONFIG.md`. |
 | `bridge.py` | The two message types (`Command`, `Status`) and the `Bridge`: the only link between the brain program and the body program. Checks every command. | You add a new command or status kind. |
 | `commandline.py` | Turns typed text like `walk fwd 0.5` into commands, and prints statuses. Shared by the typed front ends. | You add a typed command. |
-| `main.py` | **STUB.** Will start the body and the voice/brain loop together (today use `scripts/voice_cli.py`). | When you want one start command. |
+| `main.py` | The entrypoint: starts the body and the voice/brain loop, handles Ctrl-C and SIGTERM, startup checks, rotating log. | When you want one start command. |
 | `README.md` | How to run each step, with commands. | You add something runnable. |
 | `AGENTS.md` | The rules for anyone (or any AI) changing the code. | A rule changes. |
 | `CLAUDE.md` | Points Claude Code to `AGENTS.md` and `plan.md`. | Almost never. |
@@ -64,6 +64,9 @@ Legend: **STUB** = placeholder, not built yet. **DEV** = developer tool, not par
 | `voice/audio.py` | **The only file that touches the microphone.** `MicSource` (mic), `FileSource` (WAV file), `QueueSource` (tests), device list. | You change input handling. |
 | `voice/stt.py` | Vosk speech recognition: one model, two recognizers (free text and command grammar). Also the self-hearing gate. | You change the recognizer. |
 | `voice/ptt.py` | Push-to-talk: the state machine (`ptt_step`) and the thread-safe `PushToTalk` (`press()`, `release()`). Decides when the microphone is listened to. | You change the tail, add a new button (phone page, GPIO). |
+| `brain/app.py` | `HexaApp`: builds and owns everything (body, hub, voice loop, dialogue, chat, speech) and the shutdown order. | You add a part to the robot. |
+| `brain/startup.py` | The startup checks: one clear line per missing thing. | You add a requirement. |
+| `brain/logsetup.py` | Rotating log file plus console. | You change the log format. |
 | `voice/tts.py` | Piper text-to-speech as one long-lived process. Splits text into sentences. Loads pre-rendered phrases. | You change the voice engine. |
 | `voice/playback.py` | **The only file that touches the speaker.** A queue you can cancel (`clear()`), prefetching the next sentence, the `speaking` flag. | You change playback. |
 | `voice/__init__.py` | Marks the folder as a package. | Never. |
@@ -151,6 +154,10 @@ Run one file at a time on the dev laptop (see `COMMANDS.md`).
 | `tests/test_ptt.py` | Push-to-talk state machine with a fake clock, thread safety, mode switch. |
 | `tests/test_barge_in.py` | Recognizers get no audio when ptt is off; barge-in; always mode unchanged; clean shutdown. |
 | `tests/test_filler.py` | The instant filler: one for a slow reply, none for a fast one, cancelled by barge-in. |
+| `tests/test_app.py` | `HexaApp` with fakes: start, sit, chat, clean shutdown, no orphans. |
+| `tests/test_main_smoke.py` | `main.py` as a real process: sit + fake chat reply from an audio file, exit 0; SIGTERM/SIGINT. |
+| `tests/test_startup.py` | The startup checks and `main` exit codes. |
+| `tests/test_logsetup.py` | Log rotation. |
 | `tests/test_chat_llm.py` | One real-LLM check (only with `pytest -m llm`). |
 | `tests/test_tts.py` | Piper wrapper against a fake Piper (crash, hang, orphans). |
 | `tests/test_playback.py` | Playback queue, `clear()`, speaking flag, prefetch gaps. |

@@ -34,6 +34,8 @@ PIPER_DIR = ASSETS_DIR / "piper"
 LOG_DIR = PROJECT_ROOT / "logs"
 LOG_FILE = LOG_DIR / "hexa.log"
 LOG_LEVEL = "INFO"
+LOG_MAX_BYTES = 1_000_000  # logs/hexa.log rotates at this size ...
+LOG_BACKUP_COUNT = 3  # ... keeping this many old files (hexa.log.1 ...)
 
 # --- Body geometry (project spec) ----------------------------------------
 BODY_RADIUS = 0.12  # m

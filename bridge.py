@@ -170,6 +170,13 @@ class Bridge:
     def request_shutdown(self) -> None:
         self.shutdown_event.set()
 
+    def close(self) -> None:
+        """Brain side, after the body has ended: let the command queue's feeder thread exit
+        (``multiprocessing`` queues keep one alive until they are closed). Local queues: no-op."""
+        close = getattr(self.command_queue, "close", None)
+        if close is not None:
+            close()
+
     def wait_ready(self, timeout: float = config.BODY_START_TIMEOUT_S) -> bool:
         return bool(self.ready_event.wait(timeout))
 

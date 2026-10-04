@@ -4,6 +4,7 @@
     python scripts/cool_run.py -- nice -n 19 pytest tests/test_voice_loop.py
     python scripts/cool_run.py --start-below 62 --kill-at 80 -- python scripts/voice_cli.py
     python scripts/cool_run.py --poll 0.25 --kill-at 78 -- python scripts/measure_chat.py  # LLM
+    python scripts/cool_run.py --unguarded -- pytest ...   # only when the owner asks, same message
     python scripts/cool_run.py --pause-at 78 --resume-below 68 -- pytest tests/test_audio.py
 
 Before starting it waits until the temperature is below ``--start-below``. While the command
@@ -71,15 +72,23 @@ def main() -> int:
     parser.add_argument("--pause-at", type=float, default=None, help="freeze the command (C)")
     parser.add_argument("--resume-below", type=float, default=70.0, help="unfreeze (C)")
     parser.add_argument("--poll", type=float, default=1.0, help="seconds between checks")
+    parser.add_argument("--unguarded", action="store_true",
+                        help="ONLY when the owner asked for it in that message: no waiting, no "
+                             "kill; the temperature is sampled every 2 s, the peak printed")
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
     if not command:
         parser.error("give a command after --")
-    if args.kill_at >= CRITICAL_C - 2:
+    if not args.unguarded and args.kill_at >= CRITICAL_C - 2:
         parser.error(f"--kill-at must stay well under the {CRITICAL_C:.0f} C hardware limit")
 
-    wait_until_below(args.start_below)
+    if args.unguarded:
+        args.kill_at, args.pause_at, args.poll = float("inf"), None, 2.0
+        print("cool_run: UNGUARDED run (no kill limit); sampling the temperature every 2 s",
+              file=sys.stderr, flush=True)
+    else:
+        wait_until_below(args.start_below)
     process = subprocess.Popen(command, start_new_session=True)  # its own process group
     paused = False
     peak = read_temperature_c() or 0.0
