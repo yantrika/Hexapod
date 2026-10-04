@@ -11,12 +11,14 @@ which a terminal key thread (``main.py``) or, in Step 12, the phone page calls.
 from __future__ import annotations
 
 import logging
+import os
+import sys
 import threading
 from dataclasses import dataclass
 from pathlib import Path
 
 import config
-from body.process import BodyProcess
+from body.process import BodyProbe, BodyProcess
 from brain.brain_loop import BrainLoop
 from brain.chat import ChatBackend, ChatResponder, FakeChat, OllamaChat
 from brain.dialogue import Dialogue
@@ -29,6 +31,7 @@ from voice.playback import Playback, SoundDeviceSink
 from voice.ptt import PushToTalk, make_ptt
 from voice.stt import SttEngine, VoskStt
 from voice.tts import PiperEngine
+from web.server import WebServer, lan_addresses, resolve_pin
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +51,10 @@ class AppOptions:
     model: str | None = None
     ollama_model: str | None = None
     mic_device: int | None = config.MIC_DEVICE
+    web: bool = False  # the phone control page (Step 12a)
+    lan: bool = False  # bind all interfaces instead of 127.0.0.1 (implies web)
+    web_port: int = config.WEB_PORT
+    web_pin: str | None = None  # None: HEXA_WEB_PIN, config.WEB_PIN, else a random 6-digit PIN
 
 
 class LoggedPlayback:
@@ -89,6 +96,7 @@ class HexaApp:
         self,
         options: AppOptions,
         *,
+        probe: BodyProbe | None = None,
         stt: SttEngine | None = None,
         source: AudioSource | None = None,
         chat_backend: ChatBackend | None = None,
@@ -100,6 +108,7 @@ class HexaApp:
         self._chat_backend = chat_backend
         self._playback_inner = playback
         self._own_playback = playback is None
+        self._probe = probe  # test and measurement hook: shared timing numbers from the body
         self.speaking = threading.Event()
         self.bridge = make_bridge()
         self.body: BodyProcess | None = None
@@ -110,6 +119,8 @@ class HexaApp:
         self.voice: VoiceLoop | None = None
         self.ptt: PushToTalk | None = None
         self.source: AudioSource | None = None
+        self.web: WebServer | None = None
+        self.web_pin: str | None = None
         self.speech = LoggedPlayback(None)
         self._engine: PiperEngine | None = None
         self._log_stop = threading.Event()
@@ -155,7 +166,7 @@ class HexaApp:
             self._playback_inner.start()
         self.speech = LoggedPlayback(self._playback_inner)
 
-        self.body = BodyProcess(self.bridge, headless=not options.gui)
+        self.body = BodyProcess(self.bridge, headless=not options.gui, probe=self._probe)
         self.body.start()
         logger.info("body process pid %s (%s)", self.body.pid, "gui" if options.gui else "headless")
         if not self.body.wait_ready():
@@ -169,6 +180,9 @@ class HexaApp:
         self._log_thread = threading.Thread(target=self._log_statuses, name="status-log",
                                             daemon=True)
         self._log_thread.start()
+
+        if options.web or options.lan:
+            self._start_web()
 
         backend = self._chat_backend or make_chat_backend(options.chat, options.ollama_model)
         if backend is not None:
@@ -191,6 +205,32 @@ class HexaApp:
         self.voice.start()
         logger.info("hexa is ready (listen=%s, chat=%s, speech=%s)", listen, options.chat,
                     "off" if options.no_speak else "on")
+
+    def _start_web(self) -> None:
+        """The phone page: bound to 127.0.0.1, or to every interface with ``lan``. The PIN (and
+        the URLs) go to the terminal only, never to the log file."""
+        assert self.hub is not None
+        options = self.options
+        pin = options.web_pin
+        generated = False
+        if pin is None:
+            pin, generated = resolve_pin(config.WEB_PIN, dict(os.environ))
+        self.web_pin = pin
+        host = "0.0.0.0" if options.lan else "127.0.0.1"
+        self.web = WebServer(self.bridge, self.hub, pin, host=host, port=options.web_port)
+        self.web.start()
+        port = self.web.port
+        urls = [f"http://{address}:{port}/" for address in lan_addresses()] if options.lan else []
+        print(f"web page: http://127.0.0.1:{port}/", file=sys.stderr)
+        for url in urls:
+            print(f"web page (phone, same Wi-Fi): {url}", file=sys.stderr)
+        if options.lan and not urls:
+            print("web page: no LAN address found (is Wi-Fi up? try `hostname -I`)",
+                  file=sys.stderr)
+        shown = pin if generated else "(the one set in HEXA_WEB_PIN or config.WEB_PIN)"
+        print(f"web PIN: {shown}", file=sys.stderr)
+        if options.lan:
+            print("web page is plain HTTP: use it only on a network you trust", file=sys.stderr)
 
     def _make_source(self) -> AudioSource:
         if self._source is not None:
@@ -268,6 +308,7 @@ class HexaApp:
         """Stop the robot, silence it, cancel chat, join the threads, end the body. Idempotent."""
         steps = [
             ("stop the robot", self.send_stop if self.body is not None else None),
+            ("web server", self.web.stop if self.web else None),
             ("voice loop", self.voice.shutdown if self.voice else None),
             ("chat", self.chat.shutdown if self.chat else None),
             ("playback clear", self.speech.clear),
@@ -289,6 +330,7 @@ class HexaApp:
             except Exception:  # noqa: BLE001 - one failing step must not skip the rest
                 logger.exception("shutdown: %s failed", name)
         self.voice = self.chat = self.dialogue = self.brain = self.hub = self.body = None
+        self.web = None
         self._playback_inner = None
         self._engine = None
         if self._started:

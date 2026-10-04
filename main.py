@@ -5,6 +5,8 @@
     python main.py --gui --chat fake        PyBullet window, scripted chat (the slow dev laptop)
     python main.py --listen always          listen all the time instead of push-to-talk
     python main.py --no-speak --no-mic      no audio devices at all (tests, systemd without sound)
+    python main.py --web                    phone control page on 127.0.0.1 (PIN printed at start)
+    python main.py --lan                    the same, reachable from a phone on the Wi-Fi
     python main.py --audio-file x.wav       recognise a recording in real time, then exit 0
 
 SIGINT and SIGTERM stop the robot, silence it, cancel chat, join the threads and end the body
@@ -47,6 +49,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-speak", action="store_true", help="no Piper, nothing is said aloud")
     parser.add_argument("--no-mic", action="store_true",
                         help="no microphone (audio comes from the phone page, Step 12)")
+    parser.add_argument("--web", action="store_true",
+                        help="phone control page on 127.0.0.1 (Step 12a; PIN printed at start)")
+    parser.add_argument("--lan", action="store_true",
+                        help="serve the page on every interface and print the phone URL(s) "
+                             "(implies --web; plain HTTP: trusted networks only)")
+    parser.add_argument("--web-port", type=int, default=config.WEB_PORT,
+                        help="port of the page (default %(default)s)")
     parser.add_argument("--audio-file", type=Path, default=None,
                         help="recognise this WAV, then exit")
     parser.add_argument("--model", default=None, help="Vosk model: us, in, a name or a path")
@@ -108,7 +117,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     app = HexaApp(AppOptions(
         gui=args.gui, listen=args.listen, chat=args.chat, no_speak=args.no_speak,
         no_mic=args.no_mic, audio_file=args.audio_file, model=args.model,
-        ollama_model=args.ollama_model, mic_device=args.device))
+        ollama_model=args.ollama_model, mic_device=args.device,
+        web=args.web or args.lan, lan=args.lan, web_port=args.web_port))
     code = EXIT_OK
     try:
         app.start()
