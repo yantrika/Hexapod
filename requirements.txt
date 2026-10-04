@@ -3,3 +3,4 @@ vosk>=0.3.45
 sounddevice>=0.4.6
 rapidfuzz>=3.6
 requests>=2.31
+websockets>=13  # the phone page (Step 12a); also required by vosk

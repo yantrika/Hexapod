@@ -246,6 +246,22 @@ PTT_TAIL_S = 0.5  # after release the recognizer keeps listening this long, then
 # pre-rendered filler (the next of these, in turn) so the user never waits in silence.
 FILLER_DELAY_S = 0.8
 FILLER_PHRASES = ("hmm", "let_me_think", "one_moment")
+# --- Phone web page (Step 12a) --------------------------------------------
+WEB_PORT = 8765
+WEB_PIN: str | None = None  # None: HEXA_WEB_PIN, else a random 6-digit PIN printed at start
+WEB_PIN_MAX_FAILURES = 5  # wrong PINs from one address within WEB_PIN_WINDOW_S lock it out ...
+WEB_PIN_WINDOW_S = 60.0
+WEB_PIN_LOCKOUT_S = 60.0  # ... for this long
+WEB_DEADMAN_S = 0.3  # a moving robot gets `stop` if no move message arrives within this
+WEB_CLIENT_SEND_HZ = 10.0  # the page repeats a held move at this rate (the server tells it)
+WEB_WALK_SPEED = 0.5  # `speed` of a walk when the page sends none
+WEB_TICK_S = 0.05  # server loop: deadman check and status relay
+WEB_MIN_FORWARD_S = 0.05  # an unchanged move is forwarded as a heartbeat at most this often
+WEB_MAX_MESSAGE_BYTES = 256  # larger messages close the connection
+WEB_MAX_INVALID = 20  # this many rejected messages close the connection
+WEB_PING_S = 5.0  # WebSocket keepalive ping (a vanished phone is noticed, then `stop`)
+WEB_CLOSE_S = 1.0  # a client that ignores the close handshake is dropped after this
+WEB_SENT_MEMORY = 64  # command seqs remembered to label statuses
 TTS_QUEUE_MAXSIZE = 8  # utterances waiting to be synthesized
 TTS_PREFETCH_SIZE = 1  # synthesized clips waiting for the speaker: sentence N+1 renders during N
 TTS_CLEAR_MAX_S = 0.1  # playback.clear() returns within this
