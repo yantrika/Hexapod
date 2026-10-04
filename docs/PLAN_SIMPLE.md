@@ -1,6 +1,6 @@
 # hexa: the simple plan
 
-This is the easy version. The full details are in `plan.md`. If the two ever disagree, `plan.md` wins.
+This is the easy version. The full details are in `../plan.md`. If the two ever disagree, `plan.md` wins.
 
 ## What we are building
 
@@ -64,7 +64,7 @@ We do one step at a time. Each step ends with all tests passing. We wait for app
 | 5 | The link between brain and body, stop, heartbeat | done |
 | 6 | The router (words to commands) | done |
 | 7 | Speech out (Piper) with a playback queue you can cancel | done |
-| 8 | Speech in (Vosk) and no self-hearing | built, waiting for approval |
+| 8 | Speech in (Vosk), no self-hearing, command grammar | built; waiting for your voice results to choose the model and numbers |
 | 9 | Talking from status, chat with Ollama, full `main.py` | later |
 | 10 | Interrupt the robot while it talks (barge-in), push-to-talk | later |
 | 11 | Real robot on the Pi 5 | later |

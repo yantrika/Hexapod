@@ -37,6 +37,7 @@ Avoid committing build output, caches, models, or secrets; add them to `.gitigno
 - While TTS is playing (plus `SPEAK_TAIL_S`), the audio is discarded before it reaches Vosk.
 
 ## Conventions
+- `docs/` explains the project in simple words. `docs/FILES.md` lists every code file (a test, `tests/test_docs.py`, fails if one is missing): add a line there whenever you add, rename or remove a file. Update `docs/CONFIG.md`, `docs/HOW_TO.md` or `docs/HARDWARE.md` when a setting, a model or the wiring changes.
 - Never hard-code values that belong in `config.py`; bound values with `config.clamp`. Two joint-limit tiers: hard (`JOINT_HARD_LIMITS_DEG`, enforced once in the `HexapodBackend` clamp layer) and soft gait limits (`GAIT_SOFT_LIMITS_DEG`, used by the gait planner).
 - Sim and kinematics use a clean joint frame (0 = neutral). Servo centre/sign/offset live only in the calibration table in `servo_backend.py`.
 - Units: metres and radians, unless a name ends in `_DEG`. Body frame: +X forward, +Y left, +Z up.

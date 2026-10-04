@@ -1,0 +1,90 @@
+# Commands
+
+Run from the project folder with the virtual environment on:
+
+```bash
+cd ~/Desktop/Projects/projects/hexa
+source .venv/bin/activate
+```
+
+## Safe way to run things on the dev laptop
+
+The laptop overheats and powers off at 87 °C (it idles near 59 °C). So:
+
+```bash
+python scripts/cool_run.py -- nice -n 19 <your command>      # waits until cool, kills it at 82 C
+cat /sys/class/thermal/thermal_zone0/temp                    # temperature in thousandths of a degree
+```
+
+- One heavy thing at a time. Run test files one by one, never the whole suite in one go.
+- The simulation tests (`test_walk_sim.py`, `test_controller_sim.py`, `test_body_process.py`, `test_voice_body.py`, `test_brain_cli.py`) are the hottest.
+- Test the voice with a **headless** body (the default). The viewer plus Piper plus walking makes the body very slow.
+
+## Models and phrases
+
+| Command | What it does |
+|---|---|
+| `scripts/fetch_models.sh` | Downloads Piper, the voice, the Vosk models, then renders the fixed phrases. Safe to re-run. |
+| `scripts/fetch_models.sh --help` | Shows what it fetches. |
+| `python scripts/prerender_phrases.py --force` | Re-renders the spoken phrases. |
+
+## Talk to the robot
+
+| Command | What it does |
+|---|---|
+| `python scripts/voice_cli.py` | The whole loop: say "walk forward", "stop"... (headless body). |
+| `python scripts/voice_cli.py --model in` | Same with the Indian English model. |
+| `python scripts/voice_cli.py --no-speak` | No Piper, so the robot says nothing. |
+| `python scripts/voice_cli.py --gui` | With the viewer. Needs the Mesa override below. |
+| `python scripts/brain_cli.py` | Type sentences instead of speaking. |
+| `python scripts/bridge_cli.py --headless` | Type raw commands (`walk fwd 0.5`, `stop`). |
+| `python scripts/control_window.py` | A window with keys and buttons. |
+
+## Check the voice
+
+| Command | What it does |
+|---|---|
+| `python scripts/mic_check.py` | Lists microphones, records 3 s, shows the level. Speak! |
+| `python scripts/stt_check.py --model us --mic 8` | Says each phrase 3 times, shows what was heard, prints a summary. |
+| `python scripts/stt_check.py --replay logs/stt_check-us.jsonl` | Re-judges a saved run with the current thresholds. |
+| `python scripts/say.py` | Type text, hear it. `/clear` cancels, `/quit` exits. |
+| `python scripts/say.py --phrase okay` | Plays a pre-rendered phrase. |
+| `python scripts/say.py --list-phrases` | Lists the phrases. |
+
+## Measure
+
+| Command | What it does |
+|---|---|
+| `python scripts/measure_voice.py --clear` | How fast `clear()` stops speech (plays quiet sound). |
+| `python scripts/measure_voice.py --stt` | One vs two Vosk recognizers: CPU, memory, body timing. |
+| `python scripts/measure_voice.py --body` | Body timing with and without Piper (add `--gui`). |
+
+## Simulation tools (DEV)
+
+| Command | What it does |
+|---|---|
+| `python scripts/sim_demo.py` | Stand/sit in the simulation. |
+| `python scripts/walk_demo.py` | Walk, turn, strafe. |
+| `python scripts/teleop.py` | Drive from the keyboard. |
+| `python scripts/joint_jog.py` | Move each joint with sliders. |
+| `python scripts/generate_urdf.py` (`--check`) | Rebuild or verify the robot model file. |
+
+The viewer on this laptop needs: `MESA_GL_VERSION_OVERRIDE=3.3 MESA_GLSL_VERSION_OVERRIDE=330 python scripts/...  --gui`
+
+## Tests and checks
+
+```bash
+ruff check .          # style
+mypy .                # types
+python scripts/cool_run.py -- nice -n 19 pytest tests/test_router.py -q     # one file
+```
+
+| Marker | Meaning | Run with |
+|---|---|---|
+| (none) | normal tests | `pytest tests/test_<name>.py` |
+| `timing` | speed-sensitive, needs a quiet machine | `pytest -m timing` |
+| `audio` | real Piper, no speaker | `pytest -m audio -s tests/test_tts_real.py` |
+
+Tests that use the real Vosk model or Piper skip themselves if the models are missing: run `scripts/fetch_models.sh`.
+
+Before commit: `ruff check .`, `mypy .`, and the test files for what you changed.
