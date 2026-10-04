@@ -377,13 +377,32 @@ Each step is small, ends green (`pytest`, `ruff check .`, `mypy .`), and waits f
 - **Method**: stand, sit, wave (through the real `Controller`), walk, strafe and turn at the maximum command (gait loop); applied motor torque sampled at every physics step; each motion run with the force cap raised to 30 N*m (the real need) and with the normal 3 N*m cap (does anything saturate). Per joint type: peak, RMS, p99, peak speed, angle range; kg*cm and the safety factor; seconds per 60 degrees; sensitivity to mass (0.7x, 1.0x, 1.3x) and body height; joints near peak at the same time; the walk again with velocity gain 1.0.
 - **Limits stated in the report**: no gear friction or backlash, lowered sim velocity gain (understates the peak), placeholder masses, flat floor.
 
-### Step 11 — Real hardware on the Pi 5
-- **Goal**: `ServoBackend` drives the real robot with no other code changed.
-- **Files**: `body/servo_backend.py` (with its calibration table: per-joint centre, sign, offset, channel, pulse range), `requirements-pi.txt`, `scripts/calibrate_servos.py`, `tests/test_servo_backend.py` (against a fake driver).
-- **Tests**: clean-frame angle to servo angle round trip for every joint; ±90° hard limits map inside the servo's physical range; left-side sign flips come only from the table.
-- **Verify**: `pytest tests/test_servo_backend.py`; calibration script with the robot held off the ground; then ground tests starting with `stand`.
-- **Power (required)**: the 18 servos need a **separate high-current 5–6 V supply**, with a common ground to the Pi. **The Pi must never power the servos.** Add a physical power switch as the emergency stop.
-- **Done when**: stand, sit, walk, stop behave like the sim, and pulling the brain process stops the robot via the watchdog.
+### Step 11 — Real hardware on the Pi 5 (staged 11a-11f; each stage is approved on its own)
+- **Goal**: `ServoBackend` drives the real robot with no other code changed. It is done in six stages so that the software, the voice and the web page are proven on the Pi against the SIMULATED body before any servo is powered. **No servo code is written before stage 11e is approved.**
+- **The Pi (facts)**: Raspberry Pi 5, 8 GB, **Ubuntu LTS Server (aarch64), NOT Raspberry Pi OS**. Reached with `ssh hexa-pi` (user `hexa`, host `hexa.local`, key auth set up). The Python version is whatever the LTS ships and may differ from the dev laptop's 3.11 (Ubuntu 24.04 ships 3.12): check `pyproject.toml` and that every wheel (PyBullet, Vosk, Piper, websockets, sounddevice) exists for aarch64 on that Python BEFORE relying on it; a missing wheel means a source build (slow, needs `build-essential`) or a decision, not a quiet workaround.
+- **Ubuntu notes**: there is no desktop audio server: use ALSA directly (`alsa-utils`, `libportaudio2`; the Pi 5 has no analog jack, so a USB microphone and speaker or a USB headset; the user must be in the `audio` group; check devices with `arecord -l`, `aplay -l` and `scripts/mic_check.py`). I2C is off by default: it needs `dtparam=i2c_arm=on` in `/boot/firmware/config.txt` (not `/boot/config.txt`), the `i2c-dev` module, `i2c-tools`, and the user in the `i2c` group; the device is `/dev/i2c-1`. All of that is owner-run (see the rules).
+- **Rules for working on the Pi (owner, Step 11)**:
+  - Claude NEVER uses `sudo` on the Pi. Anything that needs it: give the owner the exact command and they run it in their own session.
+  - Claude touches only `~/hexa` on the Pi. No changes to `/boot/firmware`, I2C, services, `ufw` or users from Claude. Nothing is enabled at boot (no systemd unit, no cron `@reboot`) until the owner asks for it in a later stage.
+  - Dev-laptop run rules are unchanged (default `cool_run.py` guard there). On the Pi, one process at a time, and read `vcgencmd measure_temp` or `/sys/class/thermal` before and after heavy runs.
+
+#### Stage 11a: software bring-up on the Pi, simulated body only
+- Copy or clone the repo into `~/hexa`, create `.venv` with the Pi's `python3`, `pip install -r requirements-pi.txt` (plus PyBullet if the headless body needs it there), run the tests that need no audio, `main.py --headless --no-speak --no-mic --chat fake`. System packages (`python3-venv`, `build-essential` if needed, `libportaudio2`) are owner-run `sudo apt` commands that Claude lists.
+- **Done when**: the non-`audio`/`timing`/`llm` suite passes on the Pi, the headless body walks and stops through the bridge, and the idle CPU and temperature are reported.
+
+#### Stage 11b: voice on the Pi (still the simulated body)
+- `scripts/fetch_models.sh` for the ARM Piper and the Vosk models, `scripts/mic_check.py`, `stt_check.py`, `voice_cli.py`, then `main.py` with the real microphone and speaker in ptt and always mode. Barge-in and the self-hearing gate are judged with the real speaker and microphone positions.
+- **Pi voice checklist (deferred from the dev laptop)**:
+  - Real-LLM timing: run `pytest -m llm` (`tests/test_chat_llm.py`) and `scripts/measure_chat.py` on the Pi (qwen2.5:0.5b, then 1.5b). The bar is 3 tokens/s and a first token within 5 s. On the dev laptop `qwen2.5:0.5b` measured 1.5 tokens/s with a 90 C peak, so it was never judged real-time there.
+  - Re-measure Piper's load on the body (Risks), Vosk CPU in ptt and always mode.
+  - Wake word (OpenWakeWord) as a third listening mode, deferred from Step 10.
+- **Done when**: spoken "walk forward" / "stop" drive the sim on the Pi, Piper and Vosk loads are measured, and the real-LLM numbers are recorded (or chat stays on `FakeChat` with the reason).
+
+#### Stage 11c: phone page on the Pi
+- `main.py --web --lan` on the Pi; the page from a real phone on the same Wi-Fi. This also closes the open Step 12a / 12b item: multi-touch, pointercancel, long-press menu, screen lock, Wi-Fi loss, hold-to-talk with the robot's microphone. A firewall (`ufw`) rule, if one is needed, is an owner-run command.
+- **Done when**: every item of the 12a "NOT verified on a real phone" note is checked on a phone and the result is written into the 12a status line.
+
+#### Stage 11d: hardware readiness (checklist and sizing only, no code)
 - **Hardware-readiness checklist (all must be true BEFORE any servo code is written; checklist only)**:
   - [ ] Raspberry Pi 5 (8 GB preferred) with the **active cooler**, a good 5 V / 5 A supply for the Pi itself, a microSD or NVMe with the OS installed, SSH working.
   - [ ] **PCA9685** 16-channel PWM driver(s): two boards for 18 channels (addresses set, I2C enabled, `i2cdetect` shows both).
@@ -396,12 +415,19 @@ Each step is small, ends green (`pytest`, `ruff check .`, `mypy .`), and waits f
   - [ ] USB microphone and speaker (or headset) chosen; `requirements-pi.txt` installs on the Pi; `scripts/fetch_models.sh` fetches the ARM Piper.
   - [ ] `main.py --headless --no-speak --no-mic` already runs on the Pi against the simulated backend (proves the software stack before hardware).
 - **Parked from Step 10d (branch `step-10d-mg995`, commit `4f7af4c`)**: when hardware work starts, revisit the joint speed limit (`JOINT_MAX_SPEED_DEG_S` in the `HexapodBackend` clamp layer) and the MG995 sizing from that branch, and check leg length and total mass against the MG995 stall torque BEFORE buying or cutting a frame.
-- **Pi 5 checklist (voice, deferred from the dev laptop)**:
-  - Real-LLM timing: run `pytest -m llm` (`tests/test_chat_llm.py`) and `scripts/measure_chat.py` on the Pi (qwen2.5:0.5b, then 1.5b). The bar is 3 tokens/s and a first token within 5 s. On the dev laptop `qwen2.5:0.5b` measured 1.5 tokens/s with a 90 C peak, so it was never judged real-time there.
-  - Re-measure Piper's load on the body (Risks), Vosk CPU in ptt and always mode.
-  - Wake word (OpenWakeWord) as a third listening mode, deferred from Step 10.
+- **Power (required)**: the 18 servos need a **separate high-current 5-6 V supply**, with a common ground to the Pi. **The Pi must never power the servos.** A physical power switch is the emergency stop.
+- **Done when**: every box above is ticked by the owner; the Pi-software items (last two boxes) are already proven by 11a and 11b.
 
-### Step 12 — Phone web UI (split: 12a control page now, 12b audio later)
+#### Stage 11e: I2C, PCA9685 and `ServoBackend` (servo code starts here, on approval)
+- Owner enables I2C on the Pi (their `sudo`), `i2cdetect -y 1` shows both PCA9685 boards. Then: `body/servo_backend.py` with its calibration table (per-joint centre, sign, offset, channel, pulse range; never in `config.py`), `scripts/calibrate_servos.py`, `tests/test_servo_backend.py` against a fake driver. Nothing is enabled at boot.
+- **Tests**: clean-frame angle to servo angle round trip for every joint; the ±90° hard limits map inside the servo's physical range; left-side sign flips come only from the table; the joint slew limit applies.
+- **Done when**: tests pass, the calibration is run with the robot held off the ground and the dated table committed.
+
+#### Stage 11f: ground tests
+- With the robot on a stand first, then on the ground, starting with `stand`; kill switch tested.
+- **Done when**: stand, sit, walk and stop behave like the sim, the kill switch removes servo power while the Pi keeps running, and pulling the brain process stops the robot via the watchdog.
+
+### Step 12 — Phone web UI (12a control page, 12b robot-mic hold-to-talk, 12c phone mic later)
 - **Goal**: drive and talk to the robot from a phone on the local Wi-Fi.
 - **Shared rules (12a and 12b)**: the web server runs in the brain process and talks to the body ONLY through the `Bridge`, exactly like `scripts/control_window.py`; it is a status-hub subscriber, not a second reader of `status_queue`. It never imports the controller, the gait or a backend (a test enforces it). Clamps stay in the controller. The page never sends raw joint data. One controller at a time. Stop on disconnect, with the body watchdog as the last line of defence.
 
@@ -414,7 +440,7 @@ Each step is small, ends green (`pytest`, `ruff check .`, `mypy .`), and waits f
 - **Safety on the server**: the page repeats the walk message at about 10 Hz while any move button is held; if none arrives within `WEB_DEADMAN_S` (0.3 s) while moving the server sends `stop`; a closed socket sends `stop`; the page itself sends `stop` on pointercancel, visibilitychange and blur.
 - **Page**: hold-to-move buttons with pointer events (multi-touch, so forward + turn together), stand / sit / wave, a large always-visible STOP, a live status line from the status hub, no scroll, no text selection, no long-press menu on the controls.
 - **Tests** (fake bridge, fake clock, no real network where possible): validation table; combined buttons give one walk with strafe and yaw; deadman; disconnect; hidden page; wrong PIN; rate limit; second controller refused; STOP works with a walk queued; no controller/gait/backend import; default bind `127.0.0.1`; one real-process test (headless body moves, disconnect stops it, clean exit).
-- **Limits**: plain HTTP on a LAN, so use it only on a network you trust until 12b adds HTTPS.
+- **Limits**: plain HTTP on a LAN, so use it only on a network you trust until 12c adds HTTPS.
 - **Done when**: tests pass, `scripts/web_check.py` drives the headless body, and the measurements (press to first foot-target change, idle CPU, peak temperature) are reported.
 - **Status**: approved, tagged `v0.2-web-a`. **NOT yet verified on a real phone**: the page's touch handling (multi-touch, pointercancel, long-press menu, screen lock, Wi-Fi loss) has only been exercised through the protocol and server tests, never on a real touch screen. Check it on a phone before trusting it with hardware.
 

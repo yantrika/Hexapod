@@ -63,6 +63,8 @@ Avoid committing build output, caches, models, or secrets; add them to `.gitigno
 
 ## Build, Test, and Development Commands
 Python 3.11 venv in `.venv/` (gitignored).
+- The Pi 5 (Step 11, staged 11a-11f in `plan.md`) runs **Ubuntu LTS Server (aarch64), not Raspberry Pi OS**: `ssh hexa-pi` (user `hexa`, host `hexa.local`, key auth). Its `python3` is the LTS's, so it may NOT be 3.11 (check wheels for aarch64: PyBullet, Vosk, Piper). No desktop audio server: use ALSA (`alsa-utils`, `libportaudio2`, USB mic and speaker, user in the `audio` group; `arecord -l`). I2C is off by default (`dtparam=i2c_arm=on` in `/boot/firmware/config.txt`, `i2c-dev`, `i2c-tools`, user in the `i2c` group, `/dev/i2c-1`); that is owner-run.
+- Pi rules (owner): NEVER use `sudo` on the Pi; for anything that needs it give the owner the exact command and they run it in their own session. Touch only `~/hexa` on the Pi: no changes to `/boot/firmware`, I2C, services, `ufw` or users, and nothing enabled at boot. No servo code until stage 11e is approved.
 - Install: `pip install -r requirements-dev.txt` (plus `requirements-sim.txt` for PyBullet, `requirements-pi.txt` on the Pi).
 - Test: `pytest`; single test: `pytest tests/test_<module>.py::test_name`.
 - The dev laptop OVERHEATS: it idles near 59 C and powers off at 87 C (`HARDWARE PROTECTION shutdown (Temperature too high)` in `journalctl -b -1`). Run heavy commands through `python scripts/cool_run.py -- <cmd>` (waits until it is cool, kills the job at 82 C), keep runs short, one heavy thing at a time, test files singly (never the whole suite in one go; the PyBullet sim files are the hottest), and `nice -n 19 taskset -c 0` anything that does not measure timing.
