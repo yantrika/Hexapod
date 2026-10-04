@@ -8,11 +8,13 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 import config
 from bridge import make_local_bridge, new_command
 from tests.fakes import FakeClock
 from web.protocol import Request
-from web.session import PinGuard, WebControl
+from web.session import PinGuard, Refused, VoiceControls, WebControl
 
 HOLD = Request("walk", forward=1.0, yaw=1.0)
 IDLE = Request("walk")
@@ -262,3 +264,195 @@ def test_stop_survives_a_full_command_queue() -> None:
         control.handle(client, Request("walk", forward=1.0, yaw=(index % 2) or -1.0))
     control.handle(client, Request("stop"))
     assert bridge.stop_event.is_set()
+
+
+# --- Step 12b: hold-to-talk and typed text ---------------------------------------------------
+class FakeVoice:
+    """The voice side: records listening changes and typed text, in order."""
+
+    def __init__(self, ptt_unavailable: str | None = None,
+                 say_unavailable: str | None = None) -> None:
+        self.calls: list[tuple[str, object]] = []
+        self.controls = VoiceControls(self.set_listening, self.say, ptt_unavailable,
+                                      say_unavailable)
+
+    def set_listening(self, on: bool) -> None:
+        self.calls.append(("listening", on))
+
+    def say(self, text: str) -> None:
+        self.calls.append(("say", text))
+
+    @property
+    def listening_changes(self) -> list[bool]:
+        return [value for name, value in self.calls if name == "listening"]  # type: ignore[misc]
+
+
+PRESS, RELEASE = Request("ptt_press"), Request("ptt_release")
+
+
+def make_voice(**options: Any) -> tuple[WebControl, Recorder, FakeClock, FakeVoice, object]:
+    clock, recorder = FakeClock(), Recorder()
+    voice = FakeVoice(options.pop("ptt_unavailable", None), options.pop("say_unavailable", None))
+    control = WebControl(recorder, clock.now, voice=voice.controls, **options)
+    client = object()
+    control.claim(client)
+    return control, recorder, clock, voice, client
+
+
+def test_press_and_release_drive_listening_and_never_touch_the_bridge() -> None:
+    control, recorder, _, voice, client = make_voice()
+    assert control.handle(client, PRESS) and control.listening
+    assert control.handle(client, RELEASE) and not control.listening
+    assert voice.listening_changes == [True, False]
+    assert recorder.sent == []  # not a body message: the body schema is untouched
+
+
+def test_a_repeated_press_changes_nothing_and_a_stray_release_is_harmless() -> None:
+    control, _, clock, voice, client = make_voice(ptt_max_s=10.0)
+    control.handle(client, RELEASE)  # nothing was pressed
+    control.handle(client, PRESS)
+    clock.sleep(6.0)
+    control.handle(client, PRESS)  # a repeat must not extend the limit
+    assert voice.listening_changes == [True]
+    clock.sleep(4.1)
+    assert control.expire_listening()  # 10 s after the FIRST press
+    assert voice.listening_changes == [True, False]
+
+
+def test_listening_is_forced_to_release_at_the_maximum_duration() -> None:
+    control, recorder, clock, voice, client = make_voice(ptt_max_s=10.0)
+    control.handle(client, PRESS)
+    clock.sleep(9.9)
+    assert not control.expire_listening() and control.listening
+    clock.sleep(0.2)
+    assert control.expire_listening() and not control.listening
+    assert voice.listening_changes == [True, False]
+    assert not control.expire_listening()  # once only
+    assert recorder.sent == []
+
+
+def test_the_default_maximum_is_the_configured_one() -> None:
+    control, _, clock, voice, client = make_voice()
+    control.handle(client, PRESS)
+    clock.sleep(config.WEB_PTT_MAX_S - 0.1)
+    assert not control.expire_listening()
+    clock.sleep(0.2)
+    assert control.expire_listening()
+    assert config.WEB_PTT_MAX_S <= 12.0  # about 10 s
+
+
+def test_a_disconnect_releases_listening_and_stops_the_robot() -> None:
+    control, recorder, _, voice, client = make_voice()
+    control.handle(client, PRESS)
+    assert control.disconnect(client)
+    assert voice.listening_changes == [True, False] and recorder.actions == ["stop"]
+    assert control.controller is None
+
+
+def test_a_hidden_page_or_blur_sends_stop_which_releases_listening() -> None:
+    # the page sends `stop` on visibilitychange / blur / pagehide (and ptt_release first)
+    control, recorder, _, voice, client = make_voice()
+    control.handle(client, PRESS)
+    control.handle(client, Request("stop"))
+    assert voice.listening_changes == [True, False] and recorder.actions == ["stop"]
+    assert not control.listening
+
+
+def test_stop_is_sent_before_listening_is_released_and_a_slow_release_cannot_delay_it() -> None:
+    order: list[str] = []
+    clock = FakeClock()
+    voice = VoiceControls(lambda on: order.append(f"listening {on}"), lambda text: None)
+    control = WebControl(lambda action, params: order.append(action), clock.now, voice=voice)
+    client = object()
+    control.claim(client)
+    control.handle(client, PRESS)
+    control.handle(client, Request("stop"))
+    assert order == ["listening True", "stop", "listening False"]
+
+
+def test_the_stop_button_works_while_listening_even_when_the_voice_side_fails() -> None:
+    clock, recorder = FakeClock(), Recorder()
+
+    def broken(on: bool) -> None:
+        if not on:
+            raise RuntimeError("voice is stuck")
+
+    control = WebControl(recorder, clock.now, voice=VoiceControls(broken, lambda text: None))
+    client = object()
+    control.claim(client)
+    control.handle(client, PRESS)
+    with pytest.raises(RuntimeError):
+        control.handle(client, Request("stop"))
+    assert recorder.actions == ["stop"]  # the robot was stopped regardless
+    assert not control.listening
+
+
+def test_a_failed_press_does_not_leave_listening_marked_on() -> None:
+    clock = FakeClock()
+
+    def broken(on: bool) -> None:
+        raise RuntimeError("no microphone")
+
+    control = WebControl(Recorder(), clock.now, voice=VoiceControls(broken, lambda text: None))
+    client = object()
+    control.claim(client)
+    with pytest.raises(RuntimeError):
+        control.handle(client, PRESS)
+    assert not control.listening and not control.expire_listening()
+
+
+def test_only_the_controller_may_press_or_say() -> None:
+    control, _, _, voice, client = make_voice()
+    stranger = object()
+    assert not control.handle(stranger, PRESS)
+    assert not control.handle(stranger, Request("say", text="stop"))
+    assert not control.handle(stranger, RELEASE)
+    assert voice.calls == []
+    control.handle(client, PRESS)
+    assert not control.handle(stranger, RELEASE)  # a stranger cannot end the controller's press
+    assert control.listening
+    assert not control.disconnect(stranger)  # nor does its disconnect release it
+    assert control.listening
+
+
+def test_without_a_microphone_a_press_is_refused_with_the_reason_and_release_is_harmless() -> None:
+    reason = "the robot runs with --no-mic"
+    control, recorder, _, voice, client = make_voice(ptt_unavailable=reason)
+    with pytest.raises(Refused, match="--no-mic"):
+        control.handle(client, PRESS)
+    assert not control.listening and voice.calls == []
+    assert control.handle(client, RELEASE)  # letting go is never refused
+    control.handle(client, Request("say", text="hello"))  # typing still works
+    assert voice.calls == [("say", "hello")]
+    assert recorder.sent == []
+
+
+def test_say_goes_to_the_voice_side_not_the_bridge() -> None:
+    control, recorder, _, voice, client = make_voice()
+    control.handle(client, Request("say", text="walk forward"))
+    assert voice.calls == [("say", "walk forward")] and recorder.sent == []
+
+
+def test_say_is_refused_when_voice_is_off_and_a_flood_is_rate_limited() -> None:
+    off, _, _, voice, client = make_voice(say_unavailable="voice is not running")
+    with pytest.raises(Refused, match="not running"):
+        off.handle(client, Request("say", text="hi"))
+    assert voice.calls == []
+
+    control, _, clock, voice, client = make_voice(say_min_interval_s=0.3)
+    control.handle(client, Request("say", text="one"))
+    with pytest.raises(Refused, match="too fast"):
+        control.handle(client, Request("say", text="two"))
+    clock.sleep(0.31)
+    control.handle(client, Request("say", text="three"))
+    assert [text for name, text in voice.calls if name == "say"] == ["one", "three"]
+
+
+def test_the_default_controls_refuse_everything_voice() -> None:
+    clock = FakeClock()
+    control = WebControl(Recorder(), clock.now)  # a 12a-style server: no voice at all
+    client = object()
+    control.claim(client)
+    for request in (PRESS, Request("say", text="hi")):
+        with pytest.raises(Refused):
+            control.handle(client, request)

@@ -8,19 +8,24 @@ imports the controller, the gait or a backend.
 from __future__ import annotations
 
 import ast
+import json
 import re
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 import config
+from brain.event_hub import EventHub
 from brain.status_hub import StatusHub
 from bridge import Bridge, Command, Status, make_local_bridge
 from scripts.web_check import Refused, WebClient
-from tests.fakes import wait_until
+from tests.fakes import FakeClock, collect, wait_until
+from tests.test_web_session import FakeVoice
 from web.server import WebServer, lan_addresses, resolve_pin
 
 PIN = "246810"
@@ -291,3 +296,226 @@ def test_the_web_package_never_imports_the_controller_the_gait_or_a_backend() ->
                     f"{path.name} imports {name}")
     server = (ROOT / "web" / "server.py").read_text()
     assert "from bridge import" in server and "new_command" in server
+
+
+# --- Step 12b: hold-to-talk, typed text and events over a real socket ------------------------
+class VoiceRig(Rig):
+    def __init__(self, bridge: Bridge, hub: StatusHub, server: WebServer, voice: FakeVoice,
+                 events: EventHub, clock: FakeClock) -> None:
+        super().__init__(bridge, hub, server)
+        self.voice, self.events, self.clock = voice, events, clock
+
+
+def make_voice_rig(voice: FakeVoice) -> VoiceRig:
+    bridge, clock, events = make_local_bridge(), FakeClock(), EventHub()
+    hub = StatusHub(bridge)
+    server = WebServer(bridge, hub, PIN, port=0, clock=clock.now, voice=voice.controls,
+                       events=events)
+    server.start()
+    return VoiceRig(bridge, hub, server, voice, events, clock)
+
+
+@pytest.fixture()
+def voice_rig() -> Iterator[VoiceRig]:
+    made = make_voice_rig(FakeVoice())
+    yield made
+    made.server.stop()
+
+
+def hello_of(client: WebClient) -> dict[str, Any]:
+    hello = client.recv(2)
+    assert hello is not None and hello["type"] == "hello"
+    return hello
+
+
+def test_hello_tells_the_page_whether_it_can_talk_and_type(voice_rig: VoiceRig) -> None:
+    client = voice_rig.connect()
+    hello = hello_of(client)
+    assert hello["ptt"] == {"available": True, "reason": None, "max_s": config.WEB_PTT_MAX_S}
+    assert hello["say"] == {"available": True, "reason": None,
+                            "max_chars": config.WEB_SAY_MAX_CHARS}
+    client.close()
+
+
+def test_a_server_without_voice_says_so(rig: Rig) -> None:  # the 12a-style rig
+    client = rig.connect()
+    hello = hello_of(client)
+    assert hello["ptt"]["available"] is False and hello["say"]["available"] is False
+    assert hello["ptt"]["reason"] == "voice is not enabled"
+    client.close()
+
+
+def test_press_and_release_reach_the_voice_side_and_not_the_bridge(voice_rig: VoiceRig) -> None:
+    client = voice_rig.connect()
+    hello_of(client)
+    client.press()
+    wait_until(lambda: voice_rig.voice.listening_changes == [True], what="listening on")
+    client.release()
+    wait_until(lambda: voice_rig.voice.listening_changes == [True, False], what="listening off")
+    client.close()
+    wait_until(lambda: "stop" in voice_rig.actions(), what="stop on disconnect")
+    assert voice_rig.actions() == ["stop"]  # nothing but the disconnect's stop reached the body
+
+
+def test_a_press_is_forced_to_release_at_the_maximum_duration(voice_rig: VoiceRig) -> None:
+    client = voice_rig.connect()
+    hello_of(client)
+    client.press()
+    wait_until(lambda: voice_rig.voice.listening_changes == [True], what="listening on")
+    voice_rig.clock.sleep(config.WEB_PTT_MAX_S - 0.5)
+    time.sleep(0.2)  # a few pump ticks
+    assert voice_rig.voice.listening_changes == [True]
+    voice_rig.clock.sleep(1.0)
+    wait_until(lambda: voice_rig.voice.listening_changes == [True, False],
+               what="the forced release")
+    assert any(m.get("type") == "ptt_timeout" for m in client.messages(0.3))  # the page is told
+    client.close()
+
+
+def test_disconnect_and_a_dropped_connection_release_listening(voice_rig: VoiceRig) -> None:
+    for leave in ("close", "drop"):
+        voice_rig.voice.calls.clear()
+        client = voice_rig.connect()
+        hello_of(client)
+        client.press()
+        wait_until(lambda: voice_rig.voice.listening_changes == [True], what="listening on")
+        getattr(client, leave)()
+        wait_until(lambda: voice_rig.voice.listening_changes == [True, False],
+                   what=f"release after {leave}")
+
+
+def test_the_page_stop_message_releases_listening_and_stops_the_robot(voice_rig: VoiceRig) -> None:
+    client = voice_rig.connect()
+    hello_of(client)
+    client.press()
+    wait_until(lambda: voice_rig.voice.listening_changes == [True], what="listening on")
+    client.send({"action": "stop"})  # the page's hidden / blur / STOP
+    wait_until(lambda: voice_rig.voice.listening_changes == [True, False], what="release")
+    assert "stop" in voice_rig.actions() and voice_rig.bridge.stop_event.is_set()
+    client.close()
+
+
+def test_closing_the_server_releases_listening() -> None:
+    rig = make_voice_rig(FakeVoice())
+    client = rig.connect()
+    hello_of(client)
+    client.press()
+    wait_until(lambda: rig.voice.listening_changes == [True], what="listening on")
+    rig.server.stop()
+    assert rig.voice.listening_changes == [True, False]
+
+
+def test_say_reaches_the_voice_side_and_a_flood_is_refused(voice_rig: VoiceRig) -> None:
+    client = voice_rig.connect()
+    hello_of(client)
+    client.say("walk forward")
+    wait_until(lambda: ("say", "walk forward") in voice_rig.voice.calls, what="the typed text")
+    client.say("sit down")  # the fake clock did not move: too fast
+    reply = client.recv(2)
+    assert reply is not None and reply["type"] == "error" and "too fast" in reply["reason"]
+    assert [c for c in voice_rig.voice.calls if c[0] == "say"] == [("say", "walk forward")]
+    voice_rig.clock.sleep(config.WEB_SAY_MIN_INTERVAL_S + 0.1)
+    client.say("sit down")
+    wait_until(lambda: ("say", "sit down") in voice_rig.voice.calls, what="the second text")
+    client.close()
+
+
+@pytest.mark.parametrize("text", ["", "x" * (config.WEB_SAY_MAX_CHARS + 1), "bell\x07"])
+def test_a_bad_say_is_an_error_and_goes_nowhere(voice_rig: VoiceRig, text: str) -> None:
+    client = voice_rig.connect()
+    hello_of(client)
+    client.say(text)
+    reply = client.recv(2)
+    assert reply is not None and reply["type"] == "error"
+    assert voice_rig.voice.calls == []
+    client.close()
+
+
+def test_no_mic_disables_ptt_but_typing_still_works() -> None:
+    reason = "the robot runs with --no-mic: it has no microphone to hold"
+    rig = make_voice_rig(FakeVoice(ptt_unavailable=reason))
+    try:
+        client = rig.connect()
+        hello = hello_of(client)
+        assert hello["ptt"]["available"] is False and hello["ptt"]["reason"] == reason
+        assert hello["say"]["available"] is True
+        client.press()
+        reply = client.recv(2)
+        assert reply == {"type": "error", "reason": reason}
+        assert rig.voice.listening_changes == []  # the microphone was never opened
+        client.say("hello")
+        wait_until(lambda: ("say", "hello") in rig.voice.calls, what="typing")
+        client.close()
+    finally:
+        rig.server.stop()
+
+
+def test_a_second_controller_cannot_press_and_the_first_keeps_its_press(
+    voice_rig: VoiceRig,
+) -> None:
+    first = voice_rig.connect()
+    hello_of(first)
+    first.press()
+    wait_until(lambda: voice_rig.voice.listening_changes == [True], what="listening on")
+    with pytest.raises(Refused) as error:
+        voice_rig.connect()
+    assert error.value.status == 409  # refused at the handshake: it cannot send anything
+    assert voice_rig.voice.listening_changes == [True]
+    first.close()
+    wait_until(lambda: voice_rig.voice.listening_changes == [True, False], what="release")
+
+
+def test_events_reach_the_page_in_order(voice_rig: VoiceRig) -> None:
+    client = voice_rig.connect()
+    hello_of(client)
+    published: list[dict[str, Any]] = [
+        {"type": "listening", "on": True},
+        {"type": "heard", "text": "walk forward"},
+        {"type": "route", "route": "command", "action": "walk", "text": "walk forward",
+         "early_stop": False},
+        {"type": "said", "text": "okay"},
+        {"type": "listening", "on": False},
+    ]
+    for event in published:
+        voice_rig.events.publish(dict(event))
+    got: list[dict[str, Any]] = []
+    wait_until(lambda: len(collect(client, got, 0.1)) >= len(published), what="the events")
+    assert got[:len(published)] == published
+    client.close()
+
+
+def test_events_from_before_the_page_connected_are_not_replayed(voice_rig: VoiceRig) -> None:
+    voice_rig.events.publish({"type": "heard", "text": "old news"})
+    time.sleep(0.2)  # the pump drains the subscription with nobody connected
+    client = voice_rig.connect()
+    hello_of(client)
+    assert not any(m.get("type") == "heard" for m in client.messages(0.3))
+    client.close()
+
+
+def test_a_slow_page_drops_the_oldest_events_and_never_blocks_the_publisher() -> None:
+    from web.server import _Client
+
+    client = _Client(None)  # type: ignore[arg-type]  # only its outbox is used
+    for number in range(100):
+        client.post({"type": "said", "text": str(number)})
+    queued = [json.loads(client.outbox.get_nowait())["text"]
+              for _ in range(client.outbox.qsize())]
+    newest = [str(number) for number in range(100 - len(queued), 100)]
+    assert queued == newest  # the newest, in order
+    assert 0 < len(queued) <= 32
+
+    # and end to end: a burst nobody reads costs the publisher almost nothing
+    rig = make_voice_rig(FakeVoice())
+    try:
+        page = rig.connect()
+        hello_of(page)
+        start = time.monotonic()
+        for number in range(20000):
+            rig.events.publish({"type": "said", "text": str(number)})
+        assert time.monotonic() - start < 2.0
+        page.send({"action": "stop"})  # and STOP still works through the flood
+        wait_until(lambda: rig.bridge.stop_event.is_set(), what="stop through a flood of events")
+        page.close()
+    finally:
+        rig.server.stop()

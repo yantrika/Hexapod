@@ -59,6 +59,52 @@ def test_rejected_messages(raw: str | bytes) -> None:
         parse_message(raw)
 
 
+# --- Step 12b: hold-to-talk and typed text ---------------------------------------------------
+@pytest.mark.parametrize(("raw", "expected"), [
+    (message(action="ptt_press"), Request("ptt_press")),
+    (message(action="ptt_release"), Request("ptt_release")),
+    (message(action="say", text="walk forward"), Request("say", text="walk forward")),
+    (message(action="say", text="  hello \n there\t "), Request("say", text="hello there")),
+    (message(action="say", text="x" * config.WEB_SAY_MAX_CHARS),
+     Request("say", text="x" * config.WEB_SAY_MAX_CHARS)),
+    (message(action="say", text="héllo wörld ✓"), Request("say", text="héllo wörld ✓")),
+])
+def test_valid_voice_messages(raw: str, expected: Request) -> None:
+    assert parse_message(raw) == expected
+
+
+@pytest.mark.parametrize("raw", [
+    message(action="ptt_press", extra=1), message(action="ptt_release", text="x"),
+    message(action="ptt_press", pressed=True),             # unknown fields are still rejected
+    message(action="say"), message(action="say", text=None), message(action="say", text=5),
+    message(action="say", text=["walk"]), message(action="say", text=True),
+    message(action="say", text=""), message(action="say", text="   \n\t "),
+    message(action="say", text="x" * (config.WEB_SAY_MAX_CHARS + 1)),  # length-limited by config
+    message(action="say", text="walk", forward=1), message(action="say", text="a", lang="en"),
+    message(action="say", text="bell\x07"), message(action="say", text="nul\x00"),
+    message(action="say", text="zero\u200bwidth"), message(action="say", text="\ud800"),
+    message(action="PTT_PRESS"), message(action="ptt"), message(action="say "),
+])
+def test_rejected_voice_messages(raw: str) -> None:
+    with pytest.raises(ProtocolError):
+        parse_message(raw)
+
+
+def test_the_longest_say_fits_in_one_message_even_when_every_character_is_wide() -> None:
+    wide = json.dumps({"action": "say", "text": "\U0001F600" * config.WEB_SAY_MAX_CHARS},
+                      ensure_ascii=False).encode()
+    assert len(wide) <= config.WEB_MAX_MESSAGE_BYTES
+    assert len(parse_message(wide).text) == config.WEB_SAY_MAX_CHARS
+
+
+def test_voice_messages_are_not_bridge_messages() -> None:
+    from web.protocol import PTT_ACTIONS
+
+    assert set(PTT_ACTIONS) == {"ptt_press", "ptt_release"}
+    assert not Request("say", text="walk forward").moving
+    assert not Request("ptt_press").moving
+
+
 def test_a_failed_validation_names_a_reason() -> None:
     with pytest.raises(ProtocolError, match="unknown action"):
         parse_message(message(action="fly"))

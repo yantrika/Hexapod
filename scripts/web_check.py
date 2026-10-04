@@ -4,6 +4,9 @@
     python main.py --web --no-speak --no-mic --chat fake      (prints the PIN)
     python scripts/web_check.py --pin 123456 --forward 1 --yaw 0.5 --seconds 2
     python scripts/web_check.py --pin 123456 --action wave
+    python scripts/web_check.py --pin 123456 --say "walk forward"      (typed text, as spoken)
+    python scripts/web_check.py --pin 123456 --talk 3                  (hold to talk 3 s: speak
+                                                                        near the robot)
     python scripts/web_check.py --pin 123456 --forward 1 --seconds 2 --leave drop
 
 It sends the same JSON messages as the page (a ``walk`` repeated at 10 Hz while held, then a
@@ -88,6 +91,17 @@ class WebClient:
             heard += self.messages(period)
         return heard
 
+    def press(self) -> None:
+        """Hold to talk (the robot's microphone)."""
+        self.send({"action": "ptt_press"})
+
+    def release(self) -> None:
+        self.send({"action": "ptt_release"})
+
+    def say(self, text: str) -> None:
+        """Typed text: routed exactly like spoken text."""
+        self.send({"action": "say", "text": text})
+
     def close(self) -> None:
         self._ws.close()
 
@@ -113,6 +127,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--seconds", type=float, default=2.0, help="how long to hold the move")
     parser.add_argument("--action", choices=("stop", "stand", "sit", "wave"), default=None,
                         help="send this instead of a move")
+    parser.add_argument("--say", default=None, metavar="TEXT",
+                        help="send this typed text (routed like spoken text)")
+    parser.add_argument("--talk", type=float, default=None, metavar="SECONDS",
+                        help="hold to talk for this long (the robot's microphone hears you)")
     parser.add_argument("--leave", choices=("stop", "drop"), default="stop",
                         help="end with a stop message, or just close the socket")
     args = parser.parse_args(argv)
@@ -133,7 +151,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(json.dumps(message))
 
     show(client.messages(0.3))  # the hello
-    if args.action is not None:
+    if args.say is not None:
+        client.say(args.say)
+        show(client.messages(3.0))
+    elif args.talk is not None:
+        client.press()
+        show(client.messages(args.talk))
+        client.release()
+        show(client.messages(3.0))
+    elif args.action is not None:
         client.send({"action": args.action})
         show(client.messages(1.0))
     elif args.forward or args.strafe or args.yaw:

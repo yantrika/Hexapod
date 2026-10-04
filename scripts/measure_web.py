@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""What the phone page costs: press-to-motion latency, idle CPU of the server, peak temperature.
+"""What the phone page costs: press-to-motion and release-to-command latency, idle CPU, peak temp.
 
     python scripts/cool_run.py -- nice -n 19 python scripts/measure_web.py
 
@@ -10,6 +10,12 @@ A real ``HexaApp`` (headless body process, fake STT and chat, no audio) with the
             foot targets, so this is the first foot-target change), median and p95 (nearest rank).
             The robot is stopped and still before each press. The probe clock is
             ``time.monotonic()`` in both processes, so the two times compare directly.
+  release   20 times (Step 12b): hold to talk, one audio block, then the client sends
+            `ptt_release`;
+            the time from that send to the `sit` command being sent to the bridge (the recognizer
+            is a fake whose flush returns "sit down", so this is the pipeline's own cost: the
+            push-to-talk tail ``PTT_TAIL_S``, the mic-poll granularity, the router and the send;
+            real Vosk decoding time comes on top and is measured by measure_voice.py).
   idle CPU  the web-server thread's CPU (from /proc, user + system) over 10 s with a client
             connected and idle, and over 10 s with nobody connected; the whole brain process too.
   peak      the hottest sensor, sampled every second (the same sensors ``cool_run.py`` guards).
@@ -29,12 +35,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 for _var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
     os.environ.setdefault(_var, "1")
 
+import config  # noqa: E402
 from body.process import BodyProbe  # noqa: E402
 from brain.app import AppOptions, HexaApp  # noqa: E402
 from brain.chat import FakeChat  # noqa: E402
 from scripts.cool_run import read_temperature_c  # noqa: E402
 from scripts.web_check import WebClient  # noqa: E402
-from tests.fakes import FakeStt  # noqa: E402
+from tests.fakes import FakeStt, marker_block  # noqa: E402
 from voice.audio import QueueSource  # noqa: E402
 
 TRIALS = 20
@@ -71,6 +78,30 @@ def measure_latency(client: WebClient, probe: BodyProbe) -> list[float]:
     return samples
 
 
+def measure_release(app: HexaApp, client: WebClient, source: QueueSource) -> list[float]:
+    """Release (client send) to the `sit` command sent to the bridge, in ms."""
+    assert app.brain is not None
+    stamps: list[float] = []
+    app.brain.add_sent_listener(
+        lambda command: stamps.append(time.monotonic()) if command.action == "sit" else None)
+    samples = []
+    for _ in range(TRIALS):
+        before = len(stamps)
+        client.press()
+        time.sleep(0.2)
+        source.push(marker_block(1))  # some audio while listening
+        time.sleep(0.3)
+        start = time.monotonic()
+        client.release()
+        while len(stamps) == before:
+            if time.monotonic() - start > 3.0:
+                raise RuntimeError("no command within 3 s of the release")
+            time.sleep(0.0005)
+        samples.append((stamps[before] - start) * 1000.0)
+        time.sleep(1.0)
+    return samples
+
+
 def idle_cpu(app: HexaApp, seconds: float) -> tuple[float, float]:
     """(server thread CPU %, whole brain process CPU %) over *seconds*."""
     assert app.web is not None and app.web.native_id is not None
@@ -92,10 +123,11 @@ def main() -> int:
 
     threading.Thread(target=sample, daemon=True).start()
     probe = BodyProbe()
-    app = HexaApp(AppOptions(listen="always", chat="fake", no_speak=True, no_mic=True, web=True,
+    source = QueueSource()
+    app = HexaApp(AppOptions(listen="ptt", chat="fake", no_speak=True, web=True,
                              web_port=0, web_pin=PIN),
-                  probe=probe, stt=FakeStt({}), source=QueueSource(),
-                  chat_backend=FakeChat(("ok",)))
+                  probe=probe, stt=FakeStt({}, flush_events=[("final", "sit down")]),
+                  source=source, chat_backend=FakeChat(("ok",)))
     app.start()
     try:
         assert app.web is not None
@@ -112,6 +144,7 @@ def main() -> int:
         threading.Thread(target=drain, daemon=True).start()
         connected_thread, connected_process = idle_cpu(app, IDLE_S)
         samples = measure_latency(client, probe)
+        release_samples = measure_release(app, client, source)
         client.close()
     finally:
         app.shutdown()
@@ -120,6 +153,11 @@ def main() -> int:
     print(f"  median {statistics.median(samples):.1f} ms   p95 {percentile(samples, 0.95):.1f} ms"
           f"   min {min(samples):.1f}   max {max(samples):.1f}")
     print("  all (ms): " + " ".join(f"{value:.0f}" for value in samples))
+    print(f"release (ptt_release sent) to the command sent, {TRIALS} releases "
+          f"(PTT_TAIL_S = {config.PTT_TAIL_S} s of it is the tail):")
+    print(f"  median {statistics.median(release_samples):.0f} ms   "
+          f"p95 {percentile(release_samples, 0.95):.0f} ms   min {min(release_samples):.0f}   "
+          f"max {max(release_samples):.0f}")
     print(f"server idle CPU, nobody connected   : web thread {alone_thread:.2f} %   "
           f"brain process {alone_process:.1f} %")
     print(f"server idle CPU, one idle client    : web thread {connected_thread:.2f} %   "

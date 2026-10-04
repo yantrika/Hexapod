@@ -5,6 +5,7 @@ from __future__ import annotations
 import threading
 import time
 from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 
@@ -231,3 +232,9 @@ class StubPlayback:
     @property
     def sentences(self) -> list[str]:
         return [text for _, text in self.said]
+
+
+def collect(client: Any, into: list[Any], seconds: float = 0.2) -> list[Any]:
+    """Read what a ``WebClient`` receives for *seconds* into *into* and return it (for polling)."""
+    into.extend(client.messages(seconds))
+    return into
