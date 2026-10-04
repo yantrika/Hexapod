@@ -150,7 +150,12 @@ PHYSICS_HZ = 240.0  # PyBullet step, driven by wall-clock time
 CONTROL_HZ = 50.0  # control tick, driven by wall-clock time
 BACKENDS = ("sim", "dryrun")  # body backends main.py can start (the servo backend comes at 11e)
 BACKEND_DEFAULT = os.environ.get("HEXA_BACKEND", "sim")  # the Pi build sets dryrun (no pybullet)
-DRYRUN_LOG_PERIOD_S = 2.0  # the dry-run backend logs a summary of the joint targets this often
+DRYRUN_LOG_FILE = LOG_DIR / "dryrun.log"  # per-leg joint targets the gait would send (tail -f it)
+DRYRUN_LOG_HZ = 2.0  # at most this many lines per second while the targets are changing ...
+DRYRUN_LOG_EPS_DEG = 0.5  # ... a change smaller than this on every joint is not "moving"
+DRYRUN_REST_S = 0.4  # ... and one "at rest" line once the targets stopped changing this long
+DRYRUN_LOG_MAX_BYTES = 1_000_000  # dryrun.log rotates at this size, keeping DRYRUN_LOG_BACKUPS
+DRYRUN_LOG_BACKUPS = 2
 MAX_PHYSICS_CATCHUP_STEPS = 12  # caps catch-up after a stall (~50 ms of sim)
 GAIT_PERIOD_S = 1.0  # PLACEHOLDER, one full tripod cycle
 GAIT_SWING_FRACTION = 0.5  # share of the cycle a foot is in swing (0 < f <= 0.5)
