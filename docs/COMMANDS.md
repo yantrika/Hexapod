@@ -24,7 +24,8 @@ cat /sys/class/thermal/thermal_zone0/temp                    # temperature in th
 
 | Command | What it does |
 |---|---|
-| `scripts/fetch_models.sh` | Downloads Piper, the voice, the Vosk models, then renders the fixed phrases. Safe to re-run. |
+| `scripts/fetch_models.sh` | Downloads Piper, the voice (`PIPER_VOICE`), the default Vosk model, then renders the fixed phrases. Names come from `config.py`. Safe to re-run. |
+| `scripts/fetch_models.sh --all-models` | Also downloads the other Vosk models in `config.VOSK_MODELS` (the Indian English one). |
 | `scripts/fetch_models.sh --help` | Shows what it fetches. |
 | `python scripts/prerender_phrases.py --force` | Re-renders the spoken phrases. |
 

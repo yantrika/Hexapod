@@ -251,9 +251,13 @@ TTS_PHRASES: dict[str, str] = {
 }
 
 # --- Models --------------------------------------------------------------
-VOSK_MODELS = {  # short name -> directory under assets/vosk (scripts/fetch_models.sh)
-    "us": "vosk-model-small-en-us-0.15",
-    "in": "vosk-model-small-en-in-0.4",
+# TO REPLACE THE SPEECH MODEL: change the directory name here (real names:
+# https://alphacephei.com/vosk/models), then run scripts/fetch_models.sh. That is all.
+# Short name -> directory under assets/vosk. The default is the one the robot uses and the only
+# one fetch_models.sh downloads; the others are fetched only with --all-models.
+VOSK_MODELS = {
+    "us": "vosk-model-small-en-us-0.15",  # the chosen model (owner decision, Step 8b)
+    "in": "vosk-model-small-en-in-0.4",  # Indian English: slower, not used, kept for comparison
 }
 VOSK_MODEL_DEFAULT = "us"
 # Command grammar: a second recognizer on the same audio, limited to the router's phrases, aliases,
@@ -268,7 +272,10 @@ STT_STOP_EXTRA_WORDS = 2  # the same for a stop word (a false stop is harmless, 
 TRANSCRIPT_LOG = LOG_DIR / "transcripts.jsonl"  # one JSON line per final result (dataset, Step 9b)
 VOSK_MODEL_PATH = VOSK_DIR / VOSK_MODELS[VOSK_MODEL_DEFAULT]
 PIPER_BINARY = PIPER_DIR / "piper" / "piper"  # standalone binary, ONE long-lived subprocess
-PIPER_MODEL_PATH = PIPER_DIR / "en_US-amy-low.onnx"
+# TO REPLACE THE SPEAKING VOICE: change PIPER_VOICE (a path in https://huggingface.co/rhasspy/
+# piper-voices without the extension), delete assets/phrases/*.wav, run scripts/fetch_models.sh.
+PIPER_VOICE = "en/en_US/amy/low/en_US-amy-low"
+PIPER_MODEL_PATH = PIPER_DIR / (PIPER_VOICE.rsplit("/", 1)[-1] + ".onnx")
 # Optional isolation of Piper from the control loop (measured: unconstrained, its two compute
 # threads take about 2.2 cores and double the body tick time on the dev laptop).
 PIPER_NICE = 0  # extra niceness for the Piper process (0 = none)

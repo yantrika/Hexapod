@@ -5,26 +5,26 @@ On the dev laptop wrap heavy commands: `python scripts/cool_run.py -- <command>`
 
 ## Change the speech recognition model (Vosk)
 
-Models live in `assets/vosk/` and are listed in `config.py` as `VOSK_MODELS`.
+**One place: `config.py`.** The robot uses the small US model `vosk-model-small-en-us-0.15`.
 
 1. Find the real file name at https://alphacephei.com/vosk/models (do not guess it).
-2. `config.py`: add it to `VOSK_MODELS`, for example `"big": "vosk-model-en-us-0.22-lgraph"`.
-3. `scripts/fetch_models.sh`: add the same name to the `for model in ...` line, then run `scripts/fetch_models.sh` (it skips what you already have).
-4. To make it the default: set `VOSK_MODEL_DEFAULT` in `config.py` (for example `"in"` for Indian English).
-5. Try it: `python scripts/stt_check.py --model big` and `python scripts/voice_cli.py --model big`.
+2. `config.py`: change the directory name in `VOSK_MODELS` (for example change the `"us"` line), or add a new line and set `VOSK_MODEL_DEFAULT` to its short name.
+3. Run `scripts/fetch_models.sh`. It reads the names from `config.py` and downloads the default model (it skips what you already have). `--all-models` also downloads every other entry (the Indian model).
+4. Try it: `python scripts/stt_check.py --model us` and `python scripts/voice_cli.py`. (`--model` accepts a short name, a folder name or a path.)
 
 Notes:
-- The command grammar needs a model that ships `graph/HCLr.fst` and `graph/Gr.fst`. Both current small models do. If a model lacks them, set `STT_USE_GRAMMAR = False` in `config.py`.
-- Bigger models are slower. The small Indian English model was noticeably slower than the US one on the dev laptop.
-- Anything you pass to `--model` can also be a folder name or a full path.
+- The command grammar needs a model that ships `graph/HCLr.fst` and `graph/Gr.fst`. Both small models do. If a model lacks them, set `STT_USE_GRAMMAR = False`.
+- Bigger models are slower. The small Indian English model was noticeably slower than the US one on the dev laptop, so it is off by default.
+- Nothing else in the code names a model.
 
 ## Change the speaking voice (Piper)
 
+**One place: `config.py`.**
+
 1. Pick a voice at https://huggingface.co/rhasspy/piper-voices (check the real file list; each voice has a `.onnx` and a `.onnx.json`).
-2. `scripts/fetch_models.sh`: change `VOICE_PATH` (for example `en/en_US/lessac/low/en_US-lessac-low`).
-3. `config.py`: change `PIPER_MODEL_PATH` to the new `.onnx` name.
-4. Delete the old pre-rendered phrases and rebuild them with the new voice: `rm assets/phrases/*.wav` then `scripts/fetch_models.sh`.
-5. Hear it: `python scripts/say.py "Hello, I am hexa"`.
+2. `config.py`: change `PIPER_VOICE` (for example `"en/en_US/lessac/low/en_US-lessac-low"`). `PIPER_MODEL_PATH` follows from it.
+3. Delete the old pre-rendered phrases and rebuild them with the new voice: `rm assets/phrases/*.wav`, then `scripts/fetch_models.sh`.
+4. Hear it: `python scripts/say.py "Hello, I am hexa"`.
 
 Faster voices are "low" quality. On the dev laptop Piper uses about two CPU cores while it speaks and slows the body (see `plan.md`, Risks).
 

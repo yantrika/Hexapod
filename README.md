@@ -142,3 +142,14 @@ python scripts/cool_run.py --start-below 62 --kill-at 80 -- nice -n 19 python sc
 ```
 
 Measured (headless, walking): one recognizer 13 % of a core on silence and 19 % on speech, two recognizers 21 % and 23 %; decode real-time factor 0.07-0.10 for one, 0.11-0.16 for two; body mean tick 7.3 ms with no voice, 7.0 ms with one recognizer and 6.6 ms with two (no measurable cost); RSS 178 MB with either (one shared model).
+
+### Which words work (measured on the owner's voice, small US model)
+
+The speech model is `vosk-model-small-en-us-0.15` (the Indian English model is not used; it was slower and its run was incomplete). On the owner's voice, 117 attempts (3 per phrase):
+
+- **"stop" is the reliable stop word.** "halt" and "freeze" were missed several times on the small US model; "whoa", "hold still" and "stay still" worked.
+- **Two-word commands are reliable** ("walk forward", "turn left", "sit down", "stand up", "wave hello"). **Single words are not** ("sit", "stand", "wave", "walk" were often misheard). Prefer two-word forms.
+- Results: commands 50/69 (72%), stops 14/18 (78%), chat routed correctly 30/30, 0 dangerous false positives (chat turning into a motion command), 0 wrong motion commands.
+- Replaying the same run with `STT_GRAMMAR_CONF` at 0.5 / 0.6 / 0.75 / 0.9 gave 74% / 72% / 72% / 68% command accuracy with 0 dangerous at every value, so it stays at 0.75.
+
+To use a different speech model or voice, change one name in `config.py` (see `docs/HOW_TO.md`) and run `scripts/fetch_models.sh`. The Indian model is only downloaded with `scripts/fetch_models.sh --all-models`.

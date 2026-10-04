@@ -17,14 +17,15 @@ Values marked PLACEHOLDER in the file are guesses to tune. Settings that take ef
 | **Router** | `ROUTER_PHRASES`, `ROUTER_ALIASES`, `STOP_WORDS`, `ROUTER_FILLERS`, `ROUTER_THRESHOLD`, `ROUTER_MAX_WORDS` | Change the words the robot understands. |
 | **Brain** | `VOICE_WALK_MAX_S`, `VOICE_ACK_PHRASE`, `VOICE_PUMP_S`, status queue sizes | How long a voiced walk is kept alive; what is said after a command. |
 | **Audio** | `AUDIO_SAMPLE_RATE` (16000), `AUDIO_BLOCKSIZE`, `MIC_DEVICE`, `SPEAKER_DEVICE`, `SPEAK_TAIL_S`, `TTS_*` timeouts and queue sizes, `PHRASES_DIR`, `TTS_PHRASES` | Pick audio devices, change what is pre-recorded, change speech timeouts. |
-| **Models** | `VOSK_MODELS`, `VOSK_MODEL_DEFAULT`, `STT_*` thresholds, `STT_USE_GRAMMAR`, `PIPER_BINARY`, `PIPER_MODEL_PATH`, `PIPER_NICE`, `PIPER_CPU_LIST`, `OLLAMA_*` *(later)*, `CHAT_*` *(later)*, `TRANSCRIPT_LOG` | Change a model; tune recognition. |
+| **Models** | `VOSK_MODELS`, `VOSK_MODEL_DEFAULT`, `STT_*` thresholds, `STT_USE_GRAMMAR`, `PIPER_BINARY`, `PIPER_VOICE`, `PIPER_MODEL_PATH`, `PIPER_NICE`, `PIPER_CPU_LIST`, `OLLAMA_*` *(later)*, `CHAT_*` *(later)*, `TRANSCRIPT_LOG` | Change a model; tune recognition. |
 | **Test tolerances** | `WALK_TEST_*`, `HOLD_TEST_*`, `BODY_TEST_*`, `IK_TOLERANCE_M` | How strict the simulation tests are. Not used by the robot. |
 
 ## The settings you are most likely to change
 
 | Want to... | Setting |
 |---|---|
-| Change the default speech model | `VOSK_MODEL_DEFAULT` (`"us"` or `"in"`) |
+| Replace the speech model | the name in `VOSK_MODELS` / `VOSK_MODEL_DEFAULT`, then `scripts/fetch_models.sh` |
+| Replace the speaking voice | `PIPER_VOICE`, then `scripts/fetch_models.sh` |
 | Make "stop" easier or harder to trigger from the grammar | `STT_STOP_CONF` (lower = easier) |
 | Make grammar commands easier or harder | `STT_GRAMMAR_CONF` (lower = easier, riskier) |
 | Turn the command grammar off | `STT_USE_GRAMMAR = False` |
