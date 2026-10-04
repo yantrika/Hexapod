@@ -177,7 +177,7 @@ To use a different speech model or voice, change one name in `config.py` (see `d
 
 ## Phone control page (Step 12a)
 
-Drive the robot from a phone browser: hold-to-move buttons (forward, back, strafe, turn; hold two together, e.g. forward + turn), Stand, Sit, Wave, a big STOP and a live status line. No audio yet (that is Step 12b, with HTTPS). One static page, no internet needed.
+Drive the robot from a phone browser: hold-to-move buttons (forward, back, strafe, turn; hold two together, e.g. forward + turn), Stand, Sit, Wave, a big STOP and a live status line. Since Step 12b it also has hold-to-talk and a text box (below). The page never sends or records audio. One static page, no internet needed.
 
 ```bash
 python main.py --web --no-speak --no-mic --chat fake     # this computer only: http://127.0.0.1:8765/
@@ -195,9 +195,28 @@ hostname -I                                              # your computer's addre
 
 **Safety (enforced by the server, not only the page).** The page repeats a held move 10 times a second; if the server hears nothing for 0.3 s (`WEB_DEADMAN_S`) while the robot moves, it sends `stop`. A closed or lost connection sends `stop`; the page also sends `stop` when it is hidden, loses focus or the touch is cancelled. STOP uses the same `stop_event` fast path as the control window. The server accepts only walk/stop/stand/sit/wave with numbers clamped to [-1, 1]; the page never sends joint data. `scripts/web_check.py` is a headless client for testing (`python scripts/web_check.py --pin 123456 --forward 1 --seconds 2`).
 
-**Limits.** This is plain HTTP: anyone on the same network who can see the traffic can read the PIN and steer the robot. **Use it only on a network you trust (your own Wi-Fi or phone hotspot) until Step 12b adds HTTPS.** Without `--lan` it listens on this computer only. The body's own watchdog stays the last line of defence.
+**Limits.** This is plain HTTP: anyone on the same network who can see the traffic can read the PIN and steer the robot. **Use it only on a network you trust (your own Wi-Fi or phone hotspot) (HTTPS would only come with the optional Step 12c).** Without `--lan` it listens on this computer only. The body's own watchdog stays the last line of defence.
 
-Measured on the dev laptop (headless body, loopback, `scripts/measure_web.py`): button press to the first joint-target change (the foot targets' inverse kinematics) median 38.5 ms, p95 43.4 ms over 20 presses (up to one 20 ms control tick plus the velocity ramp-in); the web-server thread uses about 0.5 % of a core idle (0.6 % with a client connected), the whole brain process about 2 %; peak temperature 78 C (guard limit 82).
+Measured on the dev laptop (headless body, loopback, `scripts/measure_web.py`): button press to the first joint-target change (the foot targets' inverse kinematics) median 38.5 ms, p95 43.4 ms over 20 presses (up to one 20 ms control tick plus the velocity ramp-in); the web-server thread uses about 0.6 % of a core idle (with or without a client), the whole brain process about 2.5 %. Step 12b, hold-to-talk with a fake recognizer: `ptt_release` sent to the command sent median 502 ms, p95 702 ms (0.5 s of it is `PTT_TAIL_S`, the rest is the next microphone poll, 0.2 s steps, plus routing; real Vosk decoding time comes on top). Peak temperature 86 C (unguarded run).
+
+### Talking to hexa from the phone (Step 12b)
+
+Start the robot WITH its microphone and in push-to-talk mode (the default), and the web page:
+
+```bash
+python main.py --lan --chat fake        # the real microphone; add --no-speak to keep it quiet
+```
+
+**The microphone is the robot's, not the phone's.** The phone only sends "button down" and "button up"; hexa hears whatever its own microphone hears, so **speak near the robot**, not into the phone.
+
+1. Open the page and connect with the PIN as before.
+2. **Hold HOLD TO TALK**, say "walk forward" (or anything), let go. The LISTENING light shows while the robot's microphone is open (it stays on about half a second after you let go, `PTT_TAIL_S`). Pressing also interrupts hexa if it is talking.
+3. The log under the button shows what it **heard**, what it **decided** (a command or chat) and what it **said**, plus the body's status.
+4. Or **type** in the box and press Send: typed text is handled exactly like spoken text (a typed "stop" always works, even when you are not holding the button; chat while the robot walks answers "tell me after I stop").
+
+**Safety.** Holding is limited to 10 s (`WEB_PTT_MAX_S`): the server lets go by itself. Letting go, a lost connection, a hidden page, losing focus and the STOP button all end listening. In push-to-talk mode a spoken "stop" works only while you hold the button (the page says so); the red STOP button always works. With `--no-mic` or `--listen always` the talk button is greyed out and says why; the text box still works. Only the phone that is in control can talk.
+
+Command line: `python scripts/web_check.py --pin 123456 --say "walk forward"` or `--talk 3` (hold 3 s, speak near the robot).
 
 ## Chat and status-driven speech (Step 9)
 

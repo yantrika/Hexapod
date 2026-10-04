@@ -29,8 +29,9 @@ hexa is a six-legged robot you can talk to. It listens (Vosk), understands (a si
 | `main.py` (one start command) | Built (Step 10b) |
 | Push-to-talk, interrupting while talking, the instant "hmm" | Built (Step 10) |
 | Real servos on the Pi (pins, calibration) | **Not built** (Step 11) |
-| Phone control page (hold-to-move, stand/sit/wave, STOP, PIN; plain HTTP) | Built (Step 12a, no audio) |
-| Phone push-to-talk over HTTPS | **Not built** (Step 12b) |
+| Phone control page (hold-to-move, stand/sit/wave, STOP, PIN; plain HTTP) | Built (Step 12a) |
+| Phone hold-to-talk (the robot's own microphone) and typing | Built (Step 12b) |
+| Phone microphone over HTTPS | **Not built** (Step 12c, optional) |
 
 ## Three things to remember
 

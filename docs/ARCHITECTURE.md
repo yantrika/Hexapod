@@ -129,7 +129,7 @@ Threads talk only through `queue.Queue` and one shared `speaking` flag. Each que
 - **Voice stop works only while listening in push-to-talk mode.** Use the control window STOP button or Space, or type `stop` in the terminal. In `always` mode it works except while hexa speaks.
 - **Single words are unreliable on the small Vosk model** ("halt" and "freeze" were missed; "stop" is the reliable stop word; two-word commands are reliable).
 - **The real LLM is untested on target hardware.** Here it is too slow (1.5 tokens/s), so chat is developed against `FakeChat`. Real timing is a Step 11 task on the Pi 5.
-- No wake word yet (Step 11), no servo code (`servo_backend.py` is a stub), the phone page has no audio yet (Step 12b).
+- No wake word yet (Step 11), no servo code (`servo_backend.py` is a stub), the phone page has no audio of its own (it only presses the robot's own push-to-talk; phone microphone = Step 12c).
 - Vosk has no echo cancellation: use a headset or keep the microphone away from the speaker for barge-in.
 
 ## Where the pieces are (by job)

@@ -50,6 +50,7 @@ Legend: **STUB** = placeholder, not built yet. **DEV** = developer tool, not par
 | `brain/voice_loop.py` | The voice loop: gate, recognizer, router, bridge, spoken "okay". Two threads. | You change what happens after speech is heard. |
 | `brain/brain_loop.py` | Sends a routed command to the body and keeps a held walk alive. Shared by the typed and voice front ends. | You change how commands are sent. |
 | `brain/motion_keeper.py` | Sends heartbeats while a walk or turn is held; stops after `VOICE_WALK_MAX_S`. | You change heartbeat rules. |
+| `brain/event_hub.py` | Shares what hexa heard, decided and said (and the listening light) with the phone page, without ever blocking the voice loop (the oldest event is dropped). | You add an event type or listener. |
 | `brain/status_hub.py` | The one reader of the body's statuses; shares each status with any number of listeners without blocking. | You add a listener type. |
 | `brain/transcript_log.py` | Writes one line per recognised utterance to `logs/transcripts.jsonl`. | You change what is logged. |
 | `brain/chat.py` | Chat: the `ChatBackend` interface, `OllamaChat` (local LLM over HTTP), `FakeChat` (scripted, for tests and the slow laptop) and `ChatResponder` (streams a reply, speaks it sentence by sentence, can be cancelled, keeps history). | You change the chat model or behaviour. |
@@ -57,12 +58,12 @@ Legend: **STUB** = placeholder, not built yet. **DEV** = developer tool, not par
 | `brain/dialogue.py` | After a command, speaks from the body's STATUS ("okay", "I'm already sitting"...) using pre-recorded phrases. | You change what the robot says about statuses. |
 | `brain/__init__.py` | Marks the folder as a package. | Never. |
 
-## `web/` : the phone control page (Step 12a)
+## `web/` : the phone control page (Step 12a buttons, 12b hold-to-talk and typing)
 
 | File | What it does | Edit it when |
 |---|---|---|
-| `web/protocol.py` | Strict checks of the page's messages (only walk, stop, stand, sit, wave; numbers clamped to -1..1; unknown fields refused) and the bridge `walk` they become. Pure. | You add a button or a message. |
-| `web/session.py` | The PIN check with lockout, "one controller at a time", the server-side deadman and stop-on-disconnect. Pure, clock injected. | You change the safety rules. |
+| `web/protocol.py` | Strict checks of the page's messages (walk, stop, stand, sit, wave, ptt_press, ptt_release, say; numbers clamped to -1..1; unknown fields refused) and the bridge `walk` they become. Pure. | You add a button or a message. |
+| `web/session.py` | The PIN check with lockout, "one controller at a time", the server-side deadman, stop-on-disconnect, and hold-to-talk safety (10 s limit, release on stop or disconnect). Pure, clock injected. | You change the safety rules. |
 | `web/server.py` | The server thread: the page and the WebSocket on one port, handshake checks, status line. Talks only to the Bridge. | You change the connection handling. |
 | `web/static/index.html` | The whole phone page (one file, no CDN, no build step). | You change how the page looks or behaves. |
 | `web/__init__.py` | Marks the folder as a package. | Never. |
@@ -173,6 +174,7 @@ Run one file at a time on the dev laptop (see `COMMANDS.md`).
 | `tests/test_web_protocol.py` | The page's message checks: valid, clamped, unknown action, malformed. |
 | `tests/test_web_session.py` | PIN, lockout, one controller, deadman, stop on disconnect, `stop` on the `stop_event` path (fake clock). |
 | `tests/test_web_server.py` | The server on a real loopback socket: handshake refusals, deadman, statuses, no controller/gait/backend import. |
+| `tests/test_web_voice.py` | Typed text takes the spoken path (stop, chat while walking), the app's hold-to-talk wiring, and one real run: press, WAV through a FileSource, release, the robot sits. |
 | `tests/test_web_app.py` | The page against a real headless body: walk moves it, a dropped connection stops it, `main.py --web` exits clean. |
 | `tests/test_main_smoke.py` | `main.py` as a real process: sit + fake chat reply from an audio file, exit 0; SIGTERM/SIGINT. |
 | `tests/test_startup.py` | The startup checks and `main` exit codes. |
@@ -182,6 +184,7 @@ Run one file at a time on the dev laptop (see `COMMANDS.md`).
 | `tests/test_playback.py` | Playback queue, `clear()`, speaking flag, prefetch gaps. |
 | `tests/test_tts_real.py` | Real Piper speed (only with `pytest -m audio`). |
 | `tests/test_audio.py` | Audio sources, mic queue overflow. |
+| `tests/test_event_hub.py` | Events in order, a slow listener loses the oldest, publishing never blocks. |
 | `tests/test_status_hub.py` | Many listeners, a stuck one blocks nobody. |
 | `tests/test_stt_gate.py` | Self-hearing protection and voice-loop logic (fake recognizer). |
 | `tests/test_stt.py` | One model, two recognizers (fake Vosk). |

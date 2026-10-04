@@ -19,6 +19,7 @@ Values marked PLACEHOLDER in the file are guesses to tune. Settings that take ef
 | **Logging** | `LOG_FILE`, `LOG_LEVEL`, `LOG_MAX_BYTES`, `LOG_BACKUP_COUNT` | Where the log goes, how detailed, when it rotates. |
 | **Listening** | `LISTEN_MODE` (`"ptt"` or `"always"`), `PTT_TAIL_S`, `FILLER_DELAY_S`, `FILLER_PHRASES` | Choose push-to-talk or always-listening; how long listening goes on after release; when and what the instant filler says. |
 | **Phone page** | `WEB_PORT` (8765), `WEB_PIN` (None = random each start), `WEB_PIN_MAX_FAILURES`, `WEB_PIN_WINDOW_S`, `WEB_PIN_LOCKOUT_S`, `WEB_DEADMAN_S` (0.3), `WEB_CLIENT_SEND_HZ` (10), `WEB_WALK_SPEED`, `WEB_TICK_S`, `WEB_MIN_FORWARD_S`, `WEB_MAX_*`, `WEB_PING_S`, `WEB_CLOSE_S` | Change the port, the PIN, how long a silent phone may keep the robot walking. |
+| **Phone talking (12b)** | `WEB_PTT_MAX_S` (10), `WEB_SAY_MAX_CHARS` (120), `WEB_SAY_MIN_INTERVAL_S` (0.3), `WEB_EVENT_QUEUE_SIZE` (64) |
 | **Audio** | `AUDIO_SAMPLE_RATE` (16000), `AUDIO_BLOCKSIZE`, `MIC_DEVICE`, `SPEAKER_DEVICE`, `SPEAK_TAIL_S`, `TTS_*` timeouts and queue sizes, `PHRASES_DIR`, `TTS_PHRASES` | Pick audio devices, change what is pre-recorded, change speech timeouts. |
 | **Models** | `VOSK_MODELS`, `VOSK_MODEL_DEFAULT`, `STT_*` thresholds, `STT_USE_GRAMMAR`, `PIPER_BINARY`, `PIPER_VOICE`, `PIPER_MODEL_PATH`, `PIPER_NICE`, `PIPER_CPU_LIST`, `TRANSCRIPT_LOG` | Change a model; tune recognition. |
 | **Chat** | `OLLAMA_URL`, `OLLAMA_MODEL`, `OLLAMA_TIMEOUT_S`, `OLLAMA_KEEP_ALIVE`, `CHAT_SYSTEM_PROMPT`, `CHAT_MAX_TOKENS`, `CHAT_TEMPERATURE`, `CHAT_HISTORY_TURNS`, `CHAT_MAX_SENTENCE_CHARS` | Change the chat model, the personality, reply length, memory. |
@@ -47,6 +48,7 @@ Values marked PLACEHOLDER in the file are guesses to tune. Settings that take ef
 | Pick a microphone | `MIC_DEVICE` |
 | Fix the phone page's PIN (or use `HEXA_WEB_PIN`) | `WEB_PIN` |
 | Stop a silent phone sooner or later | `WEB_DEADMAN_S` |
+| Change how long the phone may hold to talk | `WEB_PTT_MAX_S` |
 
 ## Two rules
 
