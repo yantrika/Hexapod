@@ -175,6 +175,30 @@ The speech model is `vosk-model-small-en-us-0.15` (the Indian English model is n
 
 To use a different speech model or voice, change one name in `config.py` (see `docs/HOW_TO.md`) and run `scripts/fetch_models.sh`. The Indian model is only downloaded with `scripts/fetch_models.sh --all-models`.
 
+## Phone control page (Step 12a)
+
+Drive the robot from a phone browser: hold-to-move buttons (forward, back, strafe, turn; hold two together, e.g. forward + turn), Stand, Sit, Wave, a big STOP and a live status line. No audio yet (that is Step 12b, with HTTPS). One static page, no internet needed.
+
+```bash
+python main.py --web --no-speak --no-mic --chat fake     # this computer only: http://127.0.0.1:8765/
+python main.py --lan  --no-speak --no-mic --chat fake    # reachable from a phone; prints the URL(s)
+hostname -I                                              # your computer's address, if you need it
+```
+
+1. Start with `--lan`. The terminal prints `web PIN: 123456` and `web page (phone, same Wi-Fi): http://192.168.x.y:8765/`.
+2. Put the phone on the **same Wi-Fi**, open that URL, type the PIN, Connect. (`http://192.168.x.y:8765/#pin=123456` connects at once.)
+3. If the page does not load, the network may isolate clients (guest Wi-Fi, some university or office networks). Turn on the **phone's hotspot**, join the computer to it, run `hostname -I` and use that address.
+   If the phone still cannot connect but the page loads on the computer itself, the computer's firewall is the usual cause (seen on the dev laptop): `sudo ufw allow 8765/tcp`, and remove it when done with `sudo ufw delete allow 8765/tcp`.
+4. Walk the robot with the buttons; letting go ramps it to a halt, and STOP always stops it.
+
+**The PIN.** Set `HEXA_WEB_PIN=123456` in the environment, or `WEB_PIN` in `config.py`; with neither, a random 6-digit PIN is generated at each start and printed on the terminal only (never in the log, never committed). Five wrong PINs from one address lock that address out for a minute. Only one phone controls at a time; a second one is refused until the first disconnects.
+
+**Safety (enforced by the server, not only the page).** The page repeats a held move 10 times a second; if the server hears nothing for 0.3 s (`WEB_DEADMAN_S`) while the robot moves, it sends `stop`. A closed or lost connection sends `stop`; the page also sends `stop` when it is hidden, loses focus or the touch is cancelled. STOP uses the same `stop_event` fast path as the control window. The server accepts only walk/stop/stand/sit/wave with numbers clamped to [-1, 1]; the page never sends joint data. `scripts/web_check.py` is a headless client for testing (`python scripts/web_check.py --pin 123456 --forward 1 --seconds 2`).
+
+**Limits.** This is plain HTTP: anyone on the same network who can see the traffic can read the PIN and steer the robot. **Use it only on a network you trust (your own Wi-Fi or phone hotspot) until Step 12b adds HTTPS.** Without `--lan` it listens on this computer only. The body's own watchdog stays the last line of defence.
+
+Measured on the dev laptop (headless body, loopback, `scripts/measure_web.py`): button press to the first joint-target change (the foot targets' inverse kinematics) median 38.5 ms, p95 43.4 ms over 20 presses (up to one 20 ms control tick plus the velocity ramp-in); the web-server thread uses about 0.5 % of a core idle (0.6 % with a client connected), the whole brain process about 2 %; peak temperature 78 C (guard limit 82).
+
 ## Chat and status-driven speech (Step 9)
 
 After a command hexa answers from the body's **status** ("okay" when the body accepted it, "I'm already sitting" when the body says it is). Anything that is not a command is **chat** (a small local LLM through Ollama), but only while the body is idle. While it walks, turns or changes posture hexa says "tell me after I stop" and does not call the LLM; any command, stop or movement cuts the chat speech short so the microphone stays free for "stop". If Ollama is down hexa says "I can't think right now". The LLM is never used to decide a command: the word router does that.

@@ -77,7 +77,8 @@ We do one step at a time. Each step ends with all tests passing. We wait for app
 ### Step 10 extra
 - Push-to-talk: the robot listens only while you hold a button.
 
-### Step 12: the phone page
+### Step 12: the phone page (12a buttons now, 12b talking later)
+- 12a (built): hold-to-move buttons, stand, sit, wave, STOP, a PIN, plain HTTP on a trusted network. 12b adds the push-to-talk button over HTTPS.
 - Runs on the Pi. You open it on your phone on the same Wi-Fi.
 - Buttons: hold to move, stand, sit, wave, stop. A push-to-talk button. A live status line.
 - Safety rules for it:
