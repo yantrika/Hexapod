@@ -20,6 +20,15 @@ cat /sys/class/thermal/thermal_zone0/temp                    # temperature in th
 - The simulation tests (`test_walk_sim.py`, `test_controller_sim.py`, `test_body_process.py`, `test_voice_body.py`, `test_brain_cli.py`) are the hottest.
 - Test the voice with a **headless** body (the default). The viewer plus Piper plus walking makes the body very slow.
 
+## Ollama (runs in Docker; you start it and pull models)
+
+```bash
+docker start ollama
+docker exec -it ollama ollama pull qwen2.5:0.5b
+docker exec ollama ollama list
+docker stop ollama                  # frees the CPU when you are not chatting
+```
+
 ## Models and phrases
 
 | Command | What it does |
@@ -34,6 +43,8 @@ cat /sys/class/thermal/thermal_zone0/temp                    # temperature in th
 | Command | What it does |
 |---|---|
 | `python scripts/voice_cli.py` | The whole loop: say "walk forward", "stop"... (headless body). |
+| `python scripts/voice_cli.py --chat fake` | Scripted chat: use this on the slow dev laptop. |
+| `python scripts/voice_cli.py --no-speak --chat fake` | No audio: replies are printed as `[hexa] ...`. |
 | `python scripts/voice_cli.py --model in` | Same with the Indian English model. |
 | `python scripts/voice_cli.py --no-speak` | No Piper, so the robot says nothing. |
 | `python scripts/voice_cli.py --gui` | With the viewer. Needs the Mesa override below. |
@@ -58,6 +69,7 @@ cat /sys/class/thermal/thermal_zone0/temp                    # temperature in th
 |---|---|
 | `python scripts/measure_voice.py --clear` | How fast `clear()` stops speech (plays quiet sound). |
 | `python scripts/measure_voice.py --stt` | One vs two Vosk recognizers: CPU, memory, body timing. |
+| `python scripts/measure_chat.py` | Times the real Ollama model (heats the laptop!). Add `--with-voice` for the standing Vosk+Piper load. |
 | `python scripts/measure_voice.py --body` | Body timing with and without Piper (add `--gui`). |
 
 ## Simulation tools (DEV)
@@ -85,6 +97,7 @@ python scripts/cool_run.py -- nice -n 19 pytest tests/test_router.py -q     # on
 | (none) | normal tests | `pytest tests/test_<name>.py` |
 | `timing` | speed-sensitive, needs a quiet machine | `pytest -m timing` |
 | `audio` | real Piper, no speaker | `pytest -m audio -s tests/test_tts_real.py` |
+| `llm` | a running Ollama with the model pulled | `pytest -m llm -s tests/test_chat_llm.py` |
 
 Tests that use the real Vosk model or Piper skip themselves if the models are missing: run `scripts/fetch_models.sh`.
 

@@ -31,7 +31,7 @@ Faster voices are "low" quality. On the dev laptop Piper uses about two CPU core
 ## Change what the robot says automatically
 
 `TTS_PHRASES` in `config.py` is a list of `name: text`. Edit or add one, then run `python scripts/prerender_phrases.py --force` (or `scripts/fetch_models.sh` for new ones only). Play one with `python scripts/say.py --phrase NAME`.
-The phrase spoken after each voice command is `VOICE_ACK_PHRASE`.
+After a voice command the robot speaks from the body's status through `brain/dialogue.py` (which phrase for which status is a small table there). To add a phrase: add it to `TTS_PHRASES`, run `python scripts/prerender_phrases.py`, then use its name in `dialogue.py`.
 
 ## Change the voice commands (words the robot understands)
 
@@ -85,7 +85,13 @@ See `HARDWARE.md`. Short version: only the table in `body/servo_backend.py`; not
 
 ## Change the chat model (Ollama)
 
-`OLLAMA_MODEL`, `OLLAMA_URL`, `OLLAMA_TIMEOUT_S`, `CHAT_MAX_TOKENS` in `config.py`. The chat code (`brain/chat.py`) is not built yet (Step 9), so changing these has no effect today.
+Ollama runs in Docker here. **You** pull models (I never download):
+
+1. `docker start ollama` (if it is not running), then `docker exec -it ollama ollama pull <name>`, for example `qwen2.5:1.5b`. Only use local models (not names ending in `-cloud`): the robot must stay offline.
+2. `config.py`: change `OLLAMA_MODEL` to that name (or try it once with `python scripts/voice_cli.py --ollama-model <name>`).
+3. Time it before trusting it: `python scripts/measure_chat.py --model <name>` (it prints a verdict: you need at least 3 tokens/s and a first token within 5 s). On the dev laptop `qwen2.5:0.5b` gave about 1.5 tokens/s, so use `--chat fake` here and time the real model on the Pi.
+
+Other chat settings in `config.py`: `CHAT_SYSTEM_PROMPT` (the personality: short, friendly, no lists/emoji, only the abilities it has), `CHAT_MAX_TOKENS` (reply cap), `CHAT_TEMPERATURE`, `CHAT_HISTORY_TURNS` (memory), `OLLAMA_KEEP_ALIVE`, `OLLAMA_TIMEOUT_S`, `CHAT_MAX_SENTENCE_CHARS`. Nothing else in the code names a chat model: the code only knows the `ChatBackend` interface in `brain/chat.py`, so a different engine means one new class there.
 
 ## Add a new file or module
 

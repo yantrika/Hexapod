@@ -12,7 +12,7 @@ Legend: **STUB** = placeholder, not built yet. **DEV** = developer tool, not par
 | `config.py` | Every number and setting in one place (sizes, limits, speeds, timing, router words, audio, model names, thresholds). | You want to change any value. See `CONFIG.md`. |
 | `bridge.py` | The two message types (`Command`, `Status`) and the `Bridge`: the only link between the brain program and the body program. Checks every command. | You add a new command or status kind. |
 | `commandline.py` | Turns typed text like `walk fwd 0.5` into commands, and prints statuses. Shared by the typed front ends. | You add a typed command. |
-| `main.py` | **STUB.** Will start the body and the voice/brain loop together (Step 9). | Step 9. |
+| `main.py` | **STUB.** Will start the body and the voice/brain loop together (today use `scripts/voice_cli.py`). | When you want one start command. |
 | `README.md` | How to run each step, with commands. | You add something runnable. |
 | `AGENTS.md` | The rules for anyone (or any AI) changing the code. | A rule changes. |
 | `CLAUDE.md` | Points Claude Code to `AGENTS.md` and `plan.md`. | Almost never. |
@@ -52,7 +52,9 @@ Legend: **STUB** = placeholder, not built yet. **DEV** = developer tool, not par
 | `brain/motion_keeper.py` | Sends heartbeats while a walk or turn is held; stops after `VOICE_WALK_MAX_S`. | You change heartbeat rules. |
 | `brain/status_hub.py` | The one reader of the body's statuses; shares each status with any number of listeners without blocking. | You add a listener type. |
 | `brain/transcript_log.py` | Writes one line per recognised utterance to `logs/transcripts.jsonl`. | You change what is logged. |
-| `brain/chat.py` | **STUB.** Will talk to Ollama for open conversation (Step 9). | Step 9. |
+| `brain/chat.py` | Chat: the `ChatBackend` interface, `OllamaChat` (local LLM over HTTP), `FakeChat` (scripted, for tests and the slow laptop) and `ChatResponder` (streams a reply, speaks it sentence by sentence, can be cancelled, keeps history). | You change the chat model or behaviour. |
+| `brain/sentences.py` | Turns streamed LLM text into clean, speakable sentences (no markdown or emoji; splits overlong ones). Pure. | You change how replies are spoken. |
+| `brain/dialogue.py` | After a command, speaks from the body's STATUS ("okay", "I'm already sitting"...) using pre-recorded phrases. | You change what the robot says about statuses. |
 | `brain/__init__.py` | Marks the folder as a package. | Never. |
 
 ## `voice/` : ears and mouth
@@ -70,6 +72,7 @@ Legend: **STUB** = placeholder, not built yet. **DEV** = developer tool, not par
 | File | What it does | Edit it when |
 |---|---|---|
 | `scripts/voice_cli.py` | Runs the whole loop: talk to the robot (microphone to body). | You change the demo. |
+| `scripts/measure_chat.py` | Times the real Ollama model: first token, tokens per second, memory, temperature, body tick time (`--with-voice` adds Vosk and Piper). **DEV** (heats the laptop) | You add a measurement. |
 | `scripts/stt_check.py` | Measures how well Vosk hears **your** voice; saves results; `--replay` re-judges them. | You add test phrases. |
 | `scripts/mic_check.py` | Lists microphones, records 3 seconds, shows the level. | Rarely. |
 | `scripts/say.py` | Type text, hear it spoken. | Rarely. |
@@ -139,6 +142,11 @@ Run one file at a time on the dev laptop (see `COMMANDS.md`).
 | `tests/test_control_logic.py` | The control window's key logic. |
 | `tests/test_teleop.py` | Keyboard mapping for `teleop.py`. |
 | `tests/test_joint_jog.py` | Labels for `joint_jog.py`. |
+| `tests/test_sentences.py` | The sentence splitter: abbreviations, decimals, markdown, any chunking. |
+| `tests/test_chat.py` | Chat backends (stub HTTP server, `FakeChat`) and the reply streamer: first sentence early, cancel, history, errors. |
+| `tests/test_dialogue.py` | Status to phrase table, throttle, "already sitting". |
+| `tests/test_chat_voice.py` | Chat in the voice loop: only while the body is idle; motion and stop cancel it. |
+| `tests/test_chat_llm.py` | One real-LLM check (only with `pytest -m llm`). |
 | `tests/test_tts.py` | Piper wrapper against a fake Piper (crash, hang, orphans). |
 | `tests/test_playback.py` | Playback queue, `clear()`, speaking flag, prefetch gaps. |
 | `tests/test_tts_real.py` | Real Piper speed (only with `pytest -m audio`). |

@@ -270,7 +270,9 @@ class StubPlayback:
         return 1
 
 
-def test_a_routed_command_is_acknowledged_with_the_prerendered_okay_and_chat_is_not() -> None:
+def test_the_voice_loop_itself_says_nothing_about_a_command() -> None:
+    """Speech after a command comes from the body's STATUS (brain/dialogue.py), never from the
+    assumption that the command worked."""
     playback = StubPlayback()
     rig = Rig(playback=playback)
     try:
@@ -278,7 +280,8 @@ def test_a_routed_command_is_acknowledged_with_the_prerendered_okay_and_chat_is_
         rig.push(CHAT)
         rig.push(WALK)
         rig.settle(3)
-        assert playback.phrases == [config.VOICE_ACK_PHRASE, config.VOICE_ACK_PHRASE]
+        assert rig.actions() == ["sit", "walk"]
+        assert playback.phrases == []
     finally:
         rig.close()
 

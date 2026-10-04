@@ -56,3 +56,19 @@ You changed a size in `config.py`. Run `python scripts/generate_urdf.py` and com
 ## `ruff` or `mypy` complain
 
 Fix them before committing: `ruff check . --fix`, then `mypy .`. Lines must be 100 characters or less.
+
+## Chat says "I can't think right now"
+
+Ollama is not running, the model is not pulled, or it was too slow. Check: `docker ps` (is `ollama` listed? else `docker start ollama`), `docker exec ollama ollama list` (is the model there? else pull it yourself), `curl http://127.0.0.1:11434/api/version`. The first reply after the model was unloaded can take longer than `OLLAMA_TIMEOUT_S` on this laptop; `voice_cli.py` warms the model up at start, and `OLLAMA_KEEP_ALIVE` keeps it loaded for 10 minutes.
+
+## Chat is very slow, or the laptop gets very hot when chatting
+
+Expected on the dev laptop (no AVX): `qwen2.5:0.5b` makes about 1.5 tokens/s and the laptop reaches about 90 C. Use `--chat fake` here, and time the real model on the Pi 5. `docker stop ollama` frees the CPU. Never use a model name ending in `-cloud`: it runs online.
+
+## "Tell me after I stop"
+
+By design: chat does not run while the robot is walking, turning or changing posture, so the microphone stays free for "stop". Say "stop" (or wait for the move to end) and ask again.
+
+## Docker CPU limit
+
+If Ollama seems slow, `docker inspect -f 'NanoCpus={{.HostConfig.NanoCpus}}' ollama` shows 0 for no limit. `docker update --cpus 0` is ignored by Docker; use `docker update --cpus 4 ollama` (the machine's core count) to remove a cap.

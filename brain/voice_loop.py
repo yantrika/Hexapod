@@ -10,8 +10,11 @@
   Commands go through the bridge and the motion keeper exactly like
   ``scripts/brain_cli.py``; the voice side never touches the controller or any joint angle.
 - Audio captured while hexa speaks is discarded (``SelfHearingGate``) and never fed to Vosk.
-- After a routed command hexa says the pre-rendered "okay" (a placeholder until Step 9, which
-  speaks from body statuses). Statuses are only printed by the front end.
+- The voice loop itself says nothing about commands: speech after a command comes from the body's
+  STATUS (``brain/dialogue.py``). A chat sentence goes to the LLM (``brain/chat.py``) only while
+  the body is idle (no walk, turn or transition); otherwise hexa says "tell me after I stop" and
+  the LLM is not called. Any motion command or stop cancels a chat reply in progress, so the
+  microphone is free for "stop". The LLM is never in the command path: the router decides.
 - A source or recognizer error is logged and the loop keeps running.
 """
 
@@ -26,6 +29,7 @@ from dataclasses import dataclass
 
 import config
 from brain.brain_loop import BrainLoop
+from brain.chat import ChatResponder
 from brain.router import RouteResult, route
 from brain.stt_decision import PATH_EARLY_STOP, decide
 from brain.transcript_log import TranscriptLog, hypothesis_record
@@ -63,6 +67,7 @@ class VoiceLoop:
         on_event: Callable[[VoiceEvent], None] | None = None,
         clock: Callable[[], float] = time.monotonic,
         transcripts: TranscriptLog | None = None,
+        chat: ChatResponder | None = None,
     ) -> None:
         self.source = source
         self.stt = stt
@@ -70,6 +75,8 @@ class VoiceLoop:
         self.playback = playback
         self.on_event = on_event
         self.transcripts = transcripts
+        self.chat = chat
+        self._last_busy_notice = float("-inf")
         self._clock = clock
         self._gate = SelfHearingGate(speaking)
         self._events: queue.Queue[SttEvent] = queue.Queue(maxsize=config.UTTERANCE_QUEUE_MAXSIZE)
@@ -188,6 +195,8 @@ class VoiceLoop:
                 self.events_handled += 1
             try:
                 self.brain.pump()  # statuses to the keeper, due heartbeats to the body
+                if self.chat is not None and not self.brain.body_idle():
+                    self.chat.cancel()  # motion from any source silences chat: keep the mic free
             except Exception:  # noqa: BLE001
                 logger.exception("brain pump failed")
                 self.errors += 1
@@ -225,7 +234,7 @@ class VoiceLoop:
         self._log_final(event, decision.path, decision.reason, result, duplicate)
         if duplicate:
             return  # the partial already stopped the robot; do not send it twice
-        self._act(result, decision.path, decision.reason, False)
+        self._act(result, decision.path, decision.reason, False, event.timestamp)
 
     def _log_final(self, event: SttEvent, path: str, reason: str, result: RouteResult,
                    duplicate: bool) -> None:
@@ -242,7 +251,10 @@ class VoiceLoop:
             "duplicate_of_early_stop": duplicate,
         })
 
-    def _act(self, result: RouteResult, path: str, reason: str, early_stop: bool) -> None:
+    def _act(self, result: RouteResult, path: str, reason: str, early_stop: bool,
+             started_at: float | None = None) -> None:
+        if result.kind != "chat" and self.chat is not None:
+            self.chat.cancel()  # a command or a stop silences any chat reply first
         self.brain.handle_route(result)  # a stop goes out first, before anything else
         self._emit(
             VoiceEvent("route", result.text, self._clock(), result, early_stop, path, reason)
@@ -250,8 +262,22 @@ class VoiceLoop:
         if early_stop and self.transcripts is not None:
             self.transcripts.append({"kind": "early-stop", "free": {"text": result.text},
                                      "path": path, "reason": reason})
-        if result.kind != "chat" and self.playback is not None:
-            try:
-                self.playback.say_phrase(config.VOICE_ACK_PHRASE)
-            except TtsError as error:
-                logger.error("could not acknowledge: %s", error)
+        if result.kind == "chat":
+            self._chat(result.text, started_at)
+
+    def _chat(self, text: str, started_at: float | None) -> None:
+        """Chat goes to the LLM only while the body is idle (see the module docstring)."""
+        if self.chat is None:
+            return
+        if not self.brain.body_idle():
+            now = self._clock()
+            if self.playback is not None and now - self._last_busy_notice >= (
+                config.DIALOGUE_THROTTLE_S
+            ):
+                self._last_busy_notice = now
+                try:
+                    self.playback.say_phrase("tell_me_after_stop")
+                except TtsError as error:
+                    logger.error("could not say it: %s", error)
+            return
+        self.chat.submit(text, started_at)

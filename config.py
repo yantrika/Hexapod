@@ -207,7 +207,9 @@ ROUTER_ALIASES: dict[str, tuple[str, dict[str, object]]] = {
 # --- Brain (typed-text and voice front ends) -------------------------------
 VOICE_WALK_MAX_S = 10.0  # a walk started by text/voice stops being kept alive after this
 VOICE_PUMP_S = 0.05  # the voice worker serves heartbeats and statuses at least this often
-VOICE_ACK_PHRASE = "okay"  # spoken after a routed command (placeholder until Step 9)
+# Speech after a command comes from the body's STATUS (brain/dialogue.py), never from assumption.
+DIALOGUE_SPEAK_DONE = False  # say "Done." when an action finishes (silent by default)
+DIALOGUE_THROTTLE_S = 2.0  # the same phrase is not repeated within this many seconds
 STATUS_SUBSCRIBER_MAXSIZE = 64  # per subscriber; the oldest status is dropped when it is full
 STATUS_HUB_POLL_S = 0.05  # the hub's single reader wakes this often to notice a shutdown
 
@@ -248,6 +250,11 @@ TTS_PHRASES: dict[str, str] = {
     "hmm": "Hmm.",
     "one_moment": "One moment.",
     "let_me_think": "Let me think.",
+    "sure": "Sure.",
+    "done": "Done.",
+    "something_wrong": "Something went wrong.",
+    "cant_think": "I can't think right now.",
+    "tell_me_after_stop": "Tell me after I stop.",
 }
 
 # --- Models --------------------------------------------------------------
@@ -280,11 +287,25 @@ PIPER_MODEL_PATH = PIPER_DIR / (PIPER_VOICE.rsplit("/", 1)[-1] + ".onnx")
 # threads take about 2.2 cores and double the body tick time on the dev laptop).
 PIPER_NICE = 0  # extra niceness for the Piper process (0 = none)
 PIPER_CPU_LIST: str | None = None  # taskset CPU list, e.g. "3"; None = any CPU
+# --- Chat (Step 9): the LLM is ONLY for conversation, never in the command path ------------------
+# Real-model speed on the dev laptop (no AVX): qwen2.5:0.5b makes about 1.5 tokens/s, so chat is
+# developed against FakeChat here and the real model is timed on the Pi 5. TO REPLACE THE MODEL:
+# change OLLAMA_MODEL and pull it yourself: docker exec -it ollama ollama pull <name>
 OLLAMA_URL = "http://127.0.0.1:11434"
-OLLAMA_MODEL = "qwen2.5:1.5b"
-OLLAMA_TIMEOUT_S = 20.0
-CHAT_MAX_TOKENS = 80
-CHAT_HISTORY_TURNS = 4
+OLLAMA_MODEL = "qwen2.5:0.5b"  # 1.5b only after 0.5b works (owner)
+OLLAMA_TIMEOUT_S = 20.0  # connect timeout and the longest silence between streamed tokens
+OLLAMA_KEEP_ALIVE = "10m"  # how long Ollama keeps the model in memory after a reply
+CHAT_MAX_TOKENS = 80  # hard cap on a reply (Ollama num_predict)
+CHAT_TEMPERATURE = 0.7
+CHAT_HISTORY_TURNS = 4  # rolling history: the last N (user, reply) pairs
+CHAT_MAX_SENTENCE_CHARS = 160  # a longer sentence is split at a clause boundary for the TTS
+CHAT_SYSTEM_PROMPT = (
+    "You are Hexa, a small friendly six-legged robot. Answer in one or two short sentences. "
+    "Use plain spoken words only: no lists, no markdown, no emoji. "
+    "You can walk, sit, stand, wave and turn, and nothing else; never claim other abilities "
+    "and never pretend to have done a movement. If asked to move, say you will do it when "
+    "asked directly."
+)
 
 # --- Test tolerances -----------------------------------------------------
 IK_TOLERANCE_M = 1e-4

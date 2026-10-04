@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 import time
 from collections.abc import Callable
 
@@ -186,3 +187,38 @@ class FakeStt:
 
 def marker_block(value: int, size: int = 100) -> np.ndarray:
     return np.full(size, value, dtype=np.int16)
+
+
+# --- chat and dialogue doubles (Step 9) ---------------------------------------------------------
+class StubPlayback:
+    """Records what the chat responder, the dialogue and the voice loop ask a Playback to do."""
+
+    def __init__(self) -> None:
+        self.said: list[tuple[float, str]] = []  # (monotonic time, sentence)
+        self.phrases: list[str] = []
+        self.clears: list[float] = []
+        self.pending = 0
+        self._group = 0
+        self._lock = threading.Lock()
+
+    def say(self, text: str) -> int:
+        with self._lock:
+            self._group += 1
+            self.said.append((time.monotonic(), text))
+            self.pending += 1
+            return self._group
+
+    def say_phrase(self, name: str) -> int:
+        with self._lock:
+            self._group += 1
+            self.phrases.append(name)
+            return self._group
+
+    def clear(self) -> None:
+        with self._lock:
+            self.clears.append(time.monotonic())
+            self.pending = 0
+
+    @property
+    def sentences(self) -> list[str]:
+        return [text for _, text in self.said]

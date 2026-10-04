@@ -153,3 +153,21 @@ The speech model is `vosk-model-small-en-us-0.15` (the Indian English model is n
 - Replaying the same run with `STT_GRAMMAR_CONF` at 0.5 / 0.6 / 0.75 / 0.9 gave 74% / 72% / 72% / 68% command accuracy with 0 dangerous at every value, so it stays at 0.75.
 
 To use a different speech model or voice, change one name in `config.py` (see `docs/HOW_TO.md`) and run `scripts/fetch_models.sh`. The Indian model is only downloaded with `scripts/fetch_models.sh --all-models`.
+
+## Chat and status-driven speech (Step 9)
+
+After a command hexa answers from the body's **status** ("okay" when the body accepted it, "I'm already sitting" when the body says it is). Anything that is not a command is **chat** (a small local LLM through Ollama), but only while the body is idle. While it walks, turns or changes posture hexa says "tell me after I stop" and does not call the LLM; any command, stop or movement cuts the chat speech short so the microphone stays free for "stop". If Ollama is down hexa says "I can't think right now". The LLM is never used to decide a command: the word router does that.
+
+```bash
+docker start ollama                                  # Ollama runs in Docker here; models are pulled by you:
+docker exec -it ollama ollama pull qwen2.5:0.5b      # (once; 1.5b only after 0.5b works)
+python scripts/voice_cli.py --chat fake              # scripted chat: use this on the slow dev laptop
+python scripts/voice_cli.py                          # real Ollama chat (config.OLLAMA_MODEL)
+python scripts/voice_cli.py --no-speak --chat fake   # no audio: replies are printed as [hexa] ...
+python scripts/measure_chat.py                       # time the real model (heats the laptop!)
+pytest -m llm -s tests/test_chat_llm.py              # one real-model test, excluded by default
+```
+
+Real-model speed on the dev laptop (no AVX), `qwen2.5:0.5b`, Ollama in Docker with all cores: about 1.5 tokens/s and a 90 C peak, far below the 3 tokens/s the plan needs, so chat is developed against the fake backend here and the real model is timed on the Pi 5 (see `plan.md`, Risks). `voice_cli.py` prints, per chat utterance, the time from the final result to the first token, first sentence and first audio.
+
+To use another chat model change `OLLAMA_MODEL` in `config.py` and pull it yourself (`docker exec -it ollama ollama pull <name>`). The personality prompt, history length, token cap and temperature are in `config.py` (`CHAT_*`).

@@ -31,9 +31,16 @@ Short version. The full design is in `../plan.md` (message formats, safety rules
 4. `brain/router.py` turns it into stop / command / chat.
 5. `brain/brain_loop.py` sends the command through the Bridge; `brain/motion_keeper.py` then sends heartbeats so the walk continues.
 6. The body replies with statuses (`accepted`, `done`, `rejected`...). `brain/status_hub.py` shows them to every listener.
-7. `voice/playback.py` says "okay" (pre-rendered, no waiting). While it speaks, step 2 ignores the microphone.
+7. `brain/dialogue.py` hears the body's `accepted` and `voice/playback.py` says "okay" (pre-rendered, no waiting). While it speaks, step 2 ignores the microphone.
 
-Chat (anything that is not a command) is Step 9: `brain/chat.py` and Ollama are not built yet.
+## What happens when you just talk (chat)
+
+Something that is not a command is chat (`brain/chat.py`, a local LLM through Ollama):
+
+1. Only if the body is **idle** (no walk, turn or posture change). Otherwise hexa says "tell me after I stop" and the LLM is not called.
+2. The reply streams in; each finished sentence (`brain/sentences.py`) goes straight to the speaker queue, so hexa starts talking before the LLM has finished.
+3. A command, a stop, or any motion cancels the reply and clears the speech, so the microphone is free for "stop".
+4. If the LLM is down or too slow, hexa says "I can't think right now". The LLM is never used to decide a command.
 
 ## Safety rules that matter
 
@@ -47,6 +54,8 @@ Chat (anything that is not a command) is Step 9: `brain/chat.py` and Ollama are 
 | Fallen robot refuses motion except stop | `body/process.py`, `body/controller.py` |
 | Robot ignores the microphone while it speaks | `voice/stt.py` (gate), `voice/playback.py` (`speaking`) |
 | A grammar match is not trusted unless it is an exact known phrase | `brain/stt_decision.py` |
+| Chat runs only while the body is idle; motion cancels chat speech | `brain/voice_loop.py`, `brain/brain_loop.py` |
+| The LLM is never in the command path (the router decides) | `brain/router.py`, `brain/voice_loop.py` |
 | Only `voice/audio.py` touches the mic; only `voice/playback.py` touches the speaker | `AGENTS.md` |
 | Piper is always one long-lived process | `voice/tts.py` |
 
@@ -59,6 +68,8 @@ Chat (anything that is not a command) is Step 9: `brain/chat.py` and Ollama are 
 | `tts-synth` | sentences to say | audio clips |
 | `tts-playback` | audio clips | speaker, `speaking` flag |
 | `status-hub` | the body's status queue | every listener's own queue |
+| `dialogue` | its status subscription | phrases to the speaker |
+| `chat-reply` | the LLM's streamed reply | sentences to the speaker queue |
 
 Threads talk only through `queue.Queue` and one shared `speaking` flag. Each queue is bounded and drops the oldest item when full, so nothing can block the robot.
 
@@ -71,5 +82,7 @@ Threads talk only through `queue.Queue` and one shared `speaking` flag. Each que
 | Simulation vs real robot | `body/backend.py` (contract), `sim_backend.py`, `servo_backend.py` (stub) |
 | Understanding speech | `voice/stt.py`, `brain/stt_decision.py`, `brain/router.py` |
 | Speaking | `voice/tts.py`, `voice/playback.py` |
+| Talking back about statuses | `brain/dialogue.py` |
+| Chat | `brain/chat.py`, `brain/sentences.py` |
 | Connecting speech to the body | `brain/voice_loop.py`, `brain/brain_loop.py`, `brain/motion_keeper.py`, `brain/status_hub.py` |
 | All numbers | `config.py` |

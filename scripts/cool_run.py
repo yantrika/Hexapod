@@ -3,6 +3,7 @@
 
     python scripts/cool_run.py -- nice -n 19 pytest tests/test_voice_loop.py
     python scripts/cool_run.py --start-below 62 --kill-at 80 -- python scripts/voice_cli.py
+    python scripts/cool_run.py --poll 0.25 --kill-at 78 -- python scripts/measure_chat.py  # LLM
     python scripts/cool_run.py --pause-at 78 --resume-below 68 -- pytest tests/test_audio.py
 
 Before starting it waits until the temperature is below ``--start-below``. While the command
@@ -69,6 +70,7 @@ def main() -> int:
     parser.add_argument("--kill-at", type=float, default=82.0, help="kill the command (C)")
     parser.add_argument("--pause-at", type=float, default=None, help="freeze the command (C)")
     parser.add_argument("--resume-below", type=float, default=70.0, help="unfreeze (C)")
+    parser.add_argument("--poll", type=float, default=1.0, help="seconds between checks")
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
@@ -83,7 +85,7 @@ def main() -> int:
     peak = read_temperature_c() or 0.0
     try:
         while process.poll() is None:
-            time.sleep(1.0)
+            time.sleep(args.poll)
             temperature = read_temperature_c()
             if temperature is None:
                 continue

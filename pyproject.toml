@@ -14,8 +14,9 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-m 'not timing and not audio'"
+addopts = "-m 'not timing and not audio and not llm'"
 markers = [
     "timing: wall-clock bound tests, sensitive to machine load (run with: pytest -m timing)",
     "audio: need the real Piper binary and voice (run with: pytest -m audio)",
+    "llm: need a running Ollama with the model pulled (run with: pytest -m llm -s)",
 ]
