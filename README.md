@@ -1,12 +1,12 @@
 # hexa
 
 A talking hexapod robot: built in PyBullet simulation first, deployed to a
-
-**Docs:** start at [`docs/README.md`](docs/README.md): [every file explained](docs/FILES.md), [how to change models, phrases, thresholds and pins](docs/HOW_TO.md), [hardware and servo pins](docs/HARDWARE.md), [commands](docs/COMMANDS.md), [troubleshooting](docs/TROUBLESHOOTING.md).
 Raspberry Pi 5 later.
 
 Fully offline. STT via Vosk, TTS via Piper, optional chat via a local Ollama
 model. No cloud services and no paid tools.
+
+**Docs:** start at [`docs/README.md`](docs/README.md): [every file explained](docs/FILES.md), [how to change models, phrases, thresholds and pins](docs/HOW_TO.md), [hardware and servo pins](docs/HARDWARE.md), [commands](docs/COMMANDS.md), [troubleshooting](docs/TROUBLESHOOTING.md).
 
 - `AGENTS.md` — contributor conventions.
 - `config.py` — every tunable value (geometry, joint limits, clamp ranges).
