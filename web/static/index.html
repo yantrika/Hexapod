@@ -16,7 +16,7 @@
     font: 16px/1.3 system-ui, sans-serif; overscroll-behavior: none;
   }
   /* Controls: no scroll, no text selection, no long-press menu, no double-tap zoom. */
-  .pad, .pad * , #stop {
+  .pad, .pad * , #stop, #ptt {
     touch-action: none; user-select: none; -webkit-user-select: none;
     -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
   }
@@ -53,6 +53,29 @@
   #stop { background: var(--stop); color: #fff; border: 0; border-radius: 16px;
           font-size: 34px; font-weight: 800; letter-spacing: .08em; height: 96px; flex: none; }
   #stop:active { background: #8f1220; }
+  #voice { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 120px; }
+  #ptt { background: var(--panel); color: var(--text); border: 2px solid var(--panel-hold);
+         border-radius: 16px; font: inherit; font-size: 20px; font-weight: 800; height: 64px;
+         flex: none; letter-spacing: .04em; }
+  #ptt.held { background: var(--ok); border-color: var(--ok); color: #04210f; }
+  #ptt:disabled { border-color: var(--muted); color: var(--muted); }
+  #listen { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+  #lamp { width: 12px; height: 12px; border-radius: 50%; background: var(--panel); flex: none; }
+  #listen.on { color: var(--ok); font-weight: 700; }
+  #listen.on #lamp { background: var(--ok); }
+  #pttnote { font-size: 12px; color: var(--muted); }
+  #log { flex: 1; min-height: 48px; overflow-y: auto; background: var(--panel); border-radius: 12px;
+         padding: 8px 10px; font-size: 14px; -webkit-overflow-scrolling: touch; }
+  #log div { padding: 1px 0; overflow-wrap: anywhere; }
+  #log .heard { color: var(--text); } #log .route { color: var(--panel-hold); filter: brightness(1.6); }
+  #log .said { color: var(--ok); } #log .status, #log .info { color: var(--muted); }
+  #log .error { color: var(--warn); }
+  #sayrow { display: flex; gap: 8px; }
+  #say { flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 10px 12px;
+         border-radius: 12px; border: 0; background: var(--panel); color: var(--text); }
+  #sayrow button { font: inherit; font-weight: 700; padding: 0 18px; border-radius: 12px; border: 0;
+                   background: var(--panel-hold); color: #fff; }
+  #say:disabled, #sayrow button:disabled { opacity: .45; }
   #reconnect { display: none; }
   .lost #reconnect { display: block; }
 </style>
@@ -88,6 +111,17 @@
       <button data-cmd="stand" type="button">Stand</button>
       <button data-cmd="sit" type="button">Sit</button>
       <button data-cmd="wave" type="button">Wave</button>
+    </div>
+    <div id="voice">
+      <button id="ptt" type="button" disabled>HOLD TO TALK</button>
+      <div id="listen"><div id="lamp"></div><span id="listentext">idle</span></div>
+      <div id="pttnote">The microphone is the robot's: speak near the robot. A voice "stop" works
+        only while you hold the button; the STOP button always works.</div>
+      <div id="log" aria-live="polite"></div>
+      <form id="sayrow" autocomplete="off">
+        <input id="say" type="text" placeholder="type to hexa" maxlength="120" aria-label="type to hexa">
+        <button id="saysend" type="submit">Send</button>
+      </form>
     </div>
     <button id="stop" type="button">STOP</button>
   </div>
@@ -143,11 +177,55 @@ function update() {                 // the held set changed
     clearInterval(repeat); repeat = null;
   }
 }
-function stopAll() {                // hard stop: forget every touch, then `stop`
+function stopAll() {                // hard stop: forget every touch, then `stop` (and let go of talk)
   held.clear();
   if (repeat !== null) { clearInterval(repeat); repeat = null; }
   paint();
+  releaseTalk();
   send({action: "stop"});
+}
+
+// Hold to talk: the server owns the limit and releases on stop and on disconnect too.
+var talkPointer = null;
+function releaseTalk() {
+  if (talkPointer !== null) { talkPointer = null; $("ptt").classList.remove("held"); send({action: "ptt_release"}); }
+}
+function logLine(kind, text) {
+  var log = $("log"), line = document.createElement("div");
+  line.className = kind; line.textContent = text; log.appendChild(line);
+  while (log.childNodes.length > 200) { log.removeChild(log.firstChild); }
+  log.scrollTop = log.scrollHeight;
+}
+function setListening(on) {
+  $("listen").classList.toggle("on", on);
+  $("listentext").textContent = on ? "LISTENING" : "idle";
+}
+var ptt = $("ptt");
+ptt.addEventListener("pointerdown", function (e) {
+  e.preventDefault();
+  if (ptt.disabled || talkPointer !== null) { return; }
+  try { ptt.setPointerCapture(e.pointerId); } catch (err) { /* not capturable */ }
+  talkPointer = e.pointerId; ptt.classList.add("held");
+  send({action: "ptt_press"});
+});
+["pointerup", "pointercancel", "lostpointercapture"].forEach(function (name) {
+  ptt.addEventListener(name, function (e) { e.preventDefault(); if (e.pointerId === talkPointer) { releaseTalk(); } });
+});
+$("sayrow").addEventListener("submit", function (e) {
+  e.preventDefault();
+  var text = $("say").value.trim();
+  if (text && send({action: "say", text: text})) { $("say").value = ""; }
+});
+function applyHello(m) {
+  var p = m.ptt || {}, t = m.say || {};
+  ptt.disabled = !p.available;
+  ptt.textContent = p.available ? "HOLD TO TALK" : "TALK UNAVAILABLE";
+  $("pttnote").textContent = p.available
+    ? "The microphone is the robot's: speak near the robot. A voice \"stop\" works only while you hold the button; the STOP button always works."
+    : "Talking is off: " + (p.reason || "not available") + ". Typing still works.";
+  $("say").disabled = $("saysend").disabled = !t.available;
+  if (t.max_chars) { $("say").maxLength = t.max_chars; }
+  if (!t.available) { $("say").placeholder = t.reason || "typing is off"; }
 }
 
 document.querySelectorAll("[data-btn]").forEach(function (button) {
@@ -187,7 +265,9 @@ $("speed").addEventListener("input", function () {
   document.addEventListener(name, function (e) { e.preventDefault(); });
 });
 document.addEventListener("touchmove", function (e) {
-  if (!(e.target && e.target.id === "speed")) { e.preventDefault(); }
+  var t = e.target, id = t && t.id;
+  var inLog = t && t.closest && t.closest("#log");
+  if (id !== "speed" && id !== "say" && !inLog) { e.preventDefault(); }
 }, {passive: false});
 
 // Leaving the page for any reason stops the robot.
@@ -207,19 +287,36 @@ function connect(pin) {
       sendHz = m.send_hz || sendHz;
       document.getElementById("app").classList.add("app-on");
       setState(m.state, true);
+      applyHello(m);
+      logLine("info", "connected");
     } else if (m.type === "status") {
       setState(m.state, true);
-      $("last").textContent = m.status + (m.detail && m.detail.reason ? ": " + m.detail.reason : "");
+      var why = m.detail && m.detail.reason ? ": " + m.detail.reason : "";
+      $("last").textContent = m.status + why;
+      logLine("status", "body: " + m.status + why);
+    } else if (m.type === "listening") {
+      setListening(m.on);
+    } else if (m.type === "heard") {
+      logLine("heard", "heard: " + m.text);
+    } else if (m.type === "route") {
+      var what = m.route === "chat" ? "chat" : (m.action || m.route);
+      logLine("route", "decided: " + what + (m.early_stop ? " (early stop)" : ""));
+    } else if (m.type === "said") {
+      logLine("said", "hexa: " + m.text);
+    } else if (m.type === "ptt_timeout") {
+      releaseTalk(); setListening(false);
+      logLine("error", "released: talking is limited to " + m.max_s + " s");
     } else if (m.type === "deadman") {
       held.clear(); paint();
       if (repeat !== null) { clearInterval(repeat); repeat = null; }
       $("last").textContent = "stopped: signal lost";
     } else if (m.type === "error") {
       $("last").textContent = "refused: " + m.reason;
+      logLine("error", "refused: " + m.reason);
     }
   };
   ws.onclose = function () {
-    held.clear(); paint();
+    held.clear(); paint(); talkPointer = null; ptt.classList.remove("held"); setListening(false);
     if (repeat !== null) { clearInterval(repeat); repeat = null; }
     setState("disconnected", false);
     document.getElementById("app").classList.remove("app-on");
