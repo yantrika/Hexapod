@@ -218,6 +218,23 @@ python main.py --lan --chat fake        # the real microphone; add --no-speak to
 
 Command line: `python scripts/web_check.py --pin 123456 --say "walk forward"` or `--talk 3` (hold 3 s, speak near the robot).
 
+## Arya: persona, memory and the phone Persona section (Step 13, P1)
+
+The robot is called **Arya** (the project stays `hexa`). She has three ways of talking, chosen on the phone page (Calm / Funny / Roast) or by voice: "Arya, roast mode", "calm mode", "funny mode", "stop roasting". A mode changes only how she TALKS: commands, the router and every safety rule are the same in every mode, and a persona request never reaches the body or the language model.
+
+- **Roast** is mean and sarcastic: she teases the question first and gives the real answer when you say "seriously" or "just tell me". A safety, health or real-help question ("I need help", "is it safe to...") always gets a straight answer, in every mode.
+- **Hard limits in every mode**, written into each prompt AND checked in code on every sentence before it is spoken: no remarks about looks, body, skin colour, race, religion, caste, gender, sexuality, disability, family or health; no slurs or threats; never roast someone who is not talking to her. A sentence that fails is dropped and she says "Let's talk about something else." (the log names the category, never the words). The word lists are in `data/persona/limits.toml`.
+- **Memory** (`data/memory/arya.db`, SQLite, private to this computer): say "my name is Anna" (or "call me", "I am") and she knows who is talking; until then you are a `guest` and nothing is remembered. After a conversation goes quiet she asks the chat model for lasting facts ("Likes cricket."), and code decides what is kept (short, no sensitive topics, no private data, no duplicates). "What do you remember about me?" reads them back. "Forget me" asks "say yes to confirm", then deletes everything about you. The page lists the people with a Forget button (with a confirm).
+
+```bash
+python main.py --chat fake --web               # fake chat; the extractor is a simple rule stand-in
+python main.py --chat fake --mode roast --no-memory
+python scripts/persona_eval.py                 # a fixed script per mode; counts what the check blocked
+python scripts/arya_check.py                   # does Vosk hear "Arya"? (Piper voice, no microphone)
+```
+
+Vosk small US never writes "arya" (it hears "aria" or "are you"); the router drops a leading "aria", and the command grammar, which does list "arya", hears her every time. Names come out wrong sometimes ("Priya" became "prayer"), so say it again or type it.
+
 ## Chat and status-driven speech (Step 9)
 
 After a command hexa answers from the body's **status** ("okay" when the body accepted it, "I'm already sitting" when the body says it is). Anything that is not a command is **chat** (a small local LLM through Ollama), but only while the body is idle. While it walks, turns or changes posture hexa says "tell me after I stop" and does not call the LLM; any command, stop or movement cuts the chat speech short so the microphone stays free for "stop". If Ollama is down hexa says "I can't think right now". The LLM is never used to decide a command: the word router does that.

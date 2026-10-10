@@ -266,7 +266,8 @@ class WebServer:
                              "max_s": config.WEB_PTT_MAX_S},
                      "say": {"available": not self._voice.say_unavailable,
                              "reason": self._voice.say_unavailable,
-                             "max_chars": config.WEB_SAY_MAX_CHARS}})
+                             "max_chars": config.WEB_SAY_MAX_CHARS},
+                     "persona": self._persona_state()})
         try:
             async for raw in connection:
                 self._on_message(client, raw)
@@ -282,6 +283,16 @@ class WebServer:
                 self._client = None
             writer.cancel()
             logger.info("web: controller disconnected")
+
+    def _persona_state(self) -> dict[str, Any] | None:
+        persona = self._voice.persona
+        if persona is None:
+            return None
+        try:
+            return persona.state()
+        except Exception:  # noqa: BLE001 - the page just shows no persona section
+            logger.exception("web: could not read the persona state")
+            return None
 
     def _on_message(self, client: _Client, raw: str | bytes) -> None:
         try:

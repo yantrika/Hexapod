@@ -3,7 +3,9 @@
 Pure functions, no I/O and no clock. The page may send only ``walk`` (one combined message for
 every held move button), ``stop``, ``stand``, ``sit`` and ``wave``; since Step 12b also
 ``ptt_press`` / ``ptt_release`` (hold-to-talk with the robot's microphone) and ``say`` (typed
-text). Those three never become bridge messages. Numbers are clamped to [-1, 1]; anything
+text). Those three never become bridge messages. Step 13 adds ``set_mode`` (calm, funny, roast),
+``set_speaker`` (a name or "guest") and ``forget_person`` (an id): brain-side persona and memory
+actions, also never bridge messages. Numbers are clamped to [-1, 1]; anything
 else (an unknown action or field, a bool, a string, NaN, a nested value, bad JSON) is rejected
 and never reaches the bridge. The page never sends joint data.
 """
@@ -20,9 +22,14 @@ import config
 
 POSTURE_ACTIONS = ("stand", "sit", "wave")
 PTT_ACTIONS = ("ptt_press", "ptt_release")
-CLIENT_ACTIONS = ("walk", "stop", *POSTURE_ACTIONS, *PTT_ACTIONS, "say")
+PERSONA_ACTIONS = ("set_mode", "set_speaker", "forget_person")
+CLIENT_ACTIONS = ("walk", "stop", *POSTURE_ACTIONS, *PTT_ACTIONS, "say", *PERSONA_ACTIONS)
 _WALK_FIELDS = frozenset({"action", "forward", "strafe", "yaw", "speed"})
 _SAY_FIELDS = frozenset({"action", "text"})
+_MODE_FIELDS = frozenset({"action", "mode"})
+_SPEAKER_FIELDS = frozenset({"action", "name"})
+_FORGET_FIELDS = frozenset({"action", "id"})
+_MAX_PERSON_ID = 2**31 - 1
 
 
 class ProtocolError(ValueError):
@@ -39,6 +46,9 @@ class Request:
     yaw: float = 0.0  # +1 counter-clockwise (turn left)
     speed: float = config.WEB_WALK_SPEED
     text: str = ""  # for ``say``: stripped, 1 to WEB_SAY_MAX_CHARS characters
+    mode: str = ""  # for ``set_mode``: one of config.PERSONA_MODES
+    name: str = ""  # for ``set_speaker``: a name or "guest" (the server checks that it exists)
+    person_id: int = 0  # for ``forget_person``
 
     @property
     def moving(self) -> bool:
@@ -71,6 +81,27 @@ def _say_text(value: Any) -> str:
     return text
 
 
+def _name(value: Any) -> str:
+    if not isinstance(value, str):
+        raise ProtocolError("name must be a string")
+    name = " ".join(value.split())
+    if not name:
+        raise ProtocolError("name is empty")
+    if len(name) > config.MEMORY_NAME_MAX_CHARS:
+        raise ProtocolError(f"name is longer than {config.MEMORY_NAME_MAX_CHARS} characters")
+    if any(unicodedata.category(char) in ("Cc", "Cf", "Cs", "Co", "Cn") for char in name):
+        raise ProtocolError("name has control characters")
+    return name
+
+
+def _person_id(value: Any) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ProtocolError("id must be an integer")
+    if not 1 <= value <= _MAX_PERSON_ID:
+        raise ProtocolError("id is out of range")
+    return value
+
+
 def parse_message(raw: str | bytes) -> Request:
     """Validate one client message. Raises ``ProtocolError`` with the reason."""
     if len(raw) > config.WEB_MAX_MESSAGE_BYTES:
@@ -90,6 +121,21 @@ def parse_message(raw: str | bytes) -> Request:
         if not set(message) <= _SAY_FIELDS:
             raise ProtocolError("unknown field")
         return Request("say", text=_say_text(message.get("text")))
+    if action == "set_mode":
+        if not set(message) <= _MODE_FIELDS:
+            raise ProtocolError("unknown field")
+        mode = message.get("mode")
+        if not isinstance(mode, str) or mode not in config.PERSONA_MODES:
+            raise ProtocolError("unknown mode")
+        return Request("set_mode", mode=mode)
+    if action == "set_speaker":
+        if not set(message) <= _SPEAKER_FIELDS:
+            raise ProtocolError("unknown field")
+        return Request("set_speaker", name=_name(message.get("name")))
+    if action == "forget_person":
+        if not set(message) <= _FORGET_FIELDS:
+            raise ProtocolError("unknown field")
+        return Request("forget_person", person_id=_person_id(message.get("id")))
     if action != "walk":
         if set(message) != {"action"}:
             raise ProtocolError("unknown field")

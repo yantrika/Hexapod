@@ -76,7 +76,7 @@ def test_the_page_is_served_with_security_headers(rig: Rig) -> None:
         assert response.headers["Content-Type"].startswith("text/html")
         assert "default-src 'none'" in response.headers["Content-Security-Policy"]
         assert response.headers["Cache-Control"] == "no-store"
-    assert "STOP" in body and "hexa" in body
+    assert "STOP" in body and "arya" in body.lower()
 
 
 def test_unknown_paths_404_and_a_plain_get_of_ws_is_refused(rig: Rig) -> None:

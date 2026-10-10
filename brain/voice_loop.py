@@ -25,6 +25,10 @@
   the same worker as a spoken final and routed and acted on identically (a stop goes out first,
   chat only while the body is idle, else "tell me after I stop"). It does not need listening, so
   a typed "stop" always works. Like a press it silences hexa and cancels a chat reply first.
+- Persona (Step 13): the router runs first and does not know the persona. A ``persona`` route ("my
+  name is X", "forget me", "roast mode" ...) is handed to ``PersonaHooks`` and never reaches the
+  body or the LLM; a pending "say yes to confirm" is answered before anything else (but a stop word
+  always goes out first); every utterance feeds the mood.
 - A source or recognizer error is logged and the loop keeps running.
 """
 
@@ -36,6 +40,7 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Protocol
 
 import config
 from brain.brain_loop import BrainLoop
@@ -50,6 +55,18 @@ from voice.stt import Hypothesis, SelfHearingGate, SttEngine, SttEvent
 from voice.tts import TtsError
 
 logger = logging.getLogger(__name__)
+
+
+class PersonaHooks(Protocol):
+    """What the voice loop needs from ``brain/arya.py`` (a fake in the tests)."""
+
+    def consume(self, text: str) -> bool: ...
+
+    def cancel_pending(self) -> None: ...
+
+    def note(self, result: RouteResult) -> None: ...
+
+    def handle(self, result: RouteResult) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -80,7 +97,9 @@ class VoiceLoop:
         transcripts: TranscriptLog | None = None,
         chat: ChatResponder | None = None,
         ptt: PushToTalk | None = None,
+        persona: PersonaHooks | None = None,
     ) -> None:
+        self.persona = persona
         self.source = source
         self.stt = stt
         self.brain = brain
@@ -313,8 +332,17 @@ class VoiceLoop:
 
     def _act(self, result: RouteResult, path: str, reason: str, early_stop: bool,
              started_at: float | None = None) -> None:
+        persona = None if early_stop else self.persona
         if result.kind != "chat" and self.chat is not None:
             self.chat.cancel()  # a command or a stop silences any chat reply first
+        if persona is not None:
+            if result.kind == "stop":
+                persona.cancel_pending()
+            elif persona.consume(result.text):
+                self._emit(VoiceEvent("route", result.text, self._clock(), result, early_stop,
+                                      path, reason))
+                return  # the answer to a question Arya asked ("yes" to forget me)
+            persona.note(result)
         self.brain.handle_route(result)  # a stop goes out first, before anything else
         self._emit(
             VoiceEvent("route", result.text, self._clock(), result, early_stop, path, reason)
@@ -322,7 +350,9 @@ class VoiceLoop:
         if early_stop and self.transcripts is not None:
             self.transcripts.append({"kind": "early-stop", "free": {"text": result.text},
                                      "path": path, "reason": reason})
-        if result.kind == "chat":
+        if result.kind == "persona" and persona is not None:
+            persona.handle(result)
+        elif result.kind == "chat":
             self._chat(result.text, started_at)
 
     def _chat(self, text: str, started_at: float | None) -> None:

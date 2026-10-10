@@ -28,7 +28,8 @@ ruff check . && mypy .                   # run both before committing
 python main.py --chat fake               # the app: headless body, push-to-talk. Also --gui, --web/--lan, --backend dryrun
 python scripts/sim_demo.py --headless --script "stand,walk,stop,sit"
 python scripts/generate_urdf.py          # after ANY geometry change in config.py (a test fails on a stale URDF)
-python scripts/cool_run.py --unguarded -- <command>   # how to run anything heavy here (see below)
+python scripts/cool_run.py -- <command>               # laptop: how to run anything heavy (guarded, default kill limit)
+python scripts/cool_run.py --unguarded -- <command>   # Pi only (logs temperature + throttling); laptop only if the owner asks in that message
 scripts/sync_to_pi.sh [--assets] [--dry-run]          # push to the Pi (never --delete)
 scripts/pi_dryrun.sh start|log|status|stop            # run on the Pi in tmux
 ```
@@ -37,7 +38,7 @@ The PyBullet GUI on the dev laptop needs `MESA_GL_VERSION_OVERRIDE=3.3 MESA_GLSL
 
 ## Standing owner rules (easy to miss)
 
-- **No heat guard**, on the laptop or the Pi. Run at full CPU through `cool_run.py --unguarded -- <cmd>` so the peak temperature is still logged, and report it. One heavy process at a time: no `pytest -n`, run sim test files in small batches, use the GUI only on request. The laptop is a 2010 dual-core i3 and BLAS threads are pinned to one thread on purpose.
+- **Heat rule is split by machine.** Pi: no guard; run through `cool_run.py --unguarded -- <cmd>` to log the peak and `vcgencmd get_throttled`. Laptop: every heavy run goes through `cool_run.py -- <cmd>` with its DEFAULT kill limit; `--unguarded` there only when the owner asks in that very message. If the laptop is too hot to start a guarded run, say so and ask. One heavy process at a time: no `pytest -n`, run sim test files in small batches, use the GUI only on request. The laptop is a 2010 dual-core i3 and BLAS threads are pinned to one thread on purpose.
 - **Downloads and installs are run by the owner**: give them the exact command. Ollama runs in Docker and stays stopped unless a test needs it.
 - **Pi**: never `sudo`; touch only `~/hexa`; nothing enabled at boot. `ssh hexa-pi`.
 - Keep the existing sim as is: no servo-realism work (MG995, motor sizing) unless asked.
@@ -48,6 +49,7 @@ Two OS processes joined only by the `Bridge` (`bridge.py`: `command_queue` brain
 
 - **Brain process** (`main.py` → `brain/app.py::HexaApp`): threads for STT, router/chat worker, TTS playback, status hub and heartbeat, talking only through `queue.Queue` and one `speaking` Event. Audio in goes ONLY through `voice/audio.py` (`AudioSource`), audio out ONLY through `voice/playback.py`.
 - **Router decides, the LLM only chats**: `brain/router.py` (fuzzy phrases, aliases, stop words) picks commands; only a `chat` result reaches `brain/chat.py` (`ChatBackend`: `OllamaChat`, `FakeChat`), and only while the body is idle. STT final results are chosen by `brain/stt_decision.py` between a free-text and a grammar recognizer; confidence alone is never the guard.
+- **Arya (Step 13, P1 built)**: the robot's persona is Arya (repo stays `hexa`). `brain/arya.py` holds mode (calm/funny/roast), speaker and mood; it only changes how replies TALK. The router runs first and does not know it: persona requests ("my name is X", "forget me", "roast mode") are `RouteResult.kind == "persona"`, never reach the body or the LLM, and are looked at only after the stop check. Every reply sentence passes `brain/output_check.py` (word lists in `data/persona/limits.toml`) before the TTS; memory is `brain/memory.py` (SQLite `data/memory/arya.db`, private, never synced; tests use a temp file via `HEXA_MEMORY_DB`). Vision (P3+) is not built.
 - **Hexa speaks from the body's STATUS, never from assumption** (`brain/dialogue.py`, pre-rendered phrases in `config.TTS_PHRASES`). `brain/status_hub.py` fans each status out to every subscriber (dialogue, motion keeper, web page, control window).
 - **Body process** (`body/process.py`): a 50 Hz wall-clock tick: drain queue → drop stale → `stop` always wins, otherwise latest wins → watchdog → `controller.py` (state machine, all clamps) → `gait.py` (pure planner) → `kinematics.py` (IK, knee-up) → `HexapodBackend.set_joint_targets()`. Backends: `sim_backend.py` (PyBullet, 240 Hz), `dryrun_backend.py` (Pi, no hardware), `servo_backend.py` (later). Nothing outside the backends may know which one is loaded; pybullet is imported lazily.
 - **Front ends** (`scripts/control_window.py`, `teleop.py`, `bridge_cli.py`, `brain_cli.py` and the phone page in `web/`) command motion only through the Bridge or the `Controller` API, never the gait or a backend. `web/session.py` holds the phone safety logic server-side (PIN, one controller, deadman, `stop` on disconnect).

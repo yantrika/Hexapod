@@ -12,7 +12,8 @@ source .venv/bin/activate
 The laptop overheats and powers off at 87 °C (it idles near 59 °C). So:
 
 ```bash
-python scripts/cool_run.py -- nice -n 19 <your command>      # waits until cool, kills it at 82 C
+python scripts/cool_run.py -- nice -n 19 <your command>      # laptop: waits until below 64 C, kills it at 82 C
+# On the Pi nothing runs under the guard: scripts/cool_run.py --unguarded -- <cmd> only logs the temperature and throttling
 cat /sys/class/thermal/thermal_zone0/temp                    # temperature in thousandths of a degree
 ```
 

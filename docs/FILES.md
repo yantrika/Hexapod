@@ -57,6 +57,12 @@ Legend: **STUB** = placeholder, not built yet. **DEV** = developer tool, not par
 | `brain/chat.py` | Chat: the `ChatBackend` interface, `OllamaChat` (local LLM over HTTP), `FakeChat` (scripted, for tests and the slow laptop) and `ChatResponder` (streams a reply, speaks it sentence by sentence, can be cancelled, keeps history). | You change the chat model or behaviour. |
 | `brain/sentences.py` | Turns streamed LLM text into clean, speakable sentences (no markdown or emoji; splits overlong ones). Pure. | You change how replies are spoken. |
 | `brain/dialogue.py` | After a command, speaks from the body's STATUS ("okay", "I'm already sitting"...) using pre-recorded phrases. | You change what the robot says about statuses. |
+| `brain/persona.py` | Arya's character: the three talking modes (calm, funny, roast), the system prompt, the mood (neutral, happy, bored, busy) and the "seriously" / help-question triggers. Reads `data/persona/arya.toml`. | You change how she is built into a prompt. |
+| `brain/output_check.py` | The hard limits as code: every reply sentence is checked before the TTS (no remarks about looks, body, race, religion, caste ...; no slurs or threats), and every fact before it is saved. Reads `data/persona/limits.toml`. | You change what is checked. (The words are in the data file.) |
+| `brain/memory.py` | Arya's memory: one SQLite file (`data/memory/arya.db`, mode 600) with people, facts, summaries and face embeddings; schema versions; `forget_person` deletes everything about a person in one transaction. | You add a table (add a migration). |
+| `brain/context.py` | Builds the prompt for one reply (persona, mode, mood, speaker, facts, summary, last turns) and trims it oldest-first under `CHAT_CONTEXT_MAX_TOKENS`. Pure. | You change what goes into the prompt. |
+| `brain/extractor.py` | After a conversation goes idle, asks the chat model for facts as JSON, checks the JSON and the rules in code, saves them. Never blocks speech. Also `RuleExtractorChat`, the no-LLM stand-in used with `--chat fake`. | You change what may be remembered. |
+| `brain/arya.py` | Arya as one object: the mode, who is speaking, "my name is X", "forget me" (with a yes), "what do you remember", mood events, and the hooks the chat and the voice loop call. | You change how she reacts to persona requests. |
 | `brain/__init__.py` | Marks the folder as a package. | Never. |
 
 ## `web/` : the phone control page (Step 12a buttons, 12b hold-to-talk and typing)
@@ -94,6 +100,8 @@ Legend: **STUB** = placeholder, not built yet. **DEV** = developer tool, not par
 | `scripts/measure_web.py` | Press-to-motion time, idle CPU of the web server and peak temperature. | You want the numbers again (e.g. on the Pi). |
 | `scripts/measure_ptt.py` | Vosk CPU and body tick time with push-to-talk idle, listening and always-on. | You want the numbers again (e.g. on the Pi). |
 | `scripts/stt_check.py` | Measures how well Vosk hears **your** voice; saves results; `--replay` re-judges them. | You add test phrases. |
+| `scripts/persona_eval.py` | Runs a fixed conversation script per persona mode against a chat backend (FakeChat now, real models in P2), saves transcripts and counts what the output check blocked. **DEV** | You add cases or a model. |
+| `scripts/arya_check.py` | Does Vosk recognise "Arya"? Piper renders phrases, Vosk (free text and grammar) listens, no microphone; prints what it heard. **DEV** | You change the wake name. |
 | `scripts/mic_check.py` | Lists microphones, records 3 seconds, shows the level. | Rarely. |
 | `scripts/say.py` | Type text, hear it spoken. | Rarely. |
 | `scripts/brain_cli.py` | Type a sentence, the router decides, the body acts (no voice). | Rarely. |
@@ -125,6 +133,9 @@ Legend: **STUB** = placeholder, not built yet. **DEV** = developer tool, not par
 | `assets/piper/` | The Piper program and the voice file. Not in git. | `fetch_models.sh` |
 | `assets/vosk/` | The Vosk models. Not in git. | `fetch_models.sh` |
 | `assets/phrases/` | Pre-rendered spoken phrases (`okay.wav`, ...). Not in git. | `prerender_phrases.py` |
+| `data/persona/arya.toml` | Arya's character sheet: name, the three modes (description, style, example exchanges), mood lines, "seriously" and help triggers. In git. | You change her voice or add an example. |
+| `data/persona/limits.toml` | The hard-limit word lists (slurs, threats, sensitive topics, private data). In git. | You add a word to block. |
+| `data/memory/arya.db` | What Arya remembers about people. Personal data: not in git, not copied to the Pi. | Never by hand; use "forget me" or the page. |
 | `logs/` | `transcripts.jsonl` (what was heard) and `stt_check-*.jsonl`. Not in git. | The voice loop and `stt_check.py` |
 
 ## `docs/` : this folder
@@ -166,6 +177,18 @@ Run one file at a time on the dev laptop (see `COMMANDS.md`).
 | `tests/test_bridge_cli.py` | The typed-command parser and one end-to-end run. |
 | `tests/test_motion_keeper.py` | Heartbeat rules with a fake clock. |
 | `tests/test_router.py` | Sentence routing, including the dangerous near-misses. |
+| `tests/test_router_persona.py` | The persona routes ("my name is X", "forget me", modes, "stop roasting") and the regression: every command phrase and stop word routes as before. |
+| `tests/test_output_check.py` | Pass and fail tables for the hard limits (sentences and facts). |
+| `tests/test_persona.py` | The prompt per mode, the straight-answer triggers, the mood. |
+| `tests/test_memory.py` | The database: add, list, forget, migrations, file mode, threads. |
+| `tests/test_context.py` | The context builder and its oldest-first trimming. |
+| `tests/test_extractor.py` | The memory extractor: JSON schema, saving rules, guests, idle timing, failures. |
+| `tests/test_arya.py` | Arya's state, speaker, forget flow, recall, mood events and hooks. |
+| `tests/test_chat_persona.py` | The chat responder with the persona hooks: blocked sentences, the neutral line, history. |
+| `tests/test_voice_persona.py` | The voice loop with Arya: persona routes stay off the body, stop and commands are the same in every mode. |
+| `tests/test_web_persona.py` | The persona section of the phone page: messages, controller-only actions, the whole path over a socket. |
+| `tests/test_app_persona.py` | The whole app with Arya and a real dry-run body: naming, modes, chat, learned facts and forgetting through the page. |
+| `tests/test_persona_eval.py` | The persona evaluation harness with FakeChat. |
 | `tests/test_brain_cli.py` | Typed text through to a real headless body. |
 | `tests/test_control_logic.py` | The control window's key logic. |
 | `tests/test_teleop.py` | Keyboard mapping for `teleop.py`. |

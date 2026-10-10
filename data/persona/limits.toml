@@ -1,0 +1,123 @@
+# The hard limits as word lists (Step 13). Used by brain/output_check.py on every reply sentence
+# before the TTS, and by brain/extractor.py on every fact before it is saved.
+# Matching: lowercase, punctuation and simple letter tricks removed, whole words (a plural "s" is
+# fine). "Directed" means the sentence is about the listener (it has you / your / you're ...).
+# A sentence that fails is dropped and a neutral pre-rendered line is spoken instead.
+
+# Words that address the listener.
+listener_words = ["you", "your", "youre", "yours", "yourself", "ur", "u", "youve", "youd", "youll"]
+
+# Words for a person other than the listener (a roast must never aim at them).
+third_party_words = ["he", "she", "they", "him", "her", "them", "his", "their", "hes", "shes",
+                     "theyre", "someone", "everybody", "everyone"]
+# Names for a person who is not the listener: an insult with one of these fails even when the
+# sentence also says "your" ("your boss is a loser").
+third_party_nouns = ["friend", "friends", "boss", "teacher", "neighbour", "neighbor", "colleague",
+                     "classmate"]
+# Mean words (a roast may use them on the listener only).
+insult_words = ["idiot", "stupid", "dumb", "loser", "pathetic", "useless", "moron", "clown",
+                "fool", "worthless", "hopeless", "brainless"]
+
+# Blocked everywhere, directed or not.
+[slurs]
+words = [
+  "retard", "retarded", "faggot", "fag", "nigger", "nigga", "chink", "paki", "spic", "kike",
+  "tranny", "dyke", "cripple", "spastic", "mongoloid", "slut", "whore", "bastard", "bitch",
+  "asshole", "motherfucker", "fuck", "fucking", "fucker", "shit", "cunt", "dick", "pussy",
+  "chamar", "bhangi", "madarchod", "bhenchod", "behenchod", "chutiya", "harami", "randi",
+]
+
+[threats]
+patterns = [
+  "\\b(?:i|ill|i will|i am going to|im going to|im gonna) (?:kill|hurt|hit|beat|punch|stab|shoot|destroy|find|get) (?:you|u)\\b",
+  "\\b(?:kill|hurt|beat|stab|shoot) (?:you|u)\\b",
+  "\\byou ?(?:will|are going to|re going to|are gonna|re gonna) (?:die|suffer|pay|regret)\\b",
+  "\\bwatch your back\\b",
+  "\\bi know where you live\\b",
+  "\\bgo (?:and )?die\\b",
+]
+
+# Sensitive topics. `always` words and phrases fail anywhere. `directed` words fail only when the
+# sentence is about the listener. `patterns` are regular expressions on the cleaned text.
+[topics.looks]
+always = ["ugly", "hideous", "unattractive", "good looking", "goodlooking", "hot body"]
+directed = ["handsome", "beautiful", "pretty", "gorgeous", "attractive", "cute", "sexy", "appearance"]
+patterns = [
+  "\\byou ?(?:re |are )?(?:look|looks|looking) (?:\\w+ )?(?:like|so|really|very|bad|good|great|terrible|awful|tired|old|young)\\b",
+  "\\byour (?:face|hair|nose|eyes|teeth|smile|outfit|clothes|haircut|appearance|looks)\\b",
+]
+
+[topics.body]
+always = ["fatty", "chubby", "obese", "overweight", "skinny", "bald", "baldy", "pot belly", "potbelly"]
+directed = ["fat", "belly", "muscles"]
+patterns = [
+  "\\byour (?:body|weight|height|size|belly|figure|legs|arms|stomach)\\b",
+  "\\byou ?(?:are|re) (?:so |too |very )?(?:fat|short|tall|thin|big|small|skinny|bald)\\b",
+]
+
+[topics.skin]
+always = ["dark skinned", "darkskinned", "fair skinned", "fairskinned", "light skinned"]
+directed = ["skin", "complexion", "skinned", "pale", "tan", "tanned"]
+patterns = ["\\byour (?:skin|colour|color|complexion)\\b"]
+
+[topics.race]
+always = ["racist", "racism"]
+directed = ["race", "racial", "ethnic", "ethnicity", "asian", "african", "caucasian", "foreigner",
+            "nationality", "immigrant"]
+patterns = ["\\byour (?:race|ethnicity|nationality|people|kind)\\b"]
+
+[topics.religion]
+always = ["infidel", "heathen", "kafir"]
+directed = ["religion", "religious", "hindu", "muslim", "christian", "sikh", "jew", "jewish",
+            "buddhist", "atheist", "god", "church", "mosque", "temple", "pray", "prayer", "faith",
+            "bible", "quran", "allah"]
+patterns = ["\\byour (?:god|religion|faith|prayers?|church|mosque|temple)\\b"]
+
+[topics.caste]
+always = ["lower caste", "upper caste", "low caste", "untouchable"]
+directed = ["caste", "dalit", "brahmin", "kshatriya", "vaishya", "shudra", "obc", "casteist"]
+patterns = ["\\byour (?:caste|surname)\\b"]
+
+[topics.gender]
+always = ["like a girl", "like a boy", "man up", "girly", "sissy", "real man", "act like a lady"]
+directed = ["gender", "male", "female", "woman", "women", "girl", "girls", "boy", "boys", "sexist"]
+patterns = ["\\bwomen (?:are|cant|can t|should)\\b", "\\bmen (?:are|cant|can t|should)\\b"]
+
+[topics.sexuality]
+always = ["homo", "homosexual"]
+directed = ["gay", "lesbian", "bisexual", "queer", "transgender", "trans", "sexuality",
+            "orientation", "sexual"]
+patterns = ["\\byour (?:girlfriend|boyfriend|partner|sexuality)\\b"]
+
+[topics.disability]
+always = ["handicapped", "special needs", "mentally challenged", "wheelchair bound"]
+directed = ["disabled", "disability", "blind", "deaf", "lame", "autistic", "autism", "wheelchair",
+            "stutter", "stammer", "limp", "crippled", "mute", "dyslexic"]
+patterns = ["\\byour (?:disability|condition)\\b"]
+
+[topics.family]
+always = ["yo mama", "your mama", "your momma"]
+directed = ["mother", "father", "mom", "dad", "mum", "parents", "family", "wife", "husband",
+            "sister", "brother", "daughter", "son", "kids", "children", "grandmother", "grandfather"]
+patterns = [
+  "\\byour (?:mother|mom|mum|father|dad|parents?|family|sister|brother|wife|husband|son|daughter|kids?|children|uncle|aunt|cousin|grand\\w+)\\b",
+]
+
+[topics.health]
+always = ["sick in the head", "mentally ill", "mental case", "psycho", "lunatic", "schizo", "nutcase"]
+directed = ["sick", "illness", "disease", "cancer", "diabetes", "diabetic", "depressed",
+            "depression", "anxiety", "insane", "crazy", "mental", "mentally", "medication",
+            "pills", "therapy", "therapist", "unhealthy", "virus", "infection"]
+patterns = ["\\byour (?:health|illness|disease|condition|mental health|medication)\\b"]
+
+# Facts about a person are not saved when they hold any of these (besides the topic lists above).
+[facts]
+patterns = [
+  "\\b\\d{6,}\\b",
+  "[\\w.+-]+@[\\w-]+\\.[\\w.]+",
+  "https?://",
+  "\\bpassword\\b",
+  "\\bpin (?:is|number|code)\\b",
+  "\\baddress\\b",
+  "\\bphone (?:number|no)\\b",
+]

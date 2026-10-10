@@ -30,7 +30,7 @@ rsync_opts=(-az --human-readable --itemize-changes "${dry[@]}")
 # 1. the code: no .git, no virtualenv, no assets (models are handled below), no logs, no caches
 rsync "${rsync_opts[@]}" \
   --exclude='.git/' --exclude='.venv/' --exclude='/assets/' --exclude='/logs/' \
-  --exclude='/wheelhouse/' --exclude='/.tmp/' \
+  --exclude='/wheelhouse/' --exclude='/.tmp/' --exclude='/data/memory/' \
   --exclude='__pycache__/' --exclude='*.pyc' --exclude='.pytest_cache/' --exclude='.mypy_cache/' \
   --exclude='.ruff_cache/' --exclude='*.wav' --exclude='*.log' --exclude='*.jsonl' \
   "${root}/" "${host}:hexa/"

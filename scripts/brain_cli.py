@@ -36,6 +36,8 @@ def describe(result: RouteResult) -> str:
     if result.kind == "chat":
         near = f" (nearest {result.phrase!r} {result.score:.0f})" if result.phrase else ""
         return f"[chat] {result.text}{near}"
+    if result.kind == "persona":
+        return f"[persona] {result.action} {result.params} (nothing is sent to the body)"
     label = "STOP" if result.kind == "stop" else f"{result.action} {result.params}"
     return f"route: {label} <- {result.phrase!r} score {result.score:.0f}"
 

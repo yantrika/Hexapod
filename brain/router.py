@@ -11,6 +11,11 @@
   partial matching fires on ordinary sentences.) Natural near-forms of single words
   ("waves") are explicit aliases in the table.
 - ``chat``: everything else; the original text goes to the chat model.
+- ``persona`` (Step 13): "my name is X", "forget me", "what do you remember about me", "roast
+  mode", "stop roasting". Code in the brain acts on them, never the LLM, and they are looked at
+  only AFTER the stop check, so every phrase above routes exactly as before. The one exception:
+  the whole utterance "stop roasting" (``config.PERSONA_STOP_ROAST_PHRASES``) switches to calm
+  mode instead of stopping the robot.
 
 Numbers are not parsed in v1 and the router never produces strafe or yaw.
 """
@@ -33,7 +38,7 @@ _SPACES = re.compile(r"\s+")
 class RouteResult:
     """What ``route`` decided, and why."""
 
-    kind: str  # "stop" | "command" | "chat"
+    kind: str  # "stop" | "command" | "chat" | "persona"
     text: str  # the original utterance
     action: str | None = None  # command action (stop included)
     params: dict[str, Any] = field(default_factory=dict)
@@ -79,13 +84,79 @@ def best_phrase(candidate: str) -> tuple[str, float]:
     return best, best_score
 
 
+_NAME_WORD = r"[a-z]+"
+_NAME_FORMS = (  # (pattern on the filler-free text, how many words the name may have)
+    (re.compile(rf"^(?:you can )?call me ({_NAME_WORD}(?: {_NAME_WORD})?)$"), 2),
+    (re.compile(rf"^my name(?: is|s) ({_NAME_WORD}(?: {_NAME_WORD})?)$"), 2),
+    (re.compile(rf"^(?:i am|im) ({_NAME_WORD})$"), 1),
+)
+_MODE = re.compile(r"^(?:(?:switch|go|change|set) (?:to|into) )?(?:the )?"
+                   r"(calm|come|funny|roast) mode(?: on)?$")
+
+
+def _name_in(text: str) -> str | None:
+    """The name in "my name is X", "call me X" or "I am X", or None ("I am hungry" is chat)."""
+    for pattern, max_words in _NAME_FORMS:
+        found = pattern.match(text)
+        if found is None:
+            continue
+        words = found.group(1).split()
+        if len(words) > max_words or any(
+                word in config.ROUTER_NAME_STOPWORDS or word.endswith("ing") for word in words):
+            return None
+        return " ".join(words)
+    return None
+
+
+def _persona_route(text: str, candidate: str, normalized: str) -> RouteResult | None:
+    """A persona request in the filler-free *candidate*, or None."""
+    def result(action: str, params: dict[str, Any]) -> RouteResult:
+        return RouteResult("persona", text, action, params, candidate, 100.0, candidate)
+
+    if candidate in config.PERSONA_FORGET_PHRASES:
+        return result("forget_me", {})
+    if candidate in config.PERSONA_RECALL_PHRASES:
+        return result("recall_me", {})
+    if candidate == "roast me":
+        return result("set_mode", {"mode": "roast"})
+    found = _MODE.match(candidate)
+    if found is not None:
+        mode = found.group(1)
+        return result("set_mode", {"mode": config.PERSONA_MODE_HEARD_AS.get(mode, mode)})
+    name = _name_in(candidate)
+    if name is not None:
+        return result("set_speaker", {"name": name.title()})
+    return None
+
+
+def is_yes(text: str) -> bool:
+    """A "yes" (to "say yes to confirm"). Exact: "yes I did that" is not one."""
+    return remove_fillers(normalize(text)) in config.PERSONA_YES_WORDS
+
+
+def is_no(text: str) -> bool:
+    return remove_fillers(normalize(text)) in config.PERSONA_NO_WORDS
+
+
+def _drop_wake_variant(candidate: str) -> str:
+    """A leading "aria" (how Vosk small hears "Arya") is dropped when more words follow."""
+    first, _, rest = candidate.partition(" ")
+    return rest if rest and first in config.ROUTER_WAKE_VARIANTS else candidate
+
+
 def route(text: str) -> RouteResult:
     """Decide what an utterance means (see the module docstring)."""
     normalized = normalize(text)
+    candidate = _drop_wake_variant(remove_fillers(normalized))
+    if candidate in config.PERSONA_STOP_ROAST_PHRASES:  # the one whole-utterance exception
+        return RouteResult("persona", text, "set_mode", {"mode": "calm"}, candidate, 100.0,
+                           candidate)
     stop = _stop_match(normalized)
     if stop is not None:
         return RouteResult("stop", text, "stop", {}, stop, 100.0, normalized)
-    candidate = remove_fillers(normalized)
+    persona = _persona_route(text, candidate, normalized)
+    if persona is not None:
+        return persona
     words = candidate.split()
     if not words or len(words) > config.ROUTER_MAX_WORDS:
         return RouteResult("chat", text, normalized=candidate)

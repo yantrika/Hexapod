@@ -14,3 +14,6 @@ assets/phrases/*.wav
 logs/*.jsonl
 wheelhouse/
 .tmp/
+
+# Arya memory database (Step 13): personal data, never committed or synced
+data/memory/

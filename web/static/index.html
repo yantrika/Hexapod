@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#101418">
-<title>hexa control</title>
+<title>arya control</title>
 <style>
   :root {
     --bg: #101418; --panel: #1b222a; --panel-hold: #2f6fed; --text: #e8edf2; --muted: #8b98a5;
@@ -53,6 +53,22 @@
   #stop { background: var(--stop); color: #fff; border: 0; border-radius: 16px;
           font-size: 34px; font-weight: 800; letter-spacing: .08em; height: 96px; flex: none; }
   #stop:active { background: #8f1220; }
+  #persona { display: none; flex-direction: column; gap: 6px; flex: none; }
+  .has-persona #persona { display: flex; }
+  #modes button.on { background: var(--panel-hold); color: #fff; }
+  #modes button { touch-action: manipulation; }
+  #who { background: var(--panel); border-radius: 12px; padding: 8px 12px; font-size: 14px; }
+  #who summary { cursor: pointer; color: var(--muted); }
+  #who summary b { color: var(--text); }
+  #whoinner { display: flex; flex-direction: column; gap: 8px; margin-top: 8px;
+              max-height: 24vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  #speaker { font: inherit; font-size: 15px; padding: 6px 8px; border-radius: 8px; border: 0;
+             background: var(--bg); color: var(--text); margin-left: 8px; }
+  .person { display: flex; align-items: center; gap: 8px; }
+  .person span { flex: 1; overflow-wrap: anywhere; }
+  .person button { font: inherit; font-size: 13px; padding: 6px 10px; border-radius: 8px; border: 0;
+                   background: var(--bad); color: #fff; touch-action: manipulation; }
+  #peoplenote { font-size: 12px; color: var(--muted); }
   #voice { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 120px; }
   #ptt { background: var(--panel); color: var(--text); border: 2px solid var(--panel-hold);
          border-radius: 16px; font: inherit; font-size: 20px; font-weight: 800; height: 64px;
@@ -112,6 +128,24 @@
       <button data-cmd="sit" type="button">Sit</button>
       <button data-cmd="wave" type="button">Wave</button>
     </div>
+    <div id="persona">
+      <div class="row" id="modes">
+        <button data-mode="calm" type="button">Calm</button>
+        <button data-mode="funny" type="button">Funny</button>
+        <button data-mode="roast" type="button">Roast</button>
+      </div>
+      <details id="who">
+        <summary>speaking with <b id="whoname">guest</b> &middot; mood <b id="mood">neutral</b></summary>
+        <div id="whoinner">
+          <label>Speaker
+            <select id="speaker" aria-label="speaker"><option value="guest">guest</option></select>
+          </label>
+          <div id="people"></div>
+          <div id="peoplenote">Say &ldquo;my name is ...&rdquo; (or type it) to add someone. Forget deletes
+            what Arya remembers about that person.</div>
+        </div>
+      </details>
+    </div>
     <div id="voice">
       <button id="ptt" type="button" disabled>HOLD TO TALK</button>
       <div id="listen"><div id="lamp"></div><span id="listentext">idle</span></div>
@@ -119,7 +153,7 @@
         only while you hold the button; the STOP button always works.</div>
       <div id="log" aria-live="polite"></div>
       <form id="sayrow" autocomplete="off">
-        <input id="say" type="text" placeholder="type to hexa" maxlength="120" aria-label="type to hexa">
+        <input id="say" type="text" placeholder="type to Arya" maxlength="120" aria-label="type to Arya">
         <button id="saysend" type="submit">Send</button>
       </form>
     </div>
@@ -216,7 +250,50 @@ $("sayrow").addEventListener("submit", function (e) {
   var text = $("say").value.trim();
   if (text && send({action: "say", text: text})) { $("say").value = ""; }
 });
+// Persona (Step 13): the mode, who is speaking, and the people Arya remembers. Names come from
+// people, so they are only ever put into the page with textContent.
+var personaOn = false;
+function paintPersona(p) {
+  if (!p) { return; }
+  personaOn = true;
+  document.getElementById("app").classList.add("has-persona");
+  document.querySelectorAll("[data-mode]").forEach(function (b) {
+    b.classList.toggle("on", b.dataset.mode === p.mode);
+  });
+  $("whoname").textContent = p.speaker;
+  $("mood").textContent = p.mood;
+  var select = $("speaker"), people = $("people");
+  select.textContent = "";
+  var guest = document.createElement("option");
+  guest.value = "guest"; guest.textContent = "guest"; select.appendChild(guest);
+  people.textContent = "";
+  (p.people || []).forEach(function (person) {
+    var option = document.createElement("option");
+    option.value = person.name; option.textContent = person.name; select.appendChild(option);
+    var row = document.createElement("div"), label = document.createElement("span");
+    var button = document.createElement("button");
+    row.className = "person";
+    label.textContent = person.name + " (" + person.facts + (person.facts === 1 ? " fact)" : " facts)");
+    button.type = "button"; button.textContent = "Forget";
+    button.addEventListener("click", function () {
+      if (window.confirm("Forget " + person.name + "? This deletes everything Arya remembers about them.")) {
+        send({action: "forget_person", id: person.id});
+      }
+    });
+    row.appendChild(label); row.appendChild(button); people.appendChild(row);
+  });
+  select.value = p.speaker;
+  if (!p.memory) { $("peoplenote").textContent = "Memory is off: nothing is remembered."; }
+}
+document.querySelectorAll("[data-mode]").forEach(function (button) {
+  button.addEventListener("click", function () { send({action: "set_mode", mode: button.dataset.mode}); });
+});
+$("speaker").addEventListener("change", function () {
+  send({action: "set_speaker", name: $("speaker").value});
+});
+
 function applyHello(m) {
+  paintPersona(m.persona);
   var p = m.ptt || {}, t = m.say || {};
   ptt.disabled = !p.available;
   ptt.textContent = p.available ? "HOLD TO TALK" : "TALK UNAVAILABLE";
@@ -266,7 +343,7 @@ $("speed").addEventListener("input", function () {
 });
 document.addEventListener("touchmove", function (e) {
   var t = e.target, id = t && t.id;
-  var inLog = t && t.closest && t.closest("#log");
+  var inLog = t && t.closest && t.closest("#log, #whoinner");
   if (id !== "speed" && id !== "say" && !inLog) { e.preventDefault(); }
 }, {passive: false});
 
@@ -294,6 +371,8 @@ function connect(pin) {
       var why = m.detail && m.detail.reason ? ": " + m.detail.reason : "";
       $("last").textContent = m.status + why;
       logLine("status", "body: " + m.status + why);
+    } else if (m.type === "persona") {
+      paintPersona(m);
     } else if (m.type === "listening") {
       setListening(m.on);
     } else if (m.type === "heard") {
@@ -302,7 +381,7 @@ function connect(pin) {
       var what = m.route === "chat" ? "chat" : (m.action || m.route);
       logLine("route", "decided: " + what + (m.early_stop ? " (early stop)" : ""));
     } else if (m.type === "said") {
-      logLine("said", "hexa: " + m.text);
+      logLine("said", "arya: " + m.text);
     } else if (m.type === "ptt_timeout") {
       releaseTalk(); setListening(false);
       logLine("error", "released: talking is limited to " + m.max_s + " s");
@@ -320,6 +399,7 @@ function connect(pin) {
     if (repeat !== null) { clearInterval(repeat); repeat = null; }
     setState("disconnected", false);
     document.getElementById("app").classList.remove("app-on");
+    document.getElementById("app").classList.remove("has-persona");
     document.getElementById("app").classList.add("lost");
     say(opened ? "Connection lost. The robot was told to stop."
                : "Refused: wrong PIN, too many tries (wait a minute), or another phone is in control.");

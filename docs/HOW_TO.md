@@ -1,7 +1,7 @@
 # How to change things
 
 Each recipe says **which file to edit**, **what to run after**, and how to check it worked.
-On the dev laptop wrap heavy commands: `python scripts/cool_run.py -- <command>` (see `COMMANDS.md`).
+On the dev laptop wrap heavy commands: `python scripts/cool_run.py -- <command>` (guarded, see `COMMANDS.md`). On the Pi nothing runs under the guard (`cool_run.py --unguarded` only logs).
 
 ## Change the speech recognition model (Vosk)
 
@@ -92,6 +92,14 @@ Ollama runs in Docker on the laptop and by hand on the Pi (see "Ollama on the Pi
 3. Time it before trusting it: `python scripts/measure_chat.py --model <name>` (it prints a verdict: you need at least 3 tokens/s and a first token within 5 s). On the dev laptop `qwen2.5:0.5b` gave about 1.5 tokens/s, so use `--chat fake` here and time the real model on the Pi.
 
 Other chat settings in `config.py`: `CHAT_SYSTEM_PROMPT` (the personality: short, friendly, no lists/emoji, only the abilities it has), `CHAT_MAX_TOKENS` (reply cap), `CHAT_TEMPERATURE`, `CHAT_HISTORY_TURNS` (memory), `OLLAMA_KEEP_ALIVE`, `OLLAMA_TIMEOUT_S`, `CHAT_MAX_SENTENCE_CHARS`. Nothing else in the code names a chat model: the code only knows the `ChatBackend` interface in `brain/chat.py`, so a different engine means one new class there.
+
+## Change Arya's character, her modes or the blocked words (Step 13)
+
+- The character, the three modes (description, style, example exchanges), the mood lines and the "seriously" and help triggers: `data/persona/arya.toml`. Keep the prompt short (a test fails over 2200 characters); a small model forgets long prompts.
+- The words the output check blocks, per topic (`always` = anywhere, `directed` = only when the sentence is about the listener, `patterns` = regular expressions): `data/persona/limits.toml`. Run `pytest tests/test_output_check.py` after editing; add a line to its tables for every word you add. The same lists decide which facts may be remembered.
+- A new spoken confirmation: add it to `config.TTS_PHRASES`, then `python scripts/prerender_phrases.py` (a phrase must be one sentence).
+- Try a model on the fixed script: `python scripts/persona_eval.py --backend ollama --model <name>` (reads the JSONL by hand for quality; the table counts blocked sentences).
+- Forget someone by hand: say "forget me" or use the Forget button; do not edit the database.
 
 ## Add a new file or module
 

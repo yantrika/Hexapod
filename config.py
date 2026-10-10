@@ -32,6 +32,10 @@ URDF_PATH = URDF_DIR / "hexapod.urdf"
 VOSK_DIR = ASSETS_DIR / "vosk"
 PIPER_DIR = ASSETS_DIR / "piper"
 LOG_DIR = PROJECT_ROOT / "logs"
+DATA_DIR = PROJECT_ROOT / "data"
+PERSONA_DIR = DATA_DIR / "persona"  # arya.toml (the character) and limits.toml (the word lists)
+MEMORY_DB_PATH = Path(os.environ.get("HEXA_MEMORY_DB") or DATA_DIR / "memory" / "arya.db")
+# ... gitignored, never synced to the Pi (HEXA_MEMORY_DB moves it: the tests use a temp file)
 LOG_FILE = LOG_DIR / "hexa.log"
 LOG_LEVEL = "INFO"
 LOG_MAX_BYTES = 1_000_000  # logs/hexa.log rotates at this size ...
@@ -187,7 +191,7 @@ SIM_REALTIME = True  # --no-realtime is for fast tests only
 # --- Router --------------------------------------------------------------
 ROUTER_THRESHOLD = 85  # rapidfuzz fuzz.ratio, 0-100
 ROUTER_MAX_WORDS = 4  # after filler removal
-ROUTER_FILLERS = ("please", "can you", "could you", "hexa", "hey", "now", "just")
+ROUTER_FILLERS = ("please", "can you", "could you", "hexa", "arya", "hey", "now", "just")
 # Stop words match anywhere (whole words / phrases), highest priority. The accepted tradeoff:
 # "I can't stop laughing" and "do not stop talking" stop the robot (stopping errs on the safe side).
 STOP_WORDS = ("stop", "halt", "freeze", "whoa", "hold still", "stay still")
@@ -225,6 +229,40 @@ ROUTER_ALIASES: dict[str, tuple[str, dict[str, object]]] = {
     "waves": ("wave", {}),
     "sat down": ("sit", {}),
 }
+
+# Persona routes (Step 13): handled by code in the brain, never by the LLM, and only after the stop
+# check, so every command phrase above routes exactly as before. Matched on the normalized text
+# after filler removal ("Arya, roast mode please" -> "roast mode").
+PERSONA_MODE_PHRASES = ("calm mode", "funny mode", "roast mode", "roast me")  # + "switch to ..."
+# Vosk small US hears "Arya" as "aria" (scripts/arya_check.py: 0 of 24 as "arya", 20 of 24 as "aria"
+# or "are you"), so a LEADING "aria" is dropped like the filler "arya" ("aria sit down"). Only
+# at the start, so a person called Aria ("my name is aria") keeps the name. The command grammar
+# lists "arya" (through the fillers) and hears it every time; "aria" is NOT in the grammar.
+ROUTER_WAKE_VARIANTS = ("aria",)
+# "calm" is heard as "come" (the free text said "aria come mode" 3 times of 3).
+PERSONA_MODE_HEARD_AS = {"come": "calm"}
+# The ONE exception to "a stop word anywhere stops": these whole utterances switch back to calm
+# mode instead (they are about the roast, not the robot). "stop roasting and walk" is still a stop.
+PERSONA_STOP_ROAST_PHRASES = ("stop roasting", "stop the roast", "stop roasting me", "stop roast",
+                              "no more roasting", "no more roast")
+PERSONA_FORGET_PHRASES = ("forget me", "forget about me")
+PERSONA_RECALL_PHRASES = ("what do you remember about me", "what do you know about me",
+                          "what do you remember", "do you remember me")
+PERSONA_YES_WORDS = ("yes", "yeah", "yep", "yup", "yes please", "yes forget me", "confirm",
+                     "yes i am sure", "i am sure")
+PERSONA_NO_WORDS = ("no", "nope", "cancel", "never mind", "no thanks", "dont")
+# "I am X" is only a name when X is not one of these (or an -ing word): "I am hungry" is chat.
+ROUTER_NAME_STOPWORDS = (
+    "a", "an", "the", "not", "so", "very", "too", "just", "here", "there", "back", "home", "fine",
+    "good", "great", "okay", "ok", "well", "bad", "sad", "happy", "angry", "tired", "bored", "sick",
+    "hungry", "thirsty", "sorry", "sure", "ready", "done", "late", "early", "new", "old", "alone",
+    "confused", "lost", "cold", "hot", "busy", "free", "right", "wrong", "going", "coming", "in",
+    "on", "at", "to", "from", "with", "about", "afraid", "scared", "curious", "excited", "nervous",
+    "worried", "serious", "joking", "kidding", "listening", "talking", "later", "tomorrow", "maybe",
+    "now", "please", "anything", "whatever", "something", "nothing", "everything", "yes", "no",
+    "guest", "arya", "hexa", "robot", "nobody", "somebody", "someone", "stop", "forget", "sit",
+    "stand", "walk", "wave", "turn", "go", "back", "up", "down", "left", "right", "forward",
+)
 
 # --- Brain (typed-text and voice front ends) -------------------------------
 VOICE_WALK_MAX_S = 10.0  # a walk started by text/voice stops being kept alive after this
@@ -307,6 +345,16 @@ TTS_PHRASES: dict[str, str] = {
     "something_wrong": "Something went wrong.",
     "cant_think": "I can't think right now.",
     "tell_me_after_stop": "Tell me after I stop.",
+    # Step 13 (P1): persona and memory answers that need no name in them
+    "persona_blocked": "Let's talk about something else.",
+    "say_yes_to_confirm": "Say yes to confirm.",
+    "forget_done": "Okay, I have forgotten you.",
+    "forget_cancelled": "Okay, I will keep remembering you.",
+    "remember_nothing": "I don't remember anything about you yet.",
+    "mode_calm": "Okay, calm mode.",
+    "mode_funny": "Funny mode on.",
+    "mode_roast": "Roast mode, you asked for it.",
+    "memory_off": "My memory is not working right now.",
 }
 
 # --- Models --------------------------------------------------------------
@@ -352,12 +400,47 @@ CHAT_TEMPERATURE = 0.7
 CHAT_HISTORY_TURNS = 4  # rolling history: the last N (user, reply) pairs
 CHAT_MAX_SENTENCE_CHARS = 160  # a longer sentence is split at a clause boundary for the TTS
 CHAT_SYSTEM_PROMPT = (
-    "You are Hexa, a small friendly six-legged robot. Answer in one or two short sentences. "
+    "You are Arya, a small friendly six-legged robot. Answer in one or two short sentences. "
     "Use plain spoken words only: no lists, no markdown, no emoji. "
     "You can walk, sit, stand, wave and turn, and nothing else; never claim other abilities "
     "and never pretend to have done a movement. If asked to move, say you will do it when "
     "asked directly."
 )
+
+# --- Persona, memory and context (Step 13, P1) ---------------------------------------------
+# The persona only changes how Arya TALKS. Commands, the router and safety are identical in every
+# mode. The word lists and the character sheet live in data/persona/*.toml, not in code.
+PERSONA_FILE = PERSONA_DIR / "arya.toml"
+PERSONA_LIMITS_FILE = PERSONA_DIR / "limits.toml"
+PERSONA_MODES = ("calm", "funny", "roast")
+PERSONA_DEFAULT_MODE = "calm"
+PERSONA_EXAMPLES_IN_PROMPT = 2  # example exchanges in the system prompt (it must stay short)
+PERSONA_OUTPUT_CHECK = True  # every reply sentence is checked before the TTS (hard limits)
+GUEST_NAME = "guest"  # the speaker until someone says their name
+MOOD_STATES = ("neutral", "happy", "bored", "busy")
+MOOD_HAPPY_S = 120.0  # a greeting keeps Arya happy this long
+MOOD_BORED_AFTER_S = 300.0  # nobody spoke for this long: bored (until the next utterance)
+MOOD_BUSY_COMMANDS = 5  # this many motion commands within MOOD_BUSY_WINDOW_S: busy
+MOOD_BUSY_WINDOW_S = 60.0
+# Memory (SQLite, owned by the brain only; schema version in `meta`)
+MEMORY_MAX_FACTS_PER_PERSON = 30  # the oldest fact is dropped when a new one would exceed this
+MEMORY_MAX_PEOPLE = 50
+MEMORY_NAME_MAX_CHARS = 24
+MEMORY_FACT_MAX_CHARS = 100
+MEMORY_SUMMARY_MAX_CHARS = 300
+# Context builder: approximate tokens by characters, trimmed oldest-first (brain/context.py)
+CHAT_CONTEXT_MAX_TOKENS = 600  # the whole prompt except the model's reply
+CONTEXT_CHARS_PER_TOKEN = 4
+CONTEXT_MAX_FACTS = 6  # facts about the speaker put into one prompt
+CONTEXT_MAX_HISTORY_TURNS = 6
+# Memory extractor: after the conversation goes idle, ask the chat backend for facts (JSON)
+EXTRACTOR_IDLE_S = 45.0
+EXTRACTOR_MIN_TURNS = 2  # fewer user turns than this are not worth a model call
+EXTRACTOR_MAX_FACTS_PER_RUN = 3
+EXTRACTOR_MAX_TURNS = 8  # the last N turns are shown to the extractor
+EXTRACTOR_POLL_S = 1.0
+# "forget me" asks for a yes first; the answer must come within this long
+FORGET_CONFIRM_S = 20.0
 
 # --- Test tolerances -----------------------------------------------------
 IK_TOLERANCE_M = 1e-4

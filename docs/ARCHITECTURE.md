@@ -23,7 +23,7 @@ Short version. The full design is in `../plan.md` (message formats, safety rules
 - The only link is `bridge.py`: a small command queue (brain to body), a status queue (body to brain), and a shared `stop_event` that makes "stop" fast.
 - The body runs the simulation today; real servos replace one class (`servo_backend.py`) at Step 11. Nothing else knows which one is loaded.
 
-## Arya: three programs (design agreed for Step 13, NOT built yet)
+## Arya: three programs (Step 13: the brain part, P1, is BUILT; vision is not)
 
 The robot's name and persona is **Arya** (the project and repo stay `hexa`). Step 13 adds a third program, VISION, and grows the brain. The body and the bridge do not change.
 
@@ -60,6 +60,7 @@ The robot's name and persona is **Arya** (the project and repo stay `hexa`). Ste
 - **Memory**: a face is "remembered" by storing embeddings plus a similarity threshold (no training). Enrolment only after the person says yes; embeddings stay on the Pi and out of the logs; no images are saved; "forget me" deletes the person's face, facts and summaries.
 - **Persona modes** (calm, funny, roast) change only how Arya talks, never commands or safety. Hard limits apply in every mode (see `AGENTS.md`).
 - Build order P1 to P6 (persona and memory first, vision later) is in `../plan.md`, Step 13.
+- **Built in P1 (brain only):** `brain/persona.py` (modes, mood, prompt), `brain/arya.py` (mode, speaker, forget flow), `brain/memory.py` (SQLite), `brain/context.py` (prompt under a token budget), `brain/extractor.py` (facts from idle conversations), `brain/output_check.py` (the hard limits on every sentence before the TTS). The router runs first and does not know the persona; its new `persona` kind never reaches the body or the LLM. Data: `data/persona/*.toml`; the database `data/memory/arya.db` is personal and never leaves the machine it was made on.
 
 ## The data flow (start to finish)
 
@@ -119,7 +120,7 @@ Something that is not a command is chat (`brain/chat.py`, a local LLM through Ol
 | Only `voice/audio.py` touches the mic; only `voice/playback.py` touches the speaker | `AGENTS.md` |
 | Piper is always one long-lived process | `voice/tts.py` |
 | (Step 13, planned) Perception and the LLM can trigger only stand, wave and small turns, never walking, only when idle | `brain/behaviour.py` (not built) |
-| (Step 13, planned) Faces are enrolled only after a yes; embeddings never logged; "forget me" deletes everything | `brain/memory.py` (not built) |
+| (Step 13) "forget me" needs a spoken yes, then deletes facts, summaries, face embeddings and the row in one transaction; facts are validated by code; the hard limits are checked on every sentence | `brain/memory.py`, `brain/arya.py`, `brain/extractor.py`, `brain/output_check.py` (built); face enrolment after a yes (P4, not built) |
 
 ## Threads and who talks to whom
 
@@ -169,7 +170,7 @@ Threads talk only through `queue.Queue` and one shared `speaking` flag. Each que
 - **Voice stop works only while listening in push-to-talk mode.** Use the control window STOP button or Space, or type `stop` in the terminal. In `always` mode it works except while hexa speaks.
 - **Single words are unreliable on the small Vosk model** ("halt" and "freeze" were missed; "stop" is the reliable stop word; two-word commands are reliable).
 - **The real LLM is untested on target hardware.** Here it is too slow (1.5 tokens/s), so chat is developed against `FakeChat`. Real timing is a Step 11 task on the Pi 5.
-- Arya, the memory DB and the vision process are a plan only (Step 13). USB mic and speaker are not yet available and Ollama is not yet installed on the Pi.
+- The vision process is a plan only (Step 13, P3 onwards); persona, memory and the extractor are built (P1). USB mic and speaker are not yet available and Ollama is not yet installed on the Pi.
 - No wake word yet (Step 11), no servo code (`servo_backend.py` is a stub), the phone page has no audio of its own (it only presses the robot's own push-to-talk; phone microphone = Step 12c).
 - Vosk has no echo cancellation: use a headset or keep the microphone away from the speaker for barge-in.
 

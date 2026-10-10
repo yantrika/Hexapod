@@ -7,8 +7,7 @@ cd ~/Desktop/Projects/projects/hexa
 source .venv/bin/activate
 ```
 
-> **Heat:** the dev laptop can reach 90 °C (it powers off at 87 °C and once did). The owner runs everything at full CPU with no heat guard, one heavy thing at a time. To log the peak temperature without any guard: `python scripts/cool_run.py --unguarded -- python main.py --chat fake`.
-> It waits until the laptop is cool and kills the job at 82 °C. One heavy thing at a time.
+> **Heat:** the dev laptop can reach 90 °C (it powers off at 87 °C and once did). On the **laptop** wrap heavy commands in the guard: `python scripts/cool_run.py -- <command>` (it waits to start below 64 °C and kills the job at 82 °C); `--unguarded` only when the owner asks for it. On the **Pi** nothing runs under the guard: use `cool_run.py --unguarded -- <command>` to log the peak and `vcgencmd get_throttled`. One heavy thing at a time.
 
 ## 1. First-time setup
 
@@ -94,6 +93,8 @@ Useful switches for `main.py`:
 | `--no-mic` | no microphone (typing and the phone page still work) |
 | `--listen ptt\|always` | push-to-talk or always listening |
 | `--web`, `--lan`, `--web-port N` | phone page, on the network, other port |
+| `--mode calm\|funny\|roast` | start in this persona mode (default: the last one used, else calm) |
+| `--no-memory`, `--memory-db PATH` | remember nothing, or use another database file (default `data/memory/arya.db`) |
 | `--model us\|in` | Vosk model |
 | `--device N` | microphone number (find it with `scripts/mic_check.py`) |
 | `--log-level DEBUG` | more logging (log file is rotated automatically) |
@@ -143,7 +144,7 @@ The Pi 5 runs Ubuntu 24.04 (Python 3.12) with no PyBullet, so it uses the **dry-
 | **Start in tmux** (page + PIN on the LAN, survives ssh closing) | `ssh hexa-pi`, then `cd ~/hexa && scripts/pi_dryrun.sh start 424242` (PIN optional; omit for a random one). It prints the PIN and the page address. |
 | Watch what the gait would send to the servos | `cd ~/hexa && scripts/pi_dryrun.sh log` (same as `tail -f logs/dryrun.log`; Ctrl-C leaves it running) |
 | Status, live console, stop cleanly | `scripts/pi_dryrun.sh status`, `scripts/pi_dryrun.sh attach` (detach: Ctrl-b d), `scripts/pi_dryrun.sh stop` |
-| Run the tests | `.venv/bin/python scripts/cool_run.py --unguarded -- .venv/bin/python -m pytest -q` (logs the temperature only) |
+| Run the tests | laptop: `.venv/bin/python scripts/cool_run.py -- .venv/bin/python -m pytest -q` (guarded); Pi: `.venv/bin/python scripts/cool_run.py --unguarded -- .venv/bin/python -m pytest -q` (logs only) |
 | Measure | `scripts/measure_voice.py --body`, `--stt --latency`, `scripts/measure_e2e.py`, `scripts/measure_web.py`, and from another machine `scripts/measure_lan.py --url ws://hexa.local:8765 --pin 424242` |
 
 Rules: nothing uses `sudo` from Claude, only `~/hexa` is touched, nothing starts at boot, and there is no servo code until stage 11e is approved. Set `HEXA_BACKEND=dryrun` so every script uses the dry-run body. The systemd unit `deploy/hexa.service` is written but not installed. Still to do on the Pi: Ollama (install, pull, timing), the full test run and the real microphone and speaker checks: step by step in [HOW_TO.md](HOW_TO.md), "Work on the Raspberry Pi". Changing the Pi's Wi-Fi is in the same section. Pin locations and the hardware numbers to report are in [HARDWARE.md](HARDWARE.md).
@@ -157,4 +158,4 @@ See [TROUBLESHOOTING.md](TROUBLESHOOTING.md). Quick answers:
 | "model not found" at start | `scripts/fetch_models.sh` |
 | No sound or no microphone | `python scripts/mic_check.py`, then `--device N` |
 | Phone cannot open the page | use `--lan`, same Wi-Fi, check the port and the PIN |
-| Everything is slow or the laptop is hot | `--headless`, `--chat fake`, `--no-speak`, and watch the temperature with `cool_run.py --unguarded` |
+| Everything is slow or the laptop is hot | `--headless`, `--chat fake`, `--no-speak`, and run it through `cool_run.py` (laptop, guarded) or `cool_run.py --unguarded` (Pi) |

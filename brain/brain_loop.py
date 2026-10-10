@@ -59,8 +59,8 @@ class BrainLoop:
         return self.handle_route(route(text))
 
     def handle_route(self, result: RouteResult) -> RouteResult:
-        """Send what an already routed utterance asks for (chat sends nothing)."""
-        if result.kind == "chat":
+        """Send what an already routed utterance asks for (chat and persona send nothing)."""
+        if result.kind in ("chat", "persona"):
             return result
         command = new_command(result.action or "", result.params)
         self.bridge.send(command)  # immediately; the keeper only observes afterwards

@@ -20,10 +20,15 @@ from pathlib import Path
 
 import config
 from body.process import BodyProbe, BodyProcess
+from brain.arya import Arya, PersonaState
 from brain.brain_loop import BrainLoop
 from brain.chat import ChatBackend, ChatResponder, FakeChat, OllamaChat
+from brain.context import ContextBuilder
 from brain.dialogue import Dialogue
 from brain.event_hub import EventHub
+from brain.extractor import MemoryExtractor, RuleExtractorChat
+from brain.memory import Memory
+from brain.persona import Persona
 from brain.status_hub import StatusHub
 from brain.voice_loop import VoiceEvent, VoiceLoop
 from bridge import make_bridge, new_command
@@ -34,7 +39,7 @@ from voice.ptt import PushToTalk, make_ptt
 from voice.stt import SttEngine, VoskStt
 from voice.tts import PiperEngine
 from web.server import WebServer, lan_addresses, resolve_pin
-from web.session import VoiceControls
+from web.session import PersonaControls, VoiceControls
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +64,10 @@ class AppOptions:
     lan: bool = False  # bind all interfaces instead of 127.0.0.1 (implies web)
     web_port: int = config.WEB_PORT
     web_pin: str | None = None  # None: HEXA_WEB_PIN, config.WEB_PIN, else a random 6-digit PIN
+    persona: bool = True  # Arya: modes, memory, context, output check (Step 13)
+    memory: bool = True  # False: no database at all (nothing is remembered)
+    memory_path: Path | None = None  # None: config.MEMORY_DB_PATH when the app starts
+    mode: str | None = None  # start in this persona mode (None: the saved one, else calm)
 
 
 class LoggedPlayback:
@@ -102,6 +111,16 @@ def make_chat_backend(kind: str, model: str | None) -> ChatBackend | None:
     return backend
 
 
+def make_extractor_backend(kind: str, model: str | None) -> ChatBackend | None:
+    """The backend the memory extractor asks (its OWN object: a chat reply's cancel must never
+    abort an extraction). ``fake`` uses the rule-based stand-in; ``off`` has no extractor."""
+    if kind == "off":
+        return None
+    if kind == "fake":
+        return RuleExtractorChat()
+    return OllamaChat(model=model or config.OLLAMA_MODEL)
+
+
 class HexaApp:
     def __init__(
         self,
@@ -132,6 +151,9 @@ class HexaApp:
         self.source: AudioSource | None = None
         self.web: WebServer | None = None
         self.web_pin: str | None = None
+        self.arya: Arya | None = None
+        self.memory: Memory | None = None
+        self.extractor: MemoryExtractor | None = None
         self.events = EventHub()  # heard / route / said / listening, for the phone page
         self.speech = LoggedPlayback(None, self._on_said)
         self._engine: PiperEngine | None = None
@@ -196,8 +218,14 @@ class HexaApp:
         self._log_thread.start()
 
         backend = self._chat_backend or make_chat_backend(options.chat, options.ollama_model)
+        self._start_persona(backend)
         if backend is not None:
-            self.chat = ChatResponder(backend, self.speech)
+            arya = self.arya
+            self.chat = ChatResponder(
+                backend, self.speech,
+                context_builder=(ContextBuilder(arya.context_parts).build if arya else None),
+                sentence_check=arya.sentence_check if arya else None,
+                on_turn=self._on_turn if arya else None)
             if self._playback_inner is not None:
                 chat = self.chat
                 self._playback_inner.on_start = lambda utterance: chat.note_audio_start(
@@ -212,7 +240,7 @@ class HexaApp:
         assert self._stt is not None
         self.voice = VoiceLoop(self.source, self._stt, self.brain, self.speaking,
                                self.speech, self._on_voice_event,  # type: ignore[arg-type]
-                               chat=self.chat, ptt=self.ptt)
+                               chat=self.chat, ptt=self.ptt, persona=self.arya)
         if self.ptt is not None:
             self.ptt.add_change_listener(
                 lambda state: self.events.publish(
@@ -222,6 +250,55 @@ class HexaApp:
             self._start_web()
         logger.info("hexa is ready (listen=%s, chat=%s, speech=%s)", listen, options.chat,
                     "off" if options.no_speak else "on")
+
+    def _start_persona(self, backend: ChatBackend | None) -> None:
+        """Arya, her memory and the memory extractor (Step 13). A database that cannot be opened is
+        logged and the persona runs without memory: it must never stop the robot starting."""
+        options = self.options
+        if not options.persona:
+            return
+        if options.memory:
+            try:
+                self.memory = Memory(options.memory_path or config.MEMORY_DB_PATH)
+            except Exception as error:  # noqa: BLE001
+                logger.error("memory: could not open the database (%s); running without it", error)
+        self.arya = Arya(Persona.from_file(), self.memory, self.speech,
+                         on_change=self._on_persona_change)
+        if options.mode is not None:
+            self.arya.set_mode(options.mode, announce=False)
+        if self.memory is not None and backend is not None:
+            extractor_backend = make_extractor_backend(options.chat, options.ollama_model)
+            if self._chat_backend is not None:  # a backend handed in by a test: ask that one
+                extractor_backend = self._chat_backend
+            self.extractor = MemoryExtractor(
+                self.memory, lambda: extractor_backend, self.arya.check, self._extractor_idle,
+                on_saved=lambda _count: self._on_persona_change(self.arya.state())
+                if self.arya is not None else None)
+            self.extractor.start()
+            self.arya.on_forgotten = self.extractor.forget_pending
+
+    def _extractor_idle(self) -> bool:
+        """Facts are extracted only while the robot is idle and no reply is being spoken."""
+        brain, chat = self.brain, self.chat
+        return (brain is not None and brain.body_idle()
+                and not (chat is not None and chat.active) and self.speech.pending == 0)
+
+    def _on_turn(self, user: str, reply: str) -> None:
+        if self.extractor is not None and self.arya is not None:
+            self.extractor.add_turn(self.arya.speaker, user, reply)
+
+    def _on_persona_change(self, state: PersonaState) -> None:
+        self.events.publish(state.as_event())
+
+    def _persona_controls(self) -> PersonaControls | None:
+        arya = self.arya
+        if arya is None:
+            return None
+        return PersonaControls(
+            set_mode=arya.set_mode,
+            set_speaker=lambda name: arya.set_speaker(name, announce=True, create=False),
+            forget_person=arya.forget_person,
+            state=lambda: arya.state().as_event())
 
     def _start_web(self) -> None:
         """The phone page: bound to 127.0.0.1, or to every interface with ``lan``. The PIN (and
@@ -235,7 +312,8 @@ class HexaApp:
         self.web_pin = pin
         host = "0.0.0.0" if options.lan else "127.0.0.1"
         voice = VoiceControls(
-            self.set_listening, self.submit_text, self._ptt_unavailable(), self._say_unavailable())
+            self.set_listening, self.submit_text, self._ptt_unavailable(), self._say_unavailable(),
+            self._persona_controls())
         self.web = WebServer(self.bridge, self.hub, pin, host=host, port=options.web_port,
                              voice=voice, events=self.events)
         self.web.start()
@@ -353,12 +431,14 @@ class HexaApp:
             ("stop the robot", self.send_stop if self.body is not None else None),
             ("web server", self.web.stop if self.web else None),
             ("voice loop", self.voice.shutdown if self.voice else None),
+            ("memory extractor", self.extractor.shutdown if self.extractor else None),
             ("chat", self.chat.shutdown if self.chat else None),
             ("playback clear", self.speech.clear),
             ("dialogue", self.dialogue.shutdown if self.dialogue else None),
             ("playback", self._playback_inner.shutdown
              if self._playback_inner and self._own_playback else None),
             ("engine", self._engine.close if self._engine else None),
+            ("memory", self.memory.close if self.memory else None),
             ("brain", self.brain.close if self.brain else None),
             ("status log", self._stop_log),
             ("status hub", self.hub.stop if self.hub else None),
@@ -373,6 +453,7 @@ class HexaApp:
             except Exception:  # noqa: BLE001 - one failing step must not skip the rest
                 logger.exception("shutdown: %s failed", name)
         self.voice = self.chat = self.dialogue = self.brain = self.hub = self.body = None
+        self.arya = self.memory = self.extractor = None
         self.web = None
         self._playback_inner = None
         self._engine = None

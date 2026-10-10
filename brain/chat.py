@@ -11,6 +11,13 @@ A cancelled reply is not added to the history. If the backend fails, the pre-ren
 think right now" is spoken and the loop carries on: chat never blocks the microphone or the body.
 If no sentence is ready within ``FILLER_DELAY_S`` of the question, ONE pre-rendered filler ("hmm")
 is played so the user is not left in silence; a cancel (barge-in) drops it with the rest.
+
+Step 13 hooks (all optional, the plain responder is unchanged without them): ``context_builder``
+builds the messages (persona, memory, trimmed history) instead of the fixed system prompt;
+``sentence_check(sentence, user_text)`` returns a category when a sentence breaks a hard limit,
+and that sentence is dropped and ONE pre-rendered neutral line (``blocked_phrase``) is spoken in
+its place (only the category is logged, never the text; a blocked sentence is not kept in the
+history); ``on_turn(user, reply)`` is told about every completed reply (the memory extractor).
 """
 
 from __future__ import annotations
@@ -33,6 +40,8 @@ from brain.sentences import SentenceSplitter
 logger = logging.getLogger(__name__)
 
 Messages = list[dict[str, str]]
+ContextBuilderFn = Callable[[str, list[tuple[str, str]]], Messages]
+SentenceCheckFn = Callable[[str, str], "str | None"]
 
 
 class ChatError(RuntimeError):
@@ -169,7 +178,7 @@ class FakeChat:
     """
 
     DEFAULT_REPLIES = (
-        "Hello! I am Hexa, a small six legged robot. I like to walk and wave.",
+        "Hello! I am Arya, a small six legged robot. I like to walk and wave.",
         "That is a good question. I think I should stand up and think about it.",
         "I am happy to chat. Ask me anything, or tell me to move.",
     )
@@ -270,6 +279,8 @@ class _Request:
     cancelled: bool = False
     lock: threading.Lock = field(default_factory=threading.Lock)
     first_group: int = 0
+    blocked: int = 0  # sentences dropped by the persona check
+    passed: list[str] = field(default_factory=list)  # sentences that were spoken
     announced: bool = False
     filler_timer: threading.Timer | None = None
     filler_played: bool = False
@@ -289,8 +300,17 @@ class ChatResponder:
         fallback_phrase: str = "cant_think",
         filler_delay_s: float = config.FILLER_DELAY_S,
         fillers: tuple[str, ...] = config.FILLER_PHRASES,
+        context_builder: ContextBuilderFn | None = None,
+        sentence_check: SentenceCheckFn | None = None,
+        blocked_phrase: str = "persona_blocked",
+        on_turn: Callable[[str, str], None] | None = None,
     ) -> None:
         self.backend = backend
+        self.context_builder = context_builder
+        self.sentence_check = sentence_check
+        self.blocked_phrase = blocked_phrase
+        self.on_turn = on_turn
+        self.blocked_sentences = 0  # for the reports and the tests
         self.playback = playback
         self.system_prompt = system_prompt
         self.fallback_phrase = fallback_phrase
@@ -387,17 +407,38 @@ class ChatResponder:
 
     # -- the reply thread ----------------------------------------------------------------------
     def _messages(self, text: str) -> Messages:
+        if self.context_builder is not None:
+            return self.context_builder(text, list(self._history))
         messages: Messages = [{"role": "system", "content": self.system_prompt}]
         for user, reply in self._history:
             messages += [{"role": "user", "content": user}, {"role": "assistant", "content": reply}]
         messages.append({"role": "user", "content": text})
         return messages
 
+    def _blocked_category(self, request: _Request, sentence: str) -> str | None:
+        if self.sentence_check is None:
+            return None
+        try:
+            return self.sentence_check(sentence, request.text)
+        except Exception:  # noqa: BLE001 - fail closed: a broken check must not let text through
+            logger.exception("the sentence check failed; the sentence is dropped")
+            return "check_error"
+
     def _say(self, request: _Request, sentence: str) -> bool:
+        category = self._blocked_category(request, sentence)
         with request.lock:
             if request.cancelled:
                 return False
-            group = self.playback.say(sentence)
+            if category is not None:
+                request.blocked += 1
+                self.blocked_sentences += 1
+                logger.warning("chat: a sentence was dropped by the persona check (%s)", category)
+                if request.blocked > 1:
+                    return True  # one neutral line per reply is enough
+                group = self.playback.say_phrase(self.blocked_phrase)
+            else:
+                group = self.playback.say(sentence)
+                request.passed.append(sentence)
             request.timing.sentences += 1
             if request.timing.first_sentence is None:
                 request.timing.first_sentence = self._clock()
@@ -438,6 +479,12 @@ class ChatResponder:
         if request.cancelled:
             return
         text = "".join(reply).strip()
+        if request.blocked and not failed:
+            text = " ".join(request.passed)  # what was blocked is not remembered
+            if not text:
+                if request.timing.first_audio is None and request.timing.first_sentence is None:
+                    self._announce(request)
+                return  # the neutral line was spoken; that is the whole answer
         if failed or not text:
             request.timing.failed = True
             with request.lock:
@@ -449,6 +496,11 @@ class ChatResponder:
             self._announce(request)
             return
         self._history.append((request.text, text))
+        if self.on_turn is not None:
+            try:
+                self.on_turn(request.text, text)
+            except Exception:  # noqa: BLE001
+                logger.exception("on_turn callback failed")
         if request.timing.first_audio is None and request.timing.first_sentence is None:
             self._announce(request)  # nothing speakable came out; report what we have
 

@@ -13,6 +13,11 @@ bridge messages: they go to ``VoiceControls`` (``HexaApp.set_listening`` and the
 spoken text). The server owns the safety: a press is forced to release after ``ptt_max_s``; a
 disconnect and every ``stop`` message (the page sends one on blur and when hidden) release too;
 only the controller may press, and only a press made here is ever released here.
+
+Step 13 adds three persona actions (``set_mode``, ``set_speaker``, ``forget_person``). They go to
+``PersonaControls`` (``HexaApp`` provides it; ``Arya`` does the work) and are never bridge
+messages. Like every other action they are honoured ONLY from the controller (the one connected
+page); anyone else is ignored. They never move the robot and never touch ``stop`` or the deadman.
 """
 
 from __future__ import annotations
@@ -24,13 +29,24 @@ from dataclasses import dataclass
 from typing import Any
 
 import config
-from web.protocol import POSTURE_ACTIONS, Request, walk_params
+from web.protocol import PERSONA_ACTIONS, POSTURE_ACTIONS, Request, walk_params
 
 Sender = Callable[[str, dict[str, Any]], "int | None"]
 
 
 class Refused(Exception):
     """A valid request that cannot be done now; ``str(error)`` is the reason shown on the page."""
+
+
+@dataclass(frozen=True)
+class PersonaControls:
+    """What the page may do with Arya (``HexaApp`` provides it). Each returns True if it was done.
+    ``state()`` is the snapshot shown on the page (the ``persona`` event)."""
+
+    set_mode: Callable[[str], bool]
+    set_speaker: Callable[[str], bool]
+    forget_person: Callable[[int], bool]
+    state: Callable[[], dict[str, Any]]
 
 
 @dataclass(frozen=True)
@@ -45,6 +61,7 @@ class VoiceControls:
     say: Callable[[str], None]
     ptt_unavailable: str | None = None
     say_unavailable: str | None = None
+    persona: PersonaControls | None = None
 
 
 NO_VOICE = VoiceControls(
@@ -173,6 +190,9 @@ class WebControl:
         if request.action in ("ptt_press", "ptt_release", "say"):
             self._voice_request(request)
             return True
+        if request.action in PERSONA_ACTIONS:
+            self._persona_request(request)
+            return True
         with self._lock:
             if self._controller is not client:
                 return False
@@ -230,6 +250,19 @@ class WebControl:
                 raise Refused("too fast: wait a moment")
             self._last_say_at = now
         self._voice.say(request.text)
+
+    def _persona_request(self, request: Request) -> None:
+        persona = self._voice.persona
+        if persona is None:
+            raise Refused("the persona is not enabled")
+        if request.action == "set_mode":
+            if not persona.set_mode(request.mode):
+                raise Refused("unknown mode")
+        elif request.action == "set_speaker":
+            if not persona.set_speaker(request.name):
+                raise Refused("I don't know that person")
+        elif not persona.forget_person(request.person_id):
+            raise Refused("nobody to forget with that id")
 
     def release_listening(self) -> None:
         """Stop listening if the web started it. Idempotent."""

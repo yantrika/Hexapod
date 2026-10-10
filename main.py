@@ -60,6 +60,12 @@ def build_parser() -> argparse.ArgumentParser:
                              "(implies --web; plain HTTP: trusted networks only)")
     parser.add_argument("--web-port", type=int, default=config.WEB_PORT,
                         help="port of the page (default %(default)s)")
+    parser.add_argument("--mode", choices=config.PERSONA_MODES, default=None,
+                        help="start in this persona mode (default: the saved one, else calm)")
+    parser.add_argument("--no-memory", action="store_true",
+                        help="remember nothing: no database is opened (the persona still works)")
+    parser.add_argument("--memory-db", type=Path, default=None,
+                        help="memory database (default config.MEMORY_DB_PATH, data/memory/arya.db)")
     parser.add_argument("--audio-file", type=Path, default=None,
                         help="recognise this WAV, then exit")
     parser.add_argument("--model", default=None, help="Vosk model: us, in, a name or a path")
@@ -130,7 +136,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         gui=args.gui, backend=args.backend, listen=args.listen, chat=args.chat,
         no_speak=args.no_speak, no_mic=args.no_mic, audio_file=args.audio_file, model=args.model,
         ollama_model=args.ollama_model, mic_device=args.device,
-        web=args.web or args.lan, lan=args.lan, web_port=args.web_port))
+        web=args.web or args.lan, lan=args.lan, web_port=args.web_port, mode=args.mode,
+        memory=not args.no_memory, memory_path=args.memory_db))
     code = EXIT_OK
     try:
         app.start()

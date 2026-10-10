@@ -23,6 +23,7 @@ Values marked PLACEHOLDER in the file are guesses to tune. Settings that take ef
 | **Audio** | `AUDIO_SAMPLE_RATE` (16000), `AUDIO_BLOCKSIZE`, `MIC_DEVICE`, `SPEAKER_DEVICE`, `SPEAK_TAIL_S`, `TTS_*` timeouts and queue sizes, `PHRASES_DIR`, `TTS_PHRASES` | Pick audio devices, change what is pre-recorded, change speech timeouts. |
 | **Models** | `VOSK_MODELS`, `VOSK_MODEL_DEFAULT`, `STT_*` thresholds, `STT_USE_GRAMMAR`, `PIPER_BINARY`, `PIPER_VOICE`, `PIPER_MODEL_PATH`, `PIPER_NICE`, `PIPER_CPU_LIST`, `TRANSCRIPT_LOG` | Change a model; tune recognition. |
 | **Chat** | `OLLAMA_URL`, `OLLAMA_MODEL`, `OLLAMA_TIMEOUT_S`, `OLLAMA_KEEP_ALIVE`, `CHAT_SYSTEM_PROMPT`, `CHAT_MAX_TOKENS`, `CHAT_TEMPERATURE`, `CHAT_HISTORY_TURNS`, `CHAT_MAX_SENTENCE_CHARS` | Change the chat model, the personality, reply length, memory. |
+| **Persona and memory (Step 13)** | `PERSONA_MODES`, `PERSONA_DEFAULT_MODE`, `PERSONA_OUTPUT_CHECK`, `PERSONA_EXAMPLES_IN_PROMPT`, `GUEST_NAME`, `MOOD_*`, `MEMORY_*`, `CHAT_CONTEXT_MAX_TOKENS`, `CONTEXT_*`, `EXTRACTOR_*`, `FORGET_CONFIRM_S`, `PERSONA_*_PHRASES`, `ROUTER_NAME_STOPWORDS`, `MEMORY_DB_PATH` (or the `HEXA_MEMORY_DB` variable) | How Arya talks, how much she remembers, how long a prompt may be, when facts are learned, which words switch modes. The character and the blocked words are in `data/persona/*.toml`. |
 | **Test tolerances** | `WALK_TEST_*`, `HOLD_TEST_*`, `BODY_TEST_*`, `IK_TOLERANCE_M` | How strict the simulation tests are. Not used by the robot. |
 
 ## The settings you are most likely to change
@@ -31,7 +32,8 @@ Values marked PLACEHOLDER in the file are guesses to tune. Settings that take ef
 |---|---|
 | Replace the speech model | the name in `VOSK_MODELS` / `VOSK_MODEL_DEFAULT`, then `scripts/fetch_models.sh` |
 | Replace the chat model | `OLLAMA_MODEL`, then `docker exec -it ollama ollama pull <name>` |
-| Change the personality | `CHAT_SYSTEM_PROMPT` |
+| Change the personality | `data/persona/arya.toml` (the character, the modes, the examples); `CHAT_SYSTEM_PROMPT` is only the fallback without the persona |
+| Block another word | `data/persona/limits.toml` |
 | Replace the speaking voice | `PIPER_VOICE`, then `scripts/fetch_models.sh` |
 | Make "stop" easier or harder to trigger from the grammar | `STT_STOP_CONF` (lower = easier) |
 | Make grammar commands easier or harder | `STT_GRAMMAR_CONF` (lower = easier, riskier) |
