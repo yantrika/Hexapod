@@ -149,7 +149,9 @@ def test_forget_is_one_transaction(memory: Memory) -> None:
 def test_roast_ok_is_stored(memory: Memory) -> None:
     anna = memory.ensure_person("anna")
     assert anna
-    memory.set_roast_ok(anna.id, False)
+    assert memory.set_roast_ok(anna.id, False)
+    assert [p.roast_ok for p in memory.list_people()] == [False]
+    assert not memory.set_roast_ok(9999, True)
     person = memory.get_person("anna")
     assert person is not None and not person.roast_ok
 

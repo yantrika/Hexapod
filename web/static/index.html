@@ -66,6 +66,8 @@
              background: var(--bg); color: var(--text); margin-left: 8px; }
   .person { display: flex; align-items: center; gap: 8px; }
   .person span { flex: 1; overflow-wrap: anywhere; }
+  .person label { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--muted); }
+  .person input { width: 18px; height: 18px; }
   .person button { font: inherit; font-size: 13px; padding: 6px 10px; border-radius: 8px; border: 0;
                    background: var(--bad); color: #fff; touch-action: manipulation; }
   #peoplenote { font-size: 12px; color: var(--muted); }
@@ -142,7 +144,8 @@
           </label>
           <div id="people"></div>
           <div id="peoplenote">Say &ldquo;my name is ...&rdquo; (or type it) to add someone. Forget deletes
-            what Arya remembers about that person.</div>
+            what Arya remembers about that person. &ldquo;auto-roast ok&rdquo; only decides whether Arya may
+            start a roast by herself later; roast mode still roasts whoever is talking.</div>
         </div>
       </details>
     </div>
@@ -272,15 +275,23 @@ function paintPersona(p) {
     option.value = person.name; option.textContent = person.name; select.appendChild(option);
     var row = document.createElement("div"), label = document.createElement("span");
     var button = document.createElement("button");
+    var okLabel = document.createElement("label"), ok = document.createElement("input");
     row.className = "person";
     label.textContent = person.name + " (" + person.facts + (person.facts === 1 ? " fact)" : " facts)");
+    ok.type = "checkbox"; ok.checked = person.roast_ok !== false;
+    ok.setAttribute("aria-label", "roast ok for " + person.name);
+    ok.addEventListener("change", function () {
+      send({action: "set_roast_ok", id: person.id, roast_ok: ok.checked});
+    });
+    okLabel.appendChild(ok); okLabel.appendChild(document.createTextNode("auto-roast ok"));
     button.type = "button"; button.textContent = "Forget";
     button.addEventListener("click", function () {
       if (window.confirm("Forget " + person.name + "? This deletes everything Arya remembers about them.")) {
         send({action: "forget_person", id: person.id});
       }
     });
-    row.appendChild(label); row.appendChild(button); people.appendChild(row);
+    row.appendChild(label); row.appendChild(okLabel); row.appendChild(button);
+    people.appendChild(row);
   });
   select.value = p.speaker;
   if (!p.memory) { $("peoplenote").textContent = "Memory is off: nothing is remembered."; }

@@ -298,6 +298,7 @@ class HexaApp:
             set_mode=arya.set_mode,
             set_speaker=lambda name: arya.set_speaker(name, announce=True, create=False),
             forget_person=arya.forget_person,
+            set_roast_ok=arya.set_roast_ok,
             state=lambda: arya.state().as_event())
 
     def _start_web(self) -> None:

@@ -220,7 +220,7 @@ Command line: `python scripts/web_check.py --pin 123456 --say "walk forward"` or
 
 ## Arya: persona, memory and the phone Persona section (Step 13, P1)
 
-The robot is called **Arya** (the project stays `hexa`). She has three ways of talking, chosen on the phone page (Calm / Funny / Roast) or by voice: "Arya, roast mode", "calm mode", "funny mode", "stop roasting". A mode changes only how she TALKS: commands, the router and every safety rule are the same in every mode, and a persona request never reaches the body or the language model.
+The robot is called **Arya** (the project stays `hexa`). She has three ways of talking, chosen on the phone page (Calm / Funny / Roast) or by voice: "Arya, roast mode", "calm mode", "funny mode", "stop roasting" (back to calm; if she is walking at that moment it also stops the robot). A mode changes only how she TALKS: commands, the router and every safety rule are the same in every mode, and a persona request never reaches the body or the language model.
 
 - **Roast** is mean and sarcastic: she teases the question first and gives the real answer when you say "seriously" or "just tell me". A safety, health or real-help question ("I need help", "is it safe to...") always gets a straight answer, in every mode.
 - **Hard limits in every mode**, written into each prompt AND checked in code on every sentence before it is spoken: no remarks about looks, body, skin colour, race, religion, caste, gender, sexuality, disability, family or health; no slurs or threats; never roast someone who is not talking to her. A sentence that fails is dropped and she says "Let's talk about something else." (the log names the category, never the words). The word lists are in `data/persona/limits.toml`.

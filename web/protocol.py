@@ -4,10 +4,10 @@ Pure functions, no I/O and no clock. The page may send only ``walk`` (one combin
 every held move button), ``stop``, ``stand``, ``sit`` and ``wave``; since Step 12b also
 ``ptt_press`` / ``ptt_release`` (hold-to-talk with the robot's microphone) and ``say`` (typed
 text). Those three never become bridge messages. Step 13 adds ``set_mode`` (calm, funny, roast),
-``set_speaker`` (a name or "guest") and ``forget_person`` (an id): brain-side persona and memory
-actions, also never bridge messages. Numbers are clamped to [-1, 1]; anything
-else (an unknown action or field, a bool, a string, NaN, a nested value, bad JSON) is rejected
-and never reaches the bridge. The page never sends joint data.
+``set_speaker`` (a name or "guest"), ``forget_person`` (an id) and ``set_roast_ok`` (an id and a
+true/false): brain-side persona and memory actions, also never bridge messages. Numbers are
+clamped to [-1, 1]; anything else (an unknown action or field, a bool, a string, NaN, a nested
+value, bad JSON) is rejected and never reaches the bridge. The page never sends joint data.
 """
 
 from __future__ import annotations
@@ -22,13 +22,14 @@ import config
 
 POSTURE_ACTIONS = ("stand", "sit", "wave")
 PTT_ACTIONS = ("ptt_press", "ptt_release")
-PERSONA_ACTIONS = ("set_mode", "set_speaker", "forget_person")
+PERSONA_ACTIONS = ("set_mode", "set_speaker", "forget_person", "set_roast_ok")
 CLIENT_ACTIONS = ("walk", "stop", *POSTURE_ACTIONS, *PTT_ACTIONS, "say", *PERSONA_ACTIONS)
 _WALK_FIELDS = frozenset({"action", "forward", "strafe", "yaw", "speed"})
 _SAY_FIELDS = frozenset({"action", "text"})
 _MODE_FIELDS = frozenset({"action", "mode"})
 _SPEAKER_FIELDS = frozenset({"action", "name"})
 _FORGET_FIELDS = frozenset({"action", "id"})
+_ROAST_OK_FIELDS = frozenset({"action", "id", "roast_ok"})
 _MAX_PERSON_ID = 2**31 - 1
 
 
@@ -48,7 +49,8 @@ class Request:
     text: str = ""  # for ``say``: stripped, 1 to WEB_SAY_MAX_CHARS characters
     mode: str = ""  # for ``set_mode``: one of config.PERSONA_MODES
     name: str = ""  # for ``set_speaker``: a name or "guest" (the server checks that it exists)
-    person_id: int = 0  # for ``forget_person``
+    person_id: int = 0  # for ``forget_person`` and ``set_roast_ok``
+    roast_ok: bool = False  # for ``set_roast_ok``
 
     @property
     def moving(self) -> bool:
@@ -136,6 +138,14 @@ def parse_message(raw: str | bytes) -> Request:
         if not set(message) <= _FORGET_FIELDS:
             raise ProtocolError("unknown field")
         return Request("forget_person", person_id=_person_id(message.get("id")))
+    if action == "set_roast_ok":
+        if set(message) != _ROAST_OK_FIELDS:
+            raise ProtocolError("unknown field" if not set(message) <= _ROAST_OK_FIELDS
+                                else "missing field")
+        flag = message.get("roast_ok")
+        if not isinstance(flag, bool):
+            raise ProtocolError("roast_ok must be true or false")
+        return Request("set_roast_ok", person_id=_person_id(message.get("id")), roast_ok=flag)
     if action != "walk":
         if set(message) != {"action"}:
             raise ProtocolError("unknown field")

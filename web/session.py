@@ -14,7 +14,8 @@ spoken text). The server owns the safety: a press is forced to release after ``p
 disconnect and every ``stop`` message (the page sends one on blur and when hidden) release too;
 only the controller may press, and only a press made here is ever released here.
 
-Step 13 adds three persona actions (``set_mode``, ``set_speaker``, ``forget_person``). They go to
+Step 13 adds four persona actions (``set_mode``, ``set_speaker``, ``forget_person``,
+``set_roast_ok``). They go to
 ``PersonaControls`` (``HexaApp`` provides it; ``Arya`` does the work) and are never bridge
 messages. Like every other action they are honoured ONLY from the controller (the one connected
 page); anyone else is ignored. They never move the robot and never touch ``stop`` or the deadman.
@@ -46,6 +47,7 @@ class PersonaControls:
     set_mode: Callable[[str], bool]
     set_speaker: Callable[[str], bool]
     forget_person: Callable[[int], bool]
+    set_roast_ok: Callable[[int, bool], bool]
     state: Callable[[], dict[str, Any]]
 
 
@@ -261,6 +263,9 @@ class WebControl:
         elif request.action == "set_speaker":
             if not persona.set_speaker(request.name):
                 raise Refused("I don't know that person")
+        elif request.action == "set_roast_ok":
+            if not persona.set_roast_ok(request.person_id, request.roast_ok):
+                raise Refused("nobody with that id")
         elif not persona.forget_person(request.person_id):
             raise Refused("nobody to forget with that id")
 

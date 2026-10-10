@@ -50,13 +50,14 @@ class PersonaState:
     mode: str
     speaker: str
     mood: str
-    people: tuple[tuple[int, str, int], ...]  # (id, name, number of facts)
+    people: tuple[tuple[int, str, int, bool], ...]  # (id, name, number of facts, roast_ok)
     memory: bool  # False: the database could not be opened
 
     def as_event(self) -> dict[str, Any]:
         return {"type": "persona", "mode": self.mode, "modes": list(config.PERSONA_MODES),
                 "speaker": self.speaker, "mood": self.mood, "memory": self.memory,
-                "people": [{"id": i, "name": n, "facts": f} for i, n, f in self.people]}
+                "people": [{"id": i, "name": n, "facts": f, "roast_ok": r}
+                           for i, n, f, r in self.people]}
 
 
 class Arya:
@@ -95,22 +96,16 @@ class Arya:
     def speaker(self) -> str:
         return self._speaker
 
-    def effective_mode(self) -> str:
-        """The mode used for talking: roast falls back to funny for someone who is not roast-ok."""
-        person = self._speaker_person()
-        if self._mode == "roast" and person is not None and not person.roast_ok:
-            return "funny"
-        return self._mode
-
     def _speaker_person(self) -> Person | None:
         if self.memory is None or self._speaker == config.GUEST_NAME:
             return None
         return self.memory.get_person(self._speaker)
 
     def state(self) -> PersonaState:
-        people: tuple[tuple[int, str, int], ...] = ()
+        people: tuple[tuple[int, str, int, bool], ...] = ()
         if self.memory is not None:
-            people = tuple((p.id, p.name, p.facts) for p in self.memory.list_people())
+            people = tuple((p.id, p.name, p.facts, p.roast_ok)
+                           for p in self.memory.list_people())
         return PersonaState(self._mode, self._speaker, self.mood.state, people,
                             self.memory is not None)
 
@@ -208,6 +203,14 @@ class Arya:
         self._changed()
         return removed
 
+    def set_roast_ok(self, person_id: int, ok: bool) -> bool:
+        """The page's roast_ok toggle. It does not change what roast MODE does (that applies to
+        everyone who is talking to Arya); it is what the later auto-roast (P5) asks first."""
+        if self.memory is None or not self.memory.set_roast_ok(person_id, ok):
+            return False
+        self._changed()
+        return True
+
     def recall(self) -> None:
         """"what do you remember about me": code builds the sentence from the stored facts."""
         person = self._speaker_person()
@@ -274,7 +277,7 @@ class Arya:
         """What goes into this reply's prompt (the builder trims it)."""
         straight = (self.persona.wants_straight_answer(user_text)
                     or self.persona.is_help_question(user_text))
-        system = self.persona.system_prompt(self.effective_mode(), self.mood.state, straight)
+        system = self.persona.system_prompt(self._mode, self.mood.state, straight)
         facts: list[str] = []
         summary = None
         person = self._speaker_person()

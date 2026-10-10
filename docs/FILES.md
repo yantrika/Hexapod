@@ -100,7 +100,7 @@ Legend: **STUB** = placeholder, not built yet. **DEV** = developer tool, not par
 | `scripts/measure_web.py` | Press-to-motion time, idle CPU of the web server and peak temperature. | You want the numbers again (e.g. on the Pi). |
 | `scripts/measure_ptt.py` | Vosk CPU and body tick time with push-to-talk idle, listening and always-on. | You want the numbers again (e.g. on the Pi). |
 | `scripts/stt_check.py` | Measures how well Vosk hears **your** voice; saves results; `--replay` re-judges them. | You add test phrases. |
-| `scripts/persona_eval.py` | Runs a fixed conversation script per persona mode against a chat backend (FakeChat now, real models in P2), saves transcripts and counts what the output check blocked. **DEV** | You add cases or a model. |
+| `scripts/persona_eval.py` | Runs a fixed conversation script per persona mode against a chat backend (FakeChat, or one or more Ollama models on any machine with `--ollama-url` / `--model a,b,c`), saves transcripts and counts what the output check blocked. **DEV** | You add cases or a model. |
 | `scripts/arya_check.py` | Does Vosk recognise "Arya"? Piper renders phrases, Vosk (free text and grammar) listens, no microphone; prints what it heard. **DEV** | You change the wake name. |
 | `scripts/mic_check.py` | Lists microphones, records 3 seconds, shows the level. | Rarely. |
 | `scripts/say.py` | Type text, hear it spoken. | Rarely. |
@@ -152,6 +152,7 @@ Legend: **STUB** = placeholder, not built yet. **DEV** = developer tool, not par
 | `docs/COMMANDS.md` | Every command you can run, and the safe way to run it. |
 | `docs/TROUBLESHOOTING.md` | Problems we hit and what fixed them. |
 | `docs/PLAN_SIMPLE.md` | The plan in very simple words. |
+| `docs/PERSONA_EVAL.md` | Steps for a teammate to run `scripts/persona_eval.py` against 2-3 candidate Ollama models on any machine (an RTX 3060) and send back the JSONL. |
 
 ## `tests/` : the checks (`pytest`)
 

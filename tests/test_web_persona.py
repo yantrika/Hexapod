@@ -42,6 +42,8 @@ def test_set_speaker_and_forget_person_are_parsed() -> None:
     assert parse({"action": "set_speaker", "name": "  Anna  "}).name == "Anna"
     assert parse({"action": "set_speaker", "name": "guest"}).name == "guest"
     assert parse({"action": "forget_person", "id": 7}).person_id == 7
+    toggle = parse({"action": "set_roast_ok", "id": 7, "roast_ok": False})
+    assert toggle.person_id == 7 and toggle.roast_ok is False
 
 
 @pytest.mark.parametrize("message", [
@@ -57,6 +59,15 @@ def test_set_speaker_and_forget_person_are_parsed() -> None:
     {"action": "forget_person", "id": 1.5}, {"action": "forget_person", "id": True},
     {"action": "forget_person", "id": 0}, {"action": "forget_person", "id": -3},
     {"action": "forget_person", "id": 2**40}, {"action": "forget_person", "id": 1, "name": "A"},
+    {"action": "set_roast_ok"}, {"action": "set_roast_ok", "id": 1},
+    {"action": "set_roast_ok", "roast_ok": True},
+    {"action": "set_roast_ok", "id": 1, "roast_ok": "yes"},
+    {"action": "set_roast_ok", "id": 1, "roast_ok": 1},
+    {"action": "set_roast_ok", "id": 1, "roast_ok": None},
+    {"action": "set_roast_ok", "id": "1", "roast_ok": True},
+    {"action": "set_roast_ok", "id": 0, "roast_ok": True},
+    {"action": "set_roast_ok", "id": True, "roast_ok": True},
+    {"action": "set_roast_ok", "id": 1, "roast_ok": True, "name": "A"},
 ])
 def test_bad_persona_messages_are_rejected(message: dict[str, Any]) -> None:
     with pytest.raises(ProtocolError):
@@ -69,7 +80,7 @@ class FakePersona:
         self.calls: list[tuple[str, object]] = []
         self.accept = True
         self.controls = PersonaControls(self.set_mode, self.set_speaker, self.forget,
-                                        lambda: {"type": "persona"})
+                                        self.roast_ok, lambda: {"type": "persona"})
 
     def set_mode(self, mode: str) -> bool:
         self.calls.append(("mode", mode))
@@ -81,6 +92,10 @@ class FakePersona:
 
     def forget(self, person_id: int) -> bool:
         self.calls.append(("forget", person_id))
+        return self.accept
+
+    def roast_ok(self, person_id: int, ok: bool) -> bool:
+        self.calls.append(("roast_ok", (person_id, ok)))
         return self.accept
 
 
@@ -105,7 +120,9 @@ def test_the_controller_can_change_the_mode_the_speaker_and_forget_people() -> N
     assert control.handle(client, parse({"action": "set_mode", "mode": "roast"}))
     assert control.handle(client, parse({"action": "set_speaker", "name": "Anna"}))
     assert control.handle(client, parse({"action": "forget_person", "id": 3}))
-    assert persona.calls == [("mode", "roast"), ("speaker", "Anna"), ("forget", 3)]
+    assert control.handle(client, parse({"action": "set_roast_ok", "id": 3, "roast_ok": False}))
+    assert persona.calls == [("mode", "roast"), ("speaker", "Anna"), ("forget", 3),
+                             ("roast_ok", (3, False))]
     assert sent == []  # never a bridge message: the body cannot be moved from here
 
 
@@ -115,7 +132,8 @@ def test_anyone_else_is_ignored() -> None:
     stranger = object()
     for message in ({"action": "set_mode", "mode": "roast"},
                     {"action": "set_speaker", "name": "Anna"},
-                    {"action": "forget_person", "id": 3}):
+                    {"action": "forget_person", "id": 3},
+                    {"action": "set_roast_ok", "id": 3, "roast_ok": False}):
         assert not control.handle(stranger, parse(message))
     assert persona.calls == []
 
@@ -134,7 +152,8 @@ def test_a_refused_change_is_reported_with_a_reason() -> None:
     control, _, client = make_control(persona)
     for message, reason in (({"action": "set_mode", "mode": "calm"}, "unknown mode"),
                             ({"action": "set_speaker", "name": "Zed"}, "know that person"),
-                            ({"action": "forget_person", "id": 9}, "nobody")):
+                            ({"action": "forget_person", "id": 9}, "nobody"),
+                            ({"action": "set_roast_ok", "id": 9, "roast_ok": True}, "nobody")):
         with pytest.raises(Refused, match=reason):
             control.handle(client, parse(message))
 
@@ -173,7 +192,8 @@ class Rig:
         controls = PersonaControls(
             self.arya.set_mode,
             lambda name: self.arya.set_speaker(name, announce=False, create=False),
-            self.arya.forget_person, lambda: self.arya.state().as_event())
+            self.arya.forget_person, self.arya.set_roast_ok,
+            lambda: self.arya.state().as_event())
         voice = VoiceControls(lambda on: None, lambda text: None, persona=controls)
         self.server = WebServer(self.bridge, self.hub, PIN, port=0, voice=voice,
                                 events=self.events)
@@ -209,7 +229,7 @@ def test_hello_carries_the_persona_state(rig: Rig) -> None:
     assert hello["persona"] == {
         "type": "persona", "mode": "calm", "modes": ["calm", "funny", "roast"],
         "speaker": "guest", "mood": "neutral", "memory": True,
-        "people": [{"id": person.id, "name": "Anna", "facts": 1}]}
+        "people": [{"id": person.id, "name": "Anna", "facts": 1, "roast_ok": True}]}
     client.close()
 
 
@@ -242,6 +262,22 @@ def test_picking_a_speaker_and_forgetting_a_person(rig: Rig) -> None:
     client.close()
 
 
+def test_the_roast_ok_toggle_is_stored_and_shown_on_the_page(rig: Rig) -> None:
+    person = rig.memory.ensure_person("anna")
+    assert person
+    client = rig.connect()
+    client.recv(2)
+    client.send({"action": "set_roast_ok", "id": person.id, "roast_ok": False})
+    got: list[dict[str, Any]] = []
+    wait_until(lambda: any(e["people"] and e["people"][0]["roast_ok"] is False
+                           for e in persona_events(client, got)), what="the roast_ok event")
+    refreshed = rig.memory.get_person("anna")
+    assert refreshed is not None and not refreshed.roast_ok
+    rig.arya.set_mode("roast")
+    assert "Mode: roast" in rig.arya.context_parts("hi").system  # roast mode is not gated
+    client.close()
+
+
 def test_an_unknown_speaker_and_a_bad_id_are_refused_and_nothing_changes(rig: Rig) -> None:
     client = rig.connect()
     client.recv(2)
@@ -270,6 +306,7 @@ def test_a_second_phone_cannot_get_in_to_change_the_mode(rig: Rig) -> None:
 def test_the_page_has_the_persona_section_and_a_confirm_before_forgetting() -> None:
     page = (Path(config.PROJECT_ROOT) / "web" / "static" / "index.html").read_text()
     for needle in ('data-mode="calm"', 'data-mode="funny"', 'data-mode="roast"', 'id="speaker"',
-                   'id="people"', "forget_person", "set_mode", "set_speaker", "window.confirm"):
+                   'id="people"', "forget_person", "set_roast_ok", "set_mode", "set_speaker",
+                   "window.confirm"):
         assert needle in page, needle
     assert "innerHTML" not in page  # names are people's words: only ever textContent

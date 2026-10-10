@@ -28,7 +28,8 @@
 - Persona (Step 13): the router runs first and does not know the persona. A ``persona`` route ("my
   name is X", "forget me", "roast mode" ...) is handed to ``PersonaHooks`` and never reaches the
   body or the LLM; a pending "say yes to confirm" is answered before anything else (but a stop word
-  always goes out first); every utterance feeds the mood.
+  always goes out first); every utterance feeds the mood. "Stop roasting" only switches to calm
+  when the body is idle; while it moves (or a sit/stand/wave runs) a real stop goes out first.
 - A source or recognizer error is logged and the loop keeps running.
 """
 
@@ -45,7 +46,7 @@ from typing import Protocol
 import config
 from brain.brain_loop import BrainLoop
 from brain.chat import ChatResponder
-from brain.router import RouteResult, route
+from brain.router import RouteResult, is_stop_roast, route
 from brain.stt_decision import PATH_EARLY_STOP, decide
 from brain.transcript_log import TranscriptLog, hypothesis_record
 from voice.audio import AudioSource, EndOfAudio
@@ -335,6 +336,8 @@ class VoiceLoop:
         persona = None if early_stop else self.persona
         if result.kind != "chat" and self.chat is not None:
             self.chat.cancel()  # a command or a stop silences any chat reply first
+        if is_stop_roast(result) and not early_stop and not self.brain.body_idle():
+            self._stop_for_roast(result, path)  # moving: a real stop first, then calm mode
         if persona is not None:
             if result.kind == "stop":
                 persona.cancel_pending()
@@ -354,6 +357,14 @@ class VoiceLoop:
             persona.handle(result)
         elif result.kind == "chat":
             self._chat(result.text, started_at)
+
+    def _stop_for_roast(self, result: RouteResult, path: str) -> None:
+        """"Stop roasting" while the body moves or a motion command is active also stops the robot:
+        the same stop a stop word sends (``stop_event`` included), sent before the mode change."""
+        stop = RouteResult("stop", result.text, "stop", {}, result.phrase, 100.0, result.normalized)
+        self.brain.handle_route(stop)
+        self._emit(VoiceEvent("route", result.text, self._clock(), stop, False, path,
+                              "stop roasting while the body is moving"))
 
     def _chat(self, text: str, started_at: float | None) -> None:
         """Chat goes to the LLM only while the body is idle (see the module docstring)."""

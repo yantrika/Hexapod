@@ -89,6 +89,7 @@ class PersonSummary:
     name: str
     facts: int
     last_seen: float
+    roast_ok: bool = True
 
 
 @dataclass(frozen=True)
@@ -210,12 +211,16 @@ class Memory:
         with self._lock:
             rows = self._db.execute(
                 "SELECT p.id, p.name, (SELECT COUNT(*) FROM facts f WHERE f.person_id = p.id), "
-                "p.last_seen FROM people p ORDER BY p.name COLLATE NOCASE").fetchall()
-        return [PersonSummary(*row) for row in rows]
+                "p.last_seen, p.roast_ok FROM people p ORDER BY p.name COLLATE NOCASE").fetchall()
+        return [PersonSummary(row[0], row[1], row[2], row[3], bool(row[4])) for row in rows]
 
-    def set_roast_ok(self, person_id: int, ok: bool) -> None:
+    def set_roast_ok(self, person_id: int, ok: bool) -> bool:
+        """Store whether Arya may roast this person on her own (P5). False: nobody has that id.
+        Roast MODE is not gated by it."""
         with self._lock:
-            self._db.execute("UPDATE people SET roast_ok = ? WHERE id = ?", (int(ok), person_id))
+            cursor = self._db.execute("UPDATE people SET roast_ok = ? WHERE id = ?",
+                                      (int(ok), person_id))
+            return cursor.rowcount > 0
 
     # -- facts --------------------------------------------------------------------------------
     def add_fact(self, person_id: int, text: str, source: str = "told") -> bool:

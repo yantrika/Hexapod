@@ -98,7 +98,7 @@ Other chat settings in `config.py`: `CHAT_SYSTEM_PROMPT` (the personality: short
 - The character, the three modes (description, style, example exchanges), the mood lines and the "seriously" and help triggers: `data/persona/arya.toml`. Keep the prompt short (a test fails over 2200 characters); a small model forgets long prompts.
 - The words the output check blocks, per topic (`always` = anywhere, `directed` = only when the sentence is about the listener, `patterns` = regular expressions): `data/persona/limits.toml`. Run `pytest tests/test_output_check.py` after editing; add a line to its tables for every word you add. The same lists decide which facts may be remembered.
 - A new spoken confirmation: add it to `config.TTS_PHRASES`, then `python scripts/prerender_phrases.py` (a phrase must be one sentence).
-- Try a model on the fixed script: `python scripts/persona_eval.py --backend ollama --model <name>` (reads the JSONL by hand for quality; the table counts blocked sentences).
+- Try a model on the fixed script: `python scripts/persona_eval.py --backend ollama --model <name>[,<name>...] [--ollama-url <url>]` (several models go into one file; steps for a teammate: `docs/PERSONA_EVAL.md`; reads the JSONL by hand for quality; the table counts blocked sentences).
 - Forget someone by hand: say "forget me" or use the Forget button; do not edit the database.
 
 ## Add a new file or module

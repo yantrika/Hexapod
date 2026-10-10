@@ -15,7 +15,8 @@
   mode", "stop roasting". Code in the brain acts on them, never the LLM, and they are looked at
   only AFTER the stop check, so every phrase above routes exactly as before. The one exception:
   the whole utterance "stop roasting" (``config.PERSONA_STOP_ROAST_PHRASES``) switches to calm
-  mode instead of stopping the robot.
+  mode instead of stopping the robot. (The voice loop adds a real stop when the body is moving:
+  see ``is_stop_roast``.)
 
 Numbers are not parsed in v1 and the router never produces strafe or yaw.
 """
@@ -142,6 +143,12 @@ def _drop_wake_variant(candidate: str) -> str:
     """A leading "aria" (how Vosk small hears "Arya") is dropped when more words follow."""
     first, _, rest = candidate.partition(" ")
     return rest if rest and first in config.ROUTER_WAKE_VARIANTS else candidate
+
+
+def is_stop_roast(result: RouteResult) -> bool:
+    """True for the whole-utterance "stop roasting" route (a mode switch, not a stop word)."""
+    return (result.kind == "persona" and result.action == "set_mode"
+            and result.phrase in config.PERSONA_STOP_ROAST_PHRASES)
 
 
 def route(text: str) -> RouteResult:

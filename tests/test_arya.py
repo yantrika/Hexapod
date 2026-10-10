@@ -200,7 +200,7 @@ def test_changes_are_published_for_the_page(rig: Rig) -> None:
     assert rig.states[-1].mode == "roast" and rig.states[-1].speaker == "Anna"
     event = rig.states[-1].as_event()
     assert event["type"] == "persona" and event["modes"] == list(config.PERSONA_MODES)
-    assert event["people"] == [{"id": 1, "name": "Anna", "facts": 0}]
+    assert event["people"] == [{"id": 1, "name": "Anna", "facts": 0, "roast_ok": True}]
 
 
 def test_mood_follows_what_she_hears(rig: Rig) -> None:
@@ -229,16 +229,28 @@ def test_the_context_has_the_mode_the_speaker_and_their_facts(rig: Rig) -> None:
     assert "plain, honest, kind answer" in helping.system
 
 
-def test_roast_falls_back_to_funny_for_someone_who_is_not_roast_ok(rig: Rig) -> None:
+def test_roast_mode_applies_to_everyone_whatever_their_roast_ok(rig: Rig) -> None:
     rig.hear("roast mode")
     rig.hear("my name is anna")
     assert rig.memory is not None
     person = rig.memory.get_person("anna")
     assert person
-    rig.memory.set_roast_ok(person.id, False)
-    assert rig.arya.effective_mode() == "funny"
-    assert "Mode: funny" in rig.arya.context_parts("hi").system
-    assert rig.arya.mode == "roast"  # the setting itself is unchanged
+    assert rig.arya.set_roast_ok(person.id, False)
+    assert not rig.memory.get_person("anna").roast_ok  # type: ignore[union-attr]
+    assert "Mode: roast" in rig.arya.context_parts("hi").system  # roast_ok gates only auto-roast
+    assert rig.arya.mode == "roast"
+
+
+def test_set_roast_ok_is_published_and_refuses_strangers(rig: Rig) -> None:
+    rig.hear("my name is anna")
+    assert rig.memory is not None
+    person = rig.memory.get_person("anna")
+    assert person
+    assert rig.arya.set_roast_ok(person.id, False)
+    assert rig.states[-1].as_event()["people"][0]["roast_ok"] is False
+    assert rig.arya.set_roast_ok(person.id, True)
+    assert rig.states[-1].as_event()["people"][0]["roast_ok"] is True
+    assert not rig.arya.set_roast_ok(999, False)
 
 
 def test_the_sentence_check_knows_help_questions(rig: Rig) -> None:

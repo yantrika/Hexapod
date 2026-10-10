@@ -143,3 +143,38 @@ def test_the_loop_works_without_a_persona(tmp_path: Path) -> None:
     assert bridge.drain() == []
     loop.shutdown()
     brain.close()
+
+
+# -- "stop roasting": a real stop only when something is moving ---------------------------------
+def test_stop_roasting_while_walking_sends_a_real_stop_then_goes_calm(rig: Rig) -> None:
+    rig.type("roast mode")
+    rig.type("walk forward")
+    rig.type("stop roasting")
+    assert rig.sent() == ["walk", "stop"]
+    assert rig.bridge.stop_event.is_set()  # the stop_event fast path, like any stop word
+    assert rig.arya.mode == "calm" and rig.playback.phrases[-1] == "mode_calm"
+    assert rig.backend.calls == 0
+
+
+def test_stop_roasting_during_a_transition_also_stops(rig: Rig) -> None:
+    rig.type("roast mode")
+    rig.type("sit down")  # a sit transition is a motion command that is active
+    rig.type("stop the roast")
+    assert rig.sent() == ["sit", "stop"] and rig.arya.mode == "calm"
+
+
+def test_stop_roasting_while_idle_only_switches_the_mode(rig: Rig) -> None:
+    rig.type("roast mode")
+    rig.type("stop roasting")
+    assert rig.sent() == []
+    assert not rig.bridge.stop_event.is_set()
+    assert rig.arya.mode == "calm"
+    assert [e.route.kind for e in rig.events if e.kind == "route" and e.route] == [
+        "persona", "persona"]
+
+
+def test_stop_roasting_inside_a_longer_sentence_is_still_just_a_stop(rig: Rig) -> None:
+    rig.type("roast mode")
+    rig.type("walk forward")
+    rig.type("stop roasting and stop walking")
+    assert rig.sent() == ["walk", "stop"] and rig.arya.mode == "roast"  # mode untouched
