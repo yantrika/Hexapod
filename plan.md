@@ -576,7 +576,7 @@ A Persona section (calm / funny / roast), a face-tracking toggle, an enrolled-pe
 #### Pending (unchanged by Step 13)
 - USB microphone and speaker are not yet available; Ollama is not yet installed on the Pi.
 - The servo hardware bench (Steps 11b-11e) waits for the hardware answers.
-- The paper work (servo sim-to-real and RL) lives in `hexa_paper_plan.md` and is separate from Step 13. (That file is not in this repository yet.)
+- The paper work (servo sim-to-real and RL) lives in `docs/hexa_paper_plan.md` and is separate from Step 13.
 
 ## 9. Performance targets
 
