@@ -23,6 +23,44 @@ Short version. The full design is in `../plan.md` (message formats, safety rules
 - The only link is `bridge.py`: a small command queue (brain to body), a status queue (body to brain), and a shared `stop_event` that makes "stop" fast.
 - The body runs the simulation today; real servos replace one class (`servo_backend.py`) at Step 11. Nothing else knows which one is loaded.
 
+## Arya: three programs (design agreed for Step 13, NOT built yet)
+
+The robot's name and persona is **Arya** (the project and repo stay `hexa`). Step 13 adds a third program, VISION, and grows the brain. The body and the bridge do not change.
+
+```
+ VISION program (new, own process)        BRAIN program (grows)                         BODY program (unchanged)
+ ┌──────────────────────────────┐        ┌───────────────────────────────────────┐    ┌──────────────────────┐
+ │ USB webcam (facing forward)  │        │ mic -> STT -> router ──┬─ commands ───┼───▶│ command queue        │
+ │  -> YuNet face detection     │ events │   router additions:    │              │    │ 50 Hz control loop   │
+ │     (2-5 fps)                │ (small,│   name / forget me /   │              │◀───│ status queue         │
+ │  -> simple tracker           │ no     │   modes / stop tracking│ chat only    │    └──────────────────────┘
+ │  -> SFace recognition, only  │ images)│                        ▼              │
+ │     when a NEW track appears │───────▶│ behaviour layer  context builder ──▶ LLM (Ollama, Pi;      │
+ │                              │ mp     │ (rules, not LLM)  (who is in view,   optional 3060 server  │
+ │ emits:                       │ queue  │  greet, ask name, facts, mood, mode, over the LAN)          │
+ │  person_appeared(name|unk,id)│        │  wave, turn toward last turns,      │                      │
+ │  person_left(id)             │        │  person)          token budget)      ▼                      │
+ │  face_bearing(id, angle_deg) │        │       │                         reply -> Piper -> speaker   │
+ └──────────────────────────────┘        │       │ stand / wave /          memory extractor            │
+   a camera failure or a slow frame      │       │ small turns ONLY        (LLM proposes facts as JSON; │
+   never stalls speech or the body       │       ▼                          rules filter what is saved) │
+                                         │  Bridge (never walk)             │                           │
+                                         │                                  ▼                           │
+                                         │  persona (calm/funny/roast)   memory DB (SQLite on the Pi)   │
+                                         │  + mood state                 people, face embeddings, facts,│
+                                         │  web page: persona section,   summaries                      │
+                                         │  tracking toggle, people list,                               │
+                                         │  perception line                                             │
+                                         └───────────────────────────────────────┘
+```
+
+- **Vision** sends only small events over its own queue and never touches the bridge, the body or audio. If it dies the brain carries on without perception.
+- **Behaviour** (greet by name, ask an unknown person their name once, wave, turn toward a person) is rules, not the LLM. It may trigger only `stand`, `wave` and small in-place turns, never walking, only when the body is idle, with cooldowns; STOP always wins; the web page can switch face tracking off.
+- **The LLM** only talks. It may suggest a gesture; code checks it against the allowed list and the idle rule. Robot commands never go through the LLM.
+- **Memory**: a face is "remembered" by storing embeddings plus a similarity threshold (no training). Enrolment only after the person says yes; embeddings stay on the Pi and out of the logs; no images are saved; "forget me" deletes the person's face, facts and summaries.
+- **Persona modes** (calm, funny, roast) change only how Arya talks, never commands or safety. Hard limits apply in every mode (see `AGENTS.md`).
+- Build order P1 to P6 (persona and memory first, vision later) is in `../plan.md`, Step 13.
+
 ## The data flow (start to finish)
 
 ```
@@ -80,6 +118,8 @@ Something that is not a command is chat (`brain/chat.py`, a local LLM through Ol
 | The LLM is never in the command path (the router decides) | `brain/router.py`, `brain/voice_loop.py` |
 | Only `voice/audio.py` touches the mic; only `voice/playback.py` touches the speaker | `AGENTS.md` |
 | Piper is always one long-lived process | `voice/tts.py` |
+| (Step 13, planned) Perception and the LLM can trigger only stand, wave and small turns, never walking, only when idle | `brain/behaviour.py` (not built) |
+| (Step 13, planned) Faces are enrolled only after a yes; embeddings never logged; "forget me" deletes everything | `brain/memory.py` (not built) |
 
 ## Threads and who talks to whom
 
@@ -129,6 +169,7 @@ Threads talk only through `queue.Queue` and one shared `speaking` flag. Each que
 - **Voice stop works only while listening in push-to-talk mode.** Use the control window STOP button or Space, or type `stop` in the terminal. In `always` mode it works except while hexa speaks.
 - **Single words are unreliable on the small Vosk model** ("halt" and "freeze" were missed; "stop" is the reliable stop word; two-word commands are reliable).
 - **The real LLM is untested on target hardware.** Here it is too slow (1.5 tokens/s), so chat is developed against `FakeChat`. Real timing is a Step 11 task on the Pi 5.
+- Arya, the memory DB and the vision process are a plan only (Step 13). USB mic and speaker are not yet available and Ollama is not yet installed on the Pi.
 - No wake word yet (Step 11), no servo code (`servo_backend.py` is a stub), the phone page has no audio of its own (it only presses the robot's own push-to-talk; phone microphone = Step 12c).
 - Vosk has no echo cancellation: use a headset or keep the microphone away from the speaker for barge-in.
 
