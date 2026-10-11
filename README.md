@@ -1,254 +1,66 @@
 # hexa
 
-A talking hexapod robot: built in PyBullet simulation first, deployed to a
-Raspberry Pi 5 later.
+A six-legged robot you can talk to. It hears you, walks, and answers back, and it works **fully offline**: no cloud services, no paid tools.
 
-Fully offline. STT via Vosk, TTS via Piper, optional chat via a local Ollama
-model. No cloud services and no paid tools.
+Say "walk forward", "sit down" or "stop", or just chat. Its persona is **Arya**: calm, funny or roast mode.
 
-**Docs:** start at [`docs/README.md`](docs/README.md): [every file explained](docs/FILES.md), [how to change models, phrases, thresholds and pins](docs/HOW_TO.md), [hardware and servo pins](docs/HARDWARE.md), [commands](docs/COMMANDS.md), [troubleshooting](docs/TROUBLESHOOTING.md).
+```
+ you ── mic ──▶ Vosk (STT) ──▶ router ──┬─ command ──▶ body: gait + leg maths ──▶ simulation / servos
+                                        └─ chat ─────▶ local LLM (Ollama) ──▶ Piper (TTS) ──▶ speaker
+```
 
-- `AGENTS.md` — contributor conventions.
-- `config.py` — every tunable value (geometry, joint limits, clamp ranges).
-- `body/` — hexapod control, runs in its own process.
-- `voice/` — speech in and out.
-- `brain/` — command routing and the LLM fallback.
-- `bridge.py` — the message contract between voice/brain and body.
+- **Safe by design.** Words are matched to commands by a plain router; the LLM only chats and never moves a leg. A stop always wins, and a watchdog halts the robot if the brain goes quiet.
+- **Simulation first.** Everything is built and tested in PyBullet, then moves to a Raspberry Pi 5 by swapping one backend class.
+- **Control it your way.** Voice, keyboard, a desktop window, or a phone browser page on your own Wi-Fi.
 
-## Quickstart
+**Status:** works in simulation and in a hardware-free dry run on the Pi 5. Real servo control is not built yet.
+
+## Quick start
+
+Needs Python 3.11 and a microphone and speaker (or use `--no-mic --no-speak`).
 
 ```bash
-git clone <this repository> hexa && cd hexa
+git clone https://github.com/yantrika/Hexapod.git hexa && cd hexa
 python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt -r requirements-sim.txt -r requirements-dev.txt
-scripts/fetch_models.sh                 # Vosk model, Piper and its voice, then the fixed phrases
-python main.py --chat fake              # headless body, push-to-talk: press Enter, talk, press Enter
+pip install -r requirements-dev.txt -r requirements-sim.txt
+scripts/fetch_models.sh          # speech models and the fixed phrases (downloads once)
+python main.py --chat fake       # press Enter, say "walk forward", press Enter
 ```
 
-`main.py` is the one entrypoint. Useful flags: `--gui` (PyBullet window), `--listen always`,
-`--chat fake|ollama|off`, `--no-speak`, `--no-mic`, `--audio-file x.wav`, `--log-level DEBUG`.
-It checks everything first and prints one line per problem (missing model, Piper, phrases, no
-microphone or speaker, Ollama not reachable) and exits 1. Ctrl-C or SIGTERM stops the robot and
-exits 0. The log is `logs/hexa.log` (rotated by size). For a stop that always works in
-push-to-talk mode use the control window STOP button, Space, or type `stop` + Enter; a voice
-"stop" works only while listening. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the
-data flow, the measured numbers and the known limits.
+Add `--gui` for the PyBullet window, or `--lan` for the phone page (it prints a URL and a PIN).
+`python main.py --help` lists every option, and startup prints one line per missing piece.
 
-## Running the simulator
+To stop, use the STOP button, Space, or type `stop`. A spoken "stop" works only while the mic is listening.
+
+## Project layout
+
+| Path | What it does |
+|---|---|
+| `main.py` | the one entry point |
+| `brain/` | command router, chat, Arya persona and memory |
+| `voice/` | microphone in (Vosk), speaker out (Piper) |
+| `body/` | gait, kinematics, controller and the backends (sim, dry run) |
+| `bridge.py` | the only link between brain and body |
+| `config.py` | every number you might want to change |
+| `web/` | phone control page |
+| `scripts/` | demos, checks and tools |
+
+## Docs
+
+Start with [`docs/RUNNING.md`](docs/RUNNING.md). Then:
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): how the parts fit, measured numbers, known limits
+- [`docs/HOW_TO.md`](docs/HOW_TO.md): change a model, phrase, threshold or the robot size
+- [`docs/HARDWARE.md`](docs/HARDWARE.md): wiring, servos, power
+- [`docs/COMMANDS.md`](docs/COMMANDS.md) and [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md)
+- [`docs/FILES.md`](docs/FILES.md): what every file does
+- [`plan.md`](plan.md) and [`AGENTS.md`](AGENTS.md): the full plan and contributor rules
+
+## Development
 
 ```bash
-source .venv/bin/activate
-python scripts/generate_urdf.py            # only needed after changing geometry in config.py
-python scripts/sim_demo.py --headless --pose stand   # no window, prints measured numbers
-python scripts/sim_demo.py --pose stand              # PyBullet GUI
-python scripts/walk_demo.py --headless               # walk, turn in place, strafe; prints distances
-python scripts/walk_demo.py                          # same in the GUI
-python scripts/sim_demo.py --headless --script "stand,walk,stop,sit"   # scripted controller run
-python scripts/teleop.py                             # keyboard control (GUI); prints the key map
-python scripts/joint_jog.py                          # dev only: 18 joint sliders (GUI)
-python scripts/joint_jog.py --legs RF                # only one leg's 3 sliders: labels stay readable
+pytest               # default run skips the timing, audio and llm tests
+ruff check . && mypy .
 ```
 
-**Laptop-specific note (Intel HD Graphics "ILK", OpenGL 2.1):** PyBullet's GUI needs
-OpenGL 3.3 shaders and aborts here with `GLSL 1.50 is not supported`. This Mesa
-override makes it start:
-
-```bash
-MESA_GL_VERSION_OVERRIDE=3.3 MESA_GLSL_VERSION_OVERRIDE=330 python scripts/sim_demo.py --pose stand
-MESA_GL_VERSION_OVERRIDE=3.3 MESA_GLSL_VERSION_OVERRIDE=330 python scripts/walk_demo.py
-```
-
-The scripts do not set this themselves; tests never open the GUI.
-
-**Keep it light on slow machines:** run one process at a time, and prefix long runs with
-`nice -n 19 timeout 300`. numpy's BLAS threads are pinned to one thread (they made the
-loop 7x slower and crashed the dev laptop).
-
-**Manual control.** `teleop.py`: W/S forward/back, A/D strafe, Q/E turn, Space stop,
-1 stand, 2 sit, 3 wave, +/- speed. Releasing a movement key ramps it to zero. It only uses
-the controller API. `joint_jog.py` is a tuning tool, not part of the runtime; it only uses
-the backend API, so the hard joint limits still apply. Its slider panel is open from the start (in other PyBullet windows it
-is hidden until you press `G`), each shown leg's angles are drawn in yellow above the robot,
-and `--legs RF` keeps the panel short.
-
-## Control window (Step 5b)
-
-`scripts/control_window.py` is a small Tkinter window that drives the body process through the bridge: keys, Stand/Sit/Wave buttons, a big STOP, a command box and a status log. The PyBullet window is only the viewer (no panels, no text); click the control window to drive.
-
-```bash
-MESA_GL_VERSION_OVERRIDE=3.3 MESA_GLSL_VERSION_OVERRIDE=330 python scripts/control_window.py   # dev laptop, with the viewer
-python scripts/control_window.py              # other machines, with the viewer
-python scripts/control_window.py --headless   # no viewer
-```
-
-Keys (only when the command box is not focused): W/S forward/back, A/D strafe, Q/E turn, Space stop, 1 stand, 2 sit, 3 wave, +/- speed. Hold to move, release to ramp to zero; W+A or W+Q combine. Enter or Tab focuses the command box, Esc returns to the keys. Losing focus or closing the window sends stop. The command box takes the same lines as `bridge_cli` (`walk fwd 0.5`, `strafe left`, `turn right 45`, ...). It needs `sudo apt install python3.11-tk`.
-
-## Talking to the body process (Step 5)
-
-The body runs in its own process; `scripts/bridge_cli.py` sends typed commands through the bridge and prints the status replies. Type `stand`, `sit`, `wave`, `stop`, `walk fwd 0.5`, `walk back`, `turn left 90`, `quit`.
-
-```bash
-python scripts/bridge_cli.py --headless          # PyBullet DIRECT, no window
-MESA_GL_VERSION_OVERRIDE=3.3 MESA_GLSL_VERSION_OVERRIDE=330 python scripts/bridge_cli.py --gui   # dev laptop
-python scripts/bridge_cli.py --headless --no-heartbeat   # a walk stops by itself after 1 s (watchdog)
-python -m body.process --headless                # idle body; Ctrl-C exits cleanly
-```
-
-The CLI sends a heartbeat at `HEARTBEAT_HZ`; without heartbeats a walk or turn is stopped by the watchdog and reported as `done` with `reason=watchdog`. Tests with a wall-clock bound (tick cost, stop and walk latency, distance walked in real time) are marked `timing` and skipped by default: run timing tests on a quiet machine with `pytest -m timing`. Run the tests one file at a time (`nice -n 19 pytest tests/test_body_process.py`): they spawn real processes and take about a minute.
-
-## Typed text to the robot (Step 6)
-
-`scripts/brain_cli.py` routes typed text with the offline router and drives the body process through the bridge. A walk keeps going (a motion keeper sends heartbeats) until you say stop, or for `VOICE_WALK_MAX_S` (10 s). Anything that is not a command prints `[chat] <text>` (the chat model comes in Step 9).
-
-```bash
-python scripts/brain_cli.py --headless      # no window
-MESA_GL_VERSION_OVERRIDE=3.3 MESA_GLSL_VERSION_OVERRIDE=330 python scripts/brain_cli.py --gui   # dev laptop
-```
-
-Try `walk forward`, `please sit down`, `can you wave`, `turn left`, `hexa stop`, `halt`, `I sat down for lunch` (chat). The line printed for each input shows the matched phrase and score.
-
-## Speech (Step 7)
-
-Piper (offline TTS) runs as ONE long-lived subprocess; `voice/playback.py` speaks sentence by sentence through a queue that `clear()` can cancel at any moment (it is the only module that touches the speaker).
-
-```bash
-scripts/fetch_models.sh                  # Piper binary + voice, then pre-renders the fixed phrases (skips what exists)
-python scripts/say.py                    # type a line, hear it; /clear cancels, /quit exits; prints time to first sound
-python scripts/say.py "Hello, I am hexa" # one line and exit
-python scripts/say.py --phrase okay      # a pre-rendered phrase: no synthesis wait (--list-phrases)
-nice -n 19 python scripts/measure_voice.py --clear   # clear() latency on the speaker (quiet)
-nice -n 19 python scripts/measure_voice.py --body    # body tick time with and without Piper (add --gui)
-```
-
-Tests: `pytest tests/test_playback.py tests/test_tts.py` (no sound device, no Piper: fake engine, sink and clock). `pytest -m audio -s tests/test_tts_real.py` synthesizes with the real Piper and prints time to first audio and the real-time factor.
-
-Dev laptop numbers (Core i3 M380, no AVX; they vary with background load): model load about 1.0-2.6 s once at startup, then real-time factor 0.4-1.0 and 0.6-2 s to first audio for a short sentence. While Piper synthesizes it takes about two cores and roughly doubles the body's tick time (see the Risks table in `plan.md`); pre-rendered phrases cost nothing at speaking time. `PIPER_NICE` and `PIPER_CPU_LIST` in `config.py` exist but did not help in measurement. Re-measure on the Pi 5 in Step 11.
-
-**Dev rule (this laptop):** test voice with a headless body. GUI viewer plus Piper plus walking gives about 90 ms body ticks (11 ticks/s).
-
-## Voice in (Step 8)
-
-Microphone, Vosk (offline), the router and the body, with hexa ignoring its own voice. Models come from `scripts/fetch_models.sh` (small US English `us` and small Indian English `in`).
-
-```bash
-python scripts/mic_check.py                  # lists inputs, records 3 s, prints peak and RMS: speak!
-python scripts/stt_check.py --model us       # say each phrase, see what Vosk heard and what the router did
-python scripts/stt_check.py --model in       # the same with the Indian English model, to compare
-python scripts/voice_cli.py                  # the whole loop, headless body: say "walk forward", "stop"
-python scripts/voice_cli.py --model in       # other model;  --no-speak: no Piper;  --gui: viewer
-nice -n 19 python scripts/measure_voice.py --stt     # Vosk cost, body ticks with Vosk, voice latency
-```
-
-**Push-to-talk is the default** (`LISTEN_MODE = "ptt"`): press Enter, say "walk forward", "sit down", "stand up", "turn left", "wave" or "stop", press Enter again (a terminal has no key-release events; true hold-to-talk comes with the phone page, Step 12, which calls `press()` / `release()`). The terminal shows LISTENING / IDLE and no audio reaches Vosk while it is idle. Pressing Enter while hexa talks interrupts it (barge-in: speech is cut, a chat reply is cancelled, listening starts at once). `--listen always` listens all the time instead (deaf while hexa speaks). After a command hexa answers from the body's status. If a chat answer is slow, hexa says "hmm" once (`FILLER_DELAY_S`).
-
-**Safety: in ptt mode a voice "stop" only works WHILE LISTENING.** The control window STOP button and Space are the always-available stop (`voice_cli` also takes a typed `stop` + Enter).
-
-Dev laptop numbers (they move with background load): Vosk uses about 15-25 % of a core, real-time factor 0.07-0.11 decoding speech; it adds about 1-2 ms to the body's mean tick. Spoken "walk forward" is sent about 0.85 s after you stop talking (Vosk waits for silence) and the first foot target moves about 0.25 s later. Piper busy at the same time is still the expensive part (see Speech above).
-
-### Command grammar and the hot laptop (Step 8b)
-
-Vosk now runs two recognizers on one model: free text, and a grammar limited to the router's phrases. The grammar rescues commands the free recognizer mishears ("sit" heard as "said"), but it also forces a match on ordinary speech, so its answer is only used when it passes the guards in `brain/stt_decision.py`. Thresholds are in `config.py` (`STT_STOP_CONF`, `STT_GRAMMAR_CONF`, ...). Every final result goes to `logs/transcripts.jsonl`.
-
-```bash
-python scripts/stt_check.py --model us --mic 8     # 3 repeats per phrase, level check first
-python scripts/stt_check.py --model in
-python scripts/stt_check.py --replay logs/stt_check-us.jsonl   # re-judge with the current thresholds
-```
-
-**The dev laptop overheats**: it idles near 59 C and powers off at 87 C (`journalctl -b -1` shows `HARDWARE PROTECTION shutdown (Temperature too high)`). Run heavy commands through the guard, which waits until the machine is cool and kills the job before the hardware shutdown, and keep runs short:
-
-```bash
-python scripts/cool_run.py -- nice -n 19 pytest tests/test_voice_loop.py
-python scripts/cool_run.py --start-below 62 --kill-at 80 -- nice -n 19 python scripts/measure_voice.py --stt
-```
-
-Measured (headless, walking): one recognizer 13 % of a core on silence and 19 % on speech, two recognizers 21 % and 23 %; decode real-time factor 0.07-0.10 for one, 0.11-0.16 for two; body mean tick 7.3 ms with no voice, 7.0 ms with one recognizer and 6.6 ms with two (no measurable cost); RSS 178 MB with either (one shared model).
-
-### Which words work (measured on the owner's voice, small US model)
-
-The speech model is `vosk-model-small-en-us-0.15` (the Indian English model is not used; it was slower and its run was incomplete). On the owner's voice, 117 attempts (3 per phrase):
-
-- **"stop" is the reliable stop word.** "halt" and "freeze" were missed several times on the small US model; "whoa", "hold still" and "stay still" worked.
-- **Two-word commands are reliable** ("walk forward", "turn left", "sit down", "stand up", "wave hello"). **Single words are not** ("sit", "stand", "wave", "walk" were often misheard). Prefer two-word forms.
-- Results: commands 50/69 (72%), stops 14/18 (78%), chat routed correctly 30/30, 0 dangerous false positives (chat turning into a motion command), 0 wrong motion commands.
-- Replaying the same run with `STT_GRAMMAR_CONF` at 0.5 / 0.6 / 0.75 / 0.9 gave 74% / 72% / 72% / 68% command accuracy with 0 dangerous at every value, so it stays at 0.75.
-
-To use a different speech model or voice, change one name in `config.py` (see `docs/HOW_TO.md`) and run `scripts/fetch_models.sh`. The Indian model is only downloaded with `scripts/fetch_models.sh --all-models`.
-
-## Phone control page (Step 12a)
-
-Drive the robot from a phone browser: hold-to-move buttons (forward, back, strafe, turn; hold two together, e.g. forward + turn), Stand, Sit, Wave, a big STOP and a live status line. Since Step 12b it also has hold-to-talk and a text box (below). The page never sends or records audio. One static page, no internet needed.
-
-```bash
-python main.py --web --no-speak --no-mic --chat fake     # this computer only: http://127.0.0.1:8765/
-python main.py --lan  --no-speak --no-mic --chat fake    # reachable from a phone; prints the URL(s)
-hostname -I                                              # your computer's address, if you need it
-```
-
-1. Start with `--lan`. The terminal prints `web PIN: 123456` and `web page (phone, same Wi-Fi): http://192.168.x.y:8765/`.
-2. Put the phone on the **same Wi-Fi**, open that URL, type the PIN, Connect. (`http://192.168.x.y:8765/#pin=123456` connects at once.)
-3. If the page does not load, the network may isolate clients (guest Wi-Fi, some university or office networks). Turn on the **phone's hotspot**, join the computer to it, run `hostname -I` and use that address.
-   If the phone still cannot connect but the page loads on the computer itself, the computer's firewall is the usual cause (seen on the dev laptop): `sudo ufw allow 8765/tcp`, and remove it when done with `sudo ufw delete allow 8765/tcp`.
-4. Walk the robot with the buttons; letting go ramps it to a halt, and STOP always stops it.
-
-**The PIN.** Set `HEXA_WEB_PIN=123456` in the environment, or `WEB_PIN` in `config.py`; with neither, a random 6-digit PIN is generated at each start and printed on the terminal only (never in the log, never committed). Five wrong PINs from one address lock that address out for a minute. Only one phone controls at a time; a second one is refused until the first disconnects.
-
-**Safety (enforced by the server, not only the page).** The page repeats a held move 10 times a second; if the server hears nothing for 0.3 s (`WEB_DEADMAN_S`) while the robot moves, it sends `stop`. A closed or lost connection sends `stop`; the page also sends `stop` when it is hidden, loses focus or the touch is cancelled. STOP uses the same `stop_event` fast path as the control window. The server accepts only walk/stop/stand/sit/wave with numbers clamped to [-1, 1]; the page never sends joint data. `scripts/web_check.py` is a headless client for testing (`python scripts/web_check.py --pin 123456 --forward 1 --seconds 2`).
-
-**Limits.** This is plain HTTP: anyone on the same network who can see the traffic can read the PIN and steer the robot. **Use it only on a network you trust (your own Wi-Fi or phone hotspot) (HTTPS would only come with the optional Step 12c).** Without `--lan` it listens on this computer only. The body's own watchdog stays the last line of defence.
-
-Measured on the dev laptop (headless body, loopback, `scripts/measure_web.py`): button press to the first joint-target change (the foot targets' inverse kinematics) median 38.5 ms, p95 43.4 ms over 20 presses (up to one 20 ms control tick plus the velocity ramp-in); the web-server thread uses about 0.6 % of a core idle (with or without a client), the whole brain process about 2.5 %. Step 12b, hold-to-talk with a fake recognizer: `ptt_release` sent to the command sent median 502 ms, p95 702 ms (0.5 s of it is `PTT_TAIL_S`, the rest is the next microphone poll, 0.2 s steps, plus routing; real Vosk decoding time comes on top). Peak temperature 86 C (unguarded run).
-
-### Talking to hexa from the phone (Step 12b)
-
-Start the robot WITH its microphone and in push-to-talk mode (the default), and the web page:
-
-```bash
-python main.py --lan --chat fake        # the real microphone; add --no-speak to keep it quiet
-```
-
-**The microphone is the robot's, not the phone's.** The phone only sends "button down" and "button up"; hexa hears whatever its own microphone hears, so **speak near the robot**, not into the phone.
-
-1. Open the page and connect with the PIN as before.
-2. **Hold HOLD TO TALK**, say "walk forward" (or anything), let go. The LISTENING light shows while the robot's microphone is open (it stays on about half a second after you let go, `PTT_TAIL_S`). Pressing also interrupts hexa if it is talking.
-3. The log under the button shows what it **heard**, what it **decided** (a command or chat) and what it **said**, plus the body's status.
-4. Or **type** in the box and press Send: typed text is handled exactly like spoken text (a typed "stop" always works, even when you are not holding the button; chat while the robot walks answers "tell me after I stop").
-
-**Safety.** Holding is limited to 10 s (`WEB_PTT_MAX_S`): the server lets go by itself. Letting go, a lost connection, a hidden page, losing focus and the STOP button all end listening. In push-to-talk mode a spoken "stop" works only while you hold the button (the page says so); the red STOP button always works. With `--no-mic` or `--listen always` the talk button is greyed out and says why; the text box still works. Only the phone that is in control can talk.
-
-Command line: `python scripts/web_check.py --pin 123456 --say "walk forward"` or `--talk 3` (hold 3 s, speak near the robot).
-
-## Arya: persona, memory and the phone Persona section (Step 13, P1)
-
-The robot is called **Arya** (the project stays `hexa`). She has three ways of talking, chosen on the phone page (Calm / Funny / Roast) or by voice: "Arya, roast mode", "calm mode", "funny mode", "stop roasting" (back to calm; if she is walking at that moment it also stops the robot). A mode changes only how she TALKS: commands, the router and every safety rule are the same in every mode, and a persona request never reaches the body or the language model.
-
-- **Roast** is mean and sarcastic: she teases the question first and gives the real answer when you say "seriously" or "just tell me". A safety, health or real-help question ("I need help", "is it safe to...") always gets a straight answer, in every mode.
-- **Hard limits in every mode**, written into each prompt AND checked in code on every sentence before it is spoken: no remarks about looks, body, skin colour, race, religion, caste, gender, sexuality, disability, family or health; no slurs or threats; never roast someone who is not talking to her. A sentence that fails is dropped and she says "Let's talk about something else." (the log names the category, never the words). The word lists are in `data/persona/limits.toml`.
-- **Memory** (`data/memory/arya.db`, SQLite, private to this computer): say "my name is Anna" (or "call me", "I am") and she knows who is talking; until then you are a `guest` and nothing is remembered. After a conversation goes quiet she asks the chat model for lasting facts ("Likes cricket."), and code decides what is kept (short, no sensitive topics, no private data, no duplicates). "What do you remember about me?" reads them back. "Forget me" asks "say yes to confirm", then deletes everything about you. The page lists the people with a Forget button (with a confirm).
-
-```bash
-python main.py --chat fake --web               # fake chat; the extractor is a simple rule stand-in
-python main.py --chat fake --mode roast --no-memory
-python scripts/persona_eval.py                 # a fixed script per mode; counts what the check blocked
-python scripts/arya_check.py                   # does Vosk hear "Arya"? (Piper voice, no microphone)
-```
-
-Vosk small US never writes "arya" (it hears "aria" or "are you"); the router drops a leading "aria", and the command grammar, which does list "arya", hears her every time. Names come out wrong sometimes ("Priya" became "prayer"), so say it again or type it.
-
-## Chat and status-driven speech (Step 9)
-
-After a command hexa answers from the body's **status** ("okay" when the body accepted it, "I'm already sitting" when the body says it is). Anything that is not a command is **chat** (a small local LLM through Ollama), but only while the body is idle. While it walks, turns or changes posture hexa says "tell me after I stop" and does not call the LLM; any command, stop or movement cuts the chat speech short so the microphone stays free for "stop". If Ollama is down hexa says "I can't think right now". The LLM is never used to decide a command: the word router does that.
-
-```bash
-docker start ollama                                  # Ollama runs in Docker here; models are pulled by you:
-docker exec -it ollama ollama pull qwen2.5:0.5b      # (once; 1.5b only after 0.5b works)
-python scripts/voice_cli.py --chat fake              # scripted chat: use this on the slow dev laptop
-python scripts/voice_cli.py                          # real Ollama chat (config.OLLAMA_MODEL)
-python scripts/voice_cli.py --no-speak --chat fake   # no audio: replies are printed as [hexa] ...
-python scripts/measure_chat.py                       # time the real model (heats the laptop!)
-pytest -m llm -s tests/test_chat_llm.py              # one real-model test, excluded by default
-```
-
-Real-model speed on the dev laptop (no AVX), `qwen2.5:0.5b`, Ollama in Docker with all cores: about 1.5 tokens/s and a 90 C peak, far below the 3 tokens/s the plan needs, so chat is developed against the fake backend here and the real model is timed on the Pi 5 (see `plan.md`, Risks). `voice_cli.py` prints, per chat utterance, the time from the final result to the first token, first sentence and first audio.
-
-To use another chat model change `OLLAMA_MODEL` in `config.py` and pull it yourself (`docker exec -it ollama ollama pull <name>`). The personality prompt, history length, token cap and temperature are in `config.py` (`CHAT_*`).
+Read `AGENTS.md` before changing code. Heavy runs on a slow machine should go through `python scripts/cool_run.py -- <command>`.
