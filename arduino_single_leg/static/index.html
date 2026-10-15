@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PiHexa - Single Leg Controller (Arduino Mega 2560)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0b0f17;
+      --card-bg: rgba(22, 30, 46, 0.7);
+      --card-border: rgba(56, 189, 248, 0.15);
+      --card-hover: rgba(56, 189, 248, 0.25);
+      --primary: #38bdf8;
+      --primary-glow: rgba(56, 189, 248, 0.35);
+      --accent: #818cf8;
+      --success: #34d399;
+      --warning: #fbbf24;
+      --danger: #f87171;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: radial-gradient(circle at 20% 20%, #172554 0%, #0b0f17 70%);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* Header */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 24px;
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    }
+
+    .logo-area {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-badge {
+      background: linear-gradient(135deg, #0284c7, #6366f1);
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      font-weight: 700;
+      box-shadow: 0 0 20px var(--primary-glow);
+    }
+
+    h1 {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    /* Serial connection panel */
+    .connection-panel {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    select, input[type="range"] {
+      background: #0f172a;
+      border: 1px solid #334155;
+      color: var(--text);
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 13px;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    select:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 10px var(--primary-glow);
+    }
+
+    .btn {
+      cursor: pointer;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-family: inherit;
+      font-weight: 600;
+      font-size: 13px;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #0284c7, #38bdf8);
+      color: #04111d;
+      box-shadow: 0 4px 15px rgba(56, 189, 248, 0.3);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(56, 189, 248, 0.5);
+    }
+
+    .btn-danger {
+      background: #ef4444;
+      color: white;
+    }
+
+    .btn-secondary {
+      background: #1e293b;
+      color: var(--text);
+      border: 1px solid #334155;
+    }
+
+    .btn-secondary:hover {
+      background: #334155;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid #334155;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--danger);
+      box-shadow: 0 0 8px var(--danger);
+    }
+
+    .status-dot.online {
+      background: var(--success);
+      box-shadow: 0 0 8px var(--success);
+    }
+
+    /* Grid layout */
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    @media (max-width: 900px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--primary);
+    }
+
+    /* Hexapod Diagram / Leg Selector */
+    .hexapod-diagram {
+      position: relative;
+      width: 100%;
+      height: 280px;
+      background: rgba(15, 23, 42, 0.5);
+      border: 1px dashed rgba(56, 189, 248, 0.2);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .robot-chassis {
+      width: 130px;
+      height: 180px;
+      background: linear-gradient(180deg, #1e293b, #0f172a);
+      border: 2px solid #38bdf8;
+      border-radius: 28px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 25px rgba(56, 189, 248, 0.2);
+    }
+
+    .chassis-arrow {
+      color: var(--primary);
+      font-size: 24px;
+      font-weight: bold;
+      margin-bottom: 4px;
+    }
+
+    .chassis-label {
+      font-size: 11px;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    .leg-node {
+      position: absolute;
+      width: 82px;
+      padding: 8px 4px;
+      background: #1e293b;
+      border: 2px solid #475569;
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      user-select: none;
+    }
+
+    .leg-node:hover {
+      border-color: var(--primary);
+      transform: scale(1.05);
+      box-shadow: 0 0 15px var(--primary-glow);
+    }
+
+    .leg-node.active {
+      border-color: var(--primary);
+      background: linear-gradient(135deg, rgba(2, 132, 199, 0.4), rgba(99, 102, 241, 0.4));
+      box-shadow: 0 0 20px var(--primary-glow);
+    }
+
+    .leg-title {
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .leg-sub {
+      font-size: 10px;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Positioning 6 legs around body */
+    .leg-0 { top: 15px; right: 20px; }       /* Fore-Right */
+    .leg-1 { top: 110px; right: 15px; }      /* Right */
+    .leg-2 { bottom: 15px; right: 20px; }    /* Hind-Right */
+    .leg-3 { bottom: 15px; left: 20px; }     /* Hind-Left */
+    .leg-4 { top: 110px; left: 15px; }       /* Left */
+    .leg-5 { top: 15px; left: 20px; }        /* Fore-Left */
+
+    /* Modes and walking control */
+    .mode-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .mode-btn {
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: var(--text);
+      padding: 10px 8px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-align: center;
+    }
+
+    .mode-btn:hover {
+      border-color: var(--primary);
+      background: #273549;
+    }
+
+    .mode-btn.active {
+      background: linear-gradient(135deg, #0284c7, #2563eb);
+      border-color: var(--primary);
+      color: white;
+      box-shadow: 0 0 15px var(--primary-glow);
+    }
+
+    .walk-action-bar {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      background: rgba(15, 23, 42, 0.6);
+      padding: 12px 16px;
+      border-radius: 12px;
+      border: 1px solid #334155;
+    }
+
+    .walk-toggle-btn {
+      flex: 1;
+      padding: 14px;
+      font-size: 15px;
+      font-weight: 700;
+      border-radius: 10px;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .walk-toggle-btn.play {
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: white;
+      box-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
+    }
+
+    .walk-toggle-btn.stop {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      color: white;
+      box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
+    }
+
+    /* Joint Gauges & Sliders */
+    .joint-card {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      background: rgba(15, 23, 42, 0.5);
+      border: 1px solid #334155;
+      padding: 12px;
+      border-radius: 10px;
+    }
+
+    .joint-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .joint-val {
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--primary);
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .slider-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .slider-row input[type="range"] {
+      flex: 1;
+      accent-color: var(--primary);
+    }
+
+    /* Wiring info */
+    .wiring-box {
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 14px;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .wiring-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      font-weight: 600;
+      background: #1e293b;
+      color: var(--primary);
+      margin-right: 6px;
+    }
+
+    .telemetry-row {
+      display: flex;
+      justify-content: space-around;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: var(--text-muted);
+      background: #0f172a;
+      padding: 8px;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Header -->
+  <header>
+    <div class="logo-area">
+      <div class="logo-badge">⬡</div>
+      <div>
+        <h1>PiHexa Single Leg Lab</h1>
+        <div class="subtitle">Arduino Mega 2560 & Kinematics Web Controller</div>
+      </div>
+    </div>
+
+    <div class="connection-panel">
+      <select id="portSelect">
+        <option value="">Scanning COM ports...</option>
+      </select>
+      <button class="btn btn-secondary" onclick="refreshPorts()">⟳ Refresh</button>
+      <button id="connectBtn" class="btn btn-primary" onclick="toggleConnect()">Connect</button>
+      <div class="status-pill">
+        <div id="statusDot" class="status-dot"></div>
+        <span id="statusText">Disconnected</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="grid">
+    <!-- Left Column: Leg Selection & Gait Execution -->
+    <div class="card">
+      <div class="card-title">
+        <span>📍 1. Select Leg Position on Hexapod</span>
+      </div>
+      <p style="font-size: 12px; color: var(--text-muted);">
+        Every leg has a unique mounting angle & tripod cycle phase. Click the leg you have physically connected to your Arduino Mega.
+      </p>
+
+      <div class="hexapod-diagram">
+        <!-- Center Chassis -->
+        <div class="robot-chassis">
+          <div class="chassis-arrow">▲</div>
+          <div class="chassis-label">Front</div>
+          <div style="font-size: 10px; color: var(--primary); margin-top: 10px; font-weight: bold;" id="activeLegBadge">LEG 0</div>
+        </div>
+
+        <!-- 6 Legs -->
+        <div class="leg-node leg-0 active" onclick="selectLeg(0)">
+          <div class="leg-title">Leg 0</div>
+          <div class="leg-sub">FR (+45°)</div>
+        </div>
+        <div class="leg-node leg-1" onclick="selectLeg(1)">
+          <div class="leg-title">Leg 1</div>
+          <div class="leg-sub">R (0°)</div>
+        </div>
+        <div class="leg-node leg-2" onclick="selectLeg(2)">
+          <div class="leg-title">Leg 2</div>
+          <div class="leg-sub">HR (-45°)</div>
+        </div>
+        <div class="leg-node leg-3" onclick="selectLeg(3)">
+          <div class="leg-title">Leg 3</div>
+          <div class="leg-sub">HL (-135°)</div>
+        </div>
+        <div class="leg-node leg-4" onclick="selectLeg(4)">
+          <div class="leg-title">Leg 4</div>
+          <div class="leg-sub">L (180°)</div>
+        </div>
+        <div class="leg-node leg-5" onclick="selectLeg(5)">
+          <div class="leg-title">Leg 5</div>
+          <div class="leg-sub">FL (+135°)</div>
+        </div>
+      </div>
+
+      <!-- Locomotion Action -->
+      <div class="card-title" style="margin-top: 10px;">
+        <span>🏃 2. Walking Cycle & Motion Modes</span>
+      </div>
+
+      <div class="walk-action-bar">
+        <button id="walkToggleBtn" class="walk-toggle-btn play" onclick="toggleWalking()">
+          ▶ Start Walking
+        </button>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px;">
+        <span>Gait Step Speed:</span>
+        <span id="speedVal" style="font-family: 'JetBrains Mono', monospace; color: var(--primary);">35 ms</span>
+      </div>
+      <input type="range" id="speedSlider" min="15" max="90" value="35" oninput="changeSpeed(this.value)">
+
+      <div class="mode-grid">
+        <button class="mode-btn active" onclick="setMode('Forward')">Forward</button>
+        <button class="mode-btn" onclick="setMode('Backward')">Backward</button>
+        <button class="mode-btn" onclick="setMode('Run')">Forward Fast</button>
+        <button class="mode-btn" onclick="setMode('TurnLeft')">Turn Left</button>
+        <button class="mode-btn" onclick="setMode('TurnRight')">Turn Right</button>
+        <button class="mode-btn" onclick="setMode('ShiftLeft')">Shift Left</button>
+        <button class="mode-btn" onclick="setMode('ShiftRight')">Shift Right</button>
+        <button class="mode-btn" onclick="setMode('Climb')">Climb</button>
+        <button class="mode-btn" onclick="setMode('Twist')">Twist</button>
+        <button class="mode-btn" onclick="setMode('RotateX')">Rotate X</button>
+        <button class="mode-btn" onclick="setMode('RotateY')">Rotate Y</button>
+        <button class="mode-btn" onclick="setMode('Standby')">Standby</button>
+      </div>
+    </div>
+
+    <!-- Right Column: Real-time Servos & Arduino Wiring -->
+    <div class="card">
+      <div class="card-title">
+        <span>⚙️ 3. Joint Angles & Manual Overrides</span>
+      </div>
+
+      <div class="telemetry-row">
+        <span>X: <b id="tipX" style="color:var(--text)">0.0</b> mm</span>
+        <span>Y: <b id="tipY" style="color:var(--text)">0.0</b> mm</span>
+        <span>Z: <b id="tipZ" style="color:var(--text)">0.0</b> mm</span>
+      </div>
+
+      <!-- Coxa Joint -->
+      <div class="joint-card">
+        <div class="joint-header">
+          <span>Coxa (Shoulder / Joint 1) — Pin 9</span>
+          <span class="joint-val" id="valCoxa">0.0°</span>
+        </div>
+        <div class="slider-row">
+          <input type="range" id="sliderCoxa" min="-60" max="60" value="0" step="0.5" oninput="onManualSlider()">
+        </div>
+      </div>
+
+      <!-- Femur Joint -->
+      <div class="joint-card">
+        <div class="joint-header">
+          <span>Femur (Thigh / Joint 2) — Pin 10</span>
+          <span class="joint-val" id="valFemur">0.0°</span>
+        </div>
+        <div class="slider-row">
+          <input type="range" id="sliderFemur" min="-60" max="75" value="0" step="0.5" oninput="onManualSlider()">
+        </div>
+      </div>
+
+      <!-- Tibia Joint -->
+      <div class="joint-card">
+        <div class="joint-header">
+          <span>Tibia (Knee / Joint 3) — Pin 11</span>
+          <span class="joint-val" id="valTibia">0.0°</span>
+        </div>
+        <div class="slider-row">
+          <input type="range" id="sliderTibia" min="-60" max="60" value="0" step="0.5" oninput="onManualSlider()">
+        </div>
+      </div>
+
+      <!-- Hardware Setup Reference -->
+      <div class="card-title" style="margin-top: 10px;">
+        <span>🔌 Hardware Wiring (PCA9685 + Arduino Mega 2560)</span>
+      </div>
+      <div class="wiring-box">
+        <div><span class="wiring-badge">Pin 20 (SDA)</span> ➔ <b>PCA9685 SDA</b></div>
+        <div style="margin-top: 6px;"><span class="wiring-badge">Pin 21 (SCL)</span> ➔ <b>PCA9685 SCL</b></div>
+        <div style="margin-top: 6px;"><span class="wiring-badge">5V & GND</span> ➔ <b>PCA9685 VCC & GND (Logic)</b></div>
+        <div style="margin-top: 6px;"><span class="wiring-badge">Channel 0</span> ➔ <b>Coxa (Shoulder) Servo</b></div>
+        <div style="margin-top: 6px;"><span class="wiring-badge">Channel 1</span> ➔ <b>Femur (Thigh) Servo</b></div>
+        <div style="margin-top: 6px;"><span class="wiring-badge">Channel 2</span> ➔ <b>Tibia (Knee) Servo</b></div>
+        <div style="margin-top: 8px; color: var(--warning); font-size: 11px;">
+          ⚠️ <b>Important</b>: Connect your external 5V (2A+) power supply directly to the PCA9685 screw terminal (V+ and GND)!
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let isConnected = false;
+  let isWalking = false;
+  let selectedLeg = 0;
+  let currentMode = 'Forward';
+
+  async function refreshPorts() {
+    try {
+      const res = await fetch('/api/ports');
+      const ports = await res.json();
+      const select = document.getElementById('portSelect');
+      select.innerHTML = '';
+      if (ports.length === 0) {
+        select.innerHTML = '<option value="">No COM ports detected</option>';
+        return;
+      }
+      ports.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.device;
+        opt.textContent = `${p.device} (${p.description})`;
+        if (p.device.toUpperCase() === 'COM6' || p.description.toLowerCase().includes('ch340')) {
+          opt.selected = true;
+        }
+        select.appendChild(opt);
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  async function toggleConnect() {
+    const btn = document.getElementById('connectBtn');
+    const select = document.getElementById('portSelect');
+    if (!isConnected) {
+      const port = select.value;
+      if (!port) return alert('Select a valid COM port first');
+      btn.textContent = 'Connecting...';
+      const res = await fetch('/api/connect', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({port: port, baud: 115200})
+      });
+      const data = await res.json();
+      if (!data.success) {
+        alert('Failed: ' + data.message);
+        btn.textContent = 'Connect';
+      }
+    } else {
+      await fetch('/api/disconnect', {method: 'POST'});
+    }
+    updateStatus();
+  }
+
+  async function selectLeg(legId) {
+    selectedLeg = legId;
+    document.querySelectorAll('.leg-node').forEach((node, idx) => {
+      node.classList.toggle('active', idx === legId);
+    });
+    document.getElementById('activeLegBadge').textContent = 'LEG ' + legId;
+    await fetch('/api/leg', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({leg_id: legId})
+    });
+  }
+
+  async function setMode(mode) {
+    currentMode = mode;
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.textContent.replace(' ', '') === mode || btn.textContent === mode);
+    });
+    await fetch('/api/mode', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({mode: mode})
+    });
+  }
+
+  async function toggleWalking() {
+    const nextState = !isWalking;
+    await fetch('/api/walking', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({active: nextState})
+    });
+    isWalking = nextState;
+    renderWalkingBtn();
+  }
+
+  function renderWalkingBtn() {
+    const btn = document.getElementById('walkToggleBtn');
+    if (isWalking) {
+      btn.className = 'walk-toggle-btn stop';
+      btn.textContent = '⏹ Stop Walking';
+    } else {
+      btn.className = 'walk-toggle-btn play';
+      btn.textContent = '▶ Start Walking';
+    }
+  }
+
+  async function changeSpeed(ms) {
+    document.getElementById('speedVal').textContent = ms + ' ms';
+    await fetch('/api/speed', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({interval_ms: parseFloat(ms)})
+    });
+  }
+
+  async function onManualSlider() {
+    if (isWalking) {
+      isWalking = false;
+      renderWalkingBtn();
+    }
+    const c = parseFloat(document.getElementById('sliderCoxa').value);
+    const f = parseFloat(document.getElementById('sliderFemur').value);
+    const t = parseFloat(document.getElementById('sliderTibia').value);
+    document.getElementById('valCoxa').textContent = c.toFixed(1) + '°';
+    document.getElementById('valFemur').textContent = f.toFixed(1) + '°';
+    document.getElementById('valTibia').textContent = t.toFixed(1) + '°';
+
+    await fetch('/api/manual', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({coxa: c, femur: f, tibia: t})
+    });
+  }
+
+  async function updateStatus() {
+    try {
+      const res = await fetch('/api/status');
+      const st = await res.json();
+      isConnected = st.connected;
+      isWalking = st.is_walking;
+
+      const dot = document.getElementById('statusDot');
+      const txt = document.getElementById('statusText');
+      const btn = document.getElementById('connectBtn');
+
+      if (isConnected) {
+        dot.className = 'status-dot online';
+        txt.textContent = `Connected (${st.port})`;
+        btn.textContent = 'Disconnect';
+        btn.className = 'btn btn-danger';
+      } else {
+        dot.className = 'status-dot';
+        txt.textContent = 'Disconnected';
+        btn.textContent = 'Connect';
+        btn.className = 'btn btn-primary';
+      }
+
+      renderWalkingBtn();
+
+      // Update angles & tips if walking is active
+      if (isWalking && st.angles) {
+        document.getElementById('valCoxa').textContent = st.angles[0] + '°';
+        document.getElementById('valFemur').textContent = st.angles[1] + '°';
+        document.getElementById('valTibia').textContent = st.angles[2] + '°';
+        document.getElementById('sliderCoxa').value = st.angles[0];
+        document.getElementById('sliderFemur').value = st.angles[1];
+        document.getElementById('sliderTibia').value = st.angles[2];
+      }
+
+      if (st.tip_local) {
+        document.getElementById('tipX').textContent = st.tip_local[0];
+        document.getElementById('tipY').textContent = st.tip_local[1];
+        document.getElementById('tipZ').textContent = st.tip_local[2];
+      }
+    } catch (e) {
+      // server down or restarting
+    }
+  }
+
+  // Poll status every 100ms
+  setInterval(updateStatus, 100);
+  refreshPorts();
+</script>
+</body>
+</html>
