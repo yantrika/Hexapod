@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import os
+import queue
 import re
 import select
 import shutil
@@ -27,7 +28,7 @@ import time
 import wave
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import IO, Protocol
 
 import numpy as np
 from numpy.typing import NDArray
@@ -132,6 +133,16 @@ def load_phrase(name: str, directory: Path | None = None) -> AudioClip:
 
 
 # --- Piper --------------------------------------------------------------------------------------
+def _pump_lines(stream: IO[bytes], lines: queue.Queue[bytes | None]) -> None:
+    """Thread body (Windows): hand each line Piper prints to ``lines``; ``None`` at the end."""
+    try:
+        for line in iter(stream.readline, b""):
+            lines.put(line)
+    except (OSError, ValueError):  # the pipe was closed under us
+        pass
+    lines.put(None)
+
+
 class PiperEngine:
     """One long-lived Piper process: lines on stdin, a WAV path per line on stdout.
 
@@ -160,6 +171,7 @@ class PiperEngine:
         self._scratch: Path | None = None
         self._first_line_pending = True  # the first line after a start also pays the model load
         self._buffer = b""
+        self._lines: queue.Queue[bytes | None] | None = None  # Windows only, see _read_line
         self._closed = False
         self.restarts = 0
 
@@ -215,6 +227,12 @@ class PiperEngine:
             raise TtsError(f"could not start Piper ({self.binary}): {error}") from error
         self._buffer = b""
         self._first_line_pending = True
+        if os.name == "nt":  # select() cannot wait on a pipe there: a thread feeds a queue
+            self._lines = queue.Queue()
+            assert self._process.stdout is not None
+            threading.Thread(
+                target=_pump_lines, args=(self._process.stdout, self._lines), daemon=True
+            ).start()
         logger.info("piper started (pid %d)", self._process.pid)
 
     def _wrapper(self) -> list[str]:
@@ -324,6 +342,8 @@ class PiperEngine:
         return clip
 
     def _read_line(self, process: subprocess.Popen[bytes], deadline: float, timeout: float) -> str:
+        if os.name == "nt":
+            return self._read_line_queued(process, deadline, timeout)
         assert process.stdout is not None
         fd = process.stdout.fileno()
         while b"\n" not in self._buffer:
@@ -344,6 +364,29 @@ class PiperEngine:
             self._buffer += chunk
         line, _, self._buffer = self._buffer.partition(b"\n")
         return line.decode("utf-8", errors="replace").strip()
+
+    def _read_line_queued(
+        self, process: subprocess.Popen[bytes], deadline: float, timeout: float
+    ) -> str:
+        """Windows: the same wait as ``_read_line``, from the queue ``_pump_lines`` fills."""
+        lines = self._lines
+        assert lines is not None
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise _ProcessFailure(
+                    f"Piper did not answer within {timeout:.0f} s (hung); restarting it"
+                )
+            try:
+                line = lines.get(timeout=min(remaining, 0.25))
+            except queue.Empty:
+                if process.poll() is not None:
+                    raise _ProcessFailure(self._died_message(process)) from None
+                continue
+            if line is None:
+                process.wait()
+                raise _ProcessFailure(self._died_message(process))
+            return line.decode("utf-8", errors="replace").strip()
 
     def _died_message(self, process: subprocess.Popen[bytes]) -> str:
         detail = self._stderr_tail()
