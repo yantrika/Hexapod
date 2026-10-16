@@ -37,7 +37,7 @@ Legend: **STUB** = placeholder, not built yet. **DEV** = developer tool, not par
 | `body/backend.py` | The **backend contract** (`HexapodBackend`): set 18 joint angles, advance time, read the pose. Holds the one hard-limit clamp. | You add a backend method. |
 | `body/dryrun_backend.py` | A body with no physics and no hardware: logs the joint targets (`main.py --backend dryrun`; the Pi before the servos). | You want it to log differently. |
 | `body/sim_backend.py` | The simulated robot in PyBullet (window or headless). | You change the simulation. |
-| `body/servo_backend.py` | **STUB.** The real servo driver for the Pi. This is where the servo **pins/channels and calibration** will live (see `HARDWARE.md`). | Step 11 (hardware), and whenever you re-wire or recalibrate. |
+| `body/servo_backend.py` | The real servo driver for the Pi: PCA9685 (I2C) plus two GPIO hardware-PWM pins, the per-joint calibration table (channel, centre, direction, pulse window), slew limit (`main.py --backend servo`). | You re-wire or recalibrate. |
 | `body/urdf.py` | Builds the robot model file from `config.py` sizes. | The model description changes. |
 | `body/clock.py` | A swappable clock (real or fake) and the fixed-rate loop timer. Lets tests run without waiting. | Rarely. |
 | `body/__init__.py` | Marks the folder as a package; pins maths threads to 1. | Never. |
@@ -109,6 +109,9 @@ Legend: **STUB** = placeholder, not built yet. **DEV** = developer tool, not par
 | `scripts/control_window.py` | Small window with keys and buttons to drive the robot. | You change the window. |
 | `scripts/control_logic.py` | The window's key and button logic, with no screen code (so it can be tested). | You change key mapping. |
 | `scripts/teleop.py` | Drive the simulated robot from the keyboard. **DEV** | Rarely. |
+| `scripts/servo_center.py` | Pi: hold all servos at their centre pulse so horns and legs are attached in the neutral pose. | You re-assemble a leg. |
+| `scripts/servo_jog.py` | Pi: calibrate ONE servo from the terminal (pulse up/down, note min/centre/max). | You calibrate or replace a servo. |
+| `scripts/servo_teleop.py` | Pi: drive the real robot from the terminal keyboard (no voice), through the Controller. | You change the key map. |
 | `scripts/joint_jog.py` | Move the 18 joints with sliders. **DEV** (tuning). | Rarely. |
 | `scripts/sim_demo.py` | Hold stand/sit or run a short scripted sequence in the simulation. **DEV** | Rarely. |
 | `scripts/walk_demo.py` | Walk forward, turn, strafe in the simulation. **DEV** | Rarely. |
@@ -164,6 +167,7 @@ Run one file at a time on the dev laptop (see `COMMANDS.md`).
 | `tests/test_kinematics.py` | Leg maths: forward and back, knee-up, unreachable points. |
 | `tests/test_backend.py` | The backend contract and the hard-limit clamp. |
 | `tests/test_dryrun_backend.py` | The dry-run backend (clamp, log, starts without PyBullet). |
+| `tests/test_servo_backend.py` | The servo backend with fake drivers: table, pulse maths, slew, release. |
 | `tests/test_sim_backend.py` | The PyBullet backend (headless). |
 | `tests/test_urdf.py` | The robot model file matches `config.py`. |
 | `tests/test_gait.py` | The walking planner (pure). |
