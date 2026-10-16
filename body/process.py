@@ -231,12 +231,17 @@ class BodyRunner:
 
 
 def make_backend(headless: bool, kind: str = config.BACKEND_DEFAULT) -> HexapodBackend:
-    """The body's backend: the simulated hexapod (DIRECT, or with the PyBullet window) or the
-    dry-run backend (no physics, no hardware). Imports are lazy: the Pi has no pybullet."""
+    """The body's backend: the simulated hexapod (DIRECT, or with the PyBullet window), the
+    dry-run backend (no physics, no hardware) or the real servos (Pi). Imports are lazy: the Pi
+    has no pybullet."""
     if kind == "dryrun":
         from body.dryrun_backend import DryRunBackend
 
         return DryRunBackend()
+    if kind == "servo":
+        from body.servo_backend import ServoBackend
+
+        return ServoBackend()
     if kind != "sim":
         raise ValueError(f"unknown backend {kind!r} (choose from {', '.join(config.BACKENDS)})")
     from body.sim_backend import SimBackend

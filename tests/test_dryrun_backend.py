@@ -100,7 +100,7 @@ def test_the_log_goes_to_its_own_file_not_the_console(tmp_path: Path,
 def test_make_backend_builds_the_dry_run_and_rejects_unknown_names() -> None:
     assert isinstance(make_backend(True, "dryrun"), DryRunBackend)
     with pytest.raises(ValueError):
-        make_backend(True, "servo")
+        make_backend(True, "nonsense")
 
 
 def test_the_body_starts_without_pybullet() -> None:

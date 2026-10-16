@@ -1,5 +1,6 @@
 # Raspberry Pi 5 (Ubuntu 24.04, Python 3.12, aarch64): everything the robot needs EXCEPT pybullet.
 # Run with: python main.py --backend dryrun   (the servo driver is added at Step 11e)
+smbus2>=0.4  # I2C for the PCA9685 (pure Python)
 # Wheels only: nothing is ever built on the Pi. srt (a vosk dependency, source-only on PyPI) comes
 # from wheelhouse/, built on the laptop by scripts/build_wheelhouse.sh and sent by sync_to_pi.sh.
 --only-binary=:all:

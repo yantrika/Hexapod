@@ -9,7 +9,6 @@ import pytest
 
 import config
 from body.backend import BasePose, HexapodBackend, JointArray
-from body.servo_backend import ServoBackend
 
 
 class RecordingBackend(HexapodBackend):
@@ -41,11 +40,6 @@ class RecordingBackend(HexapodBackend):
 def test_abc_cannot_be_instantiated() -> None:
     with pytest.raises(TypeError):
         HexapodBackend()  # type: ignore[abstract]
-
-
-def test_servo_backend_is_a_stub() -> None:
-    with pytest.raises(NotImplementedError):
-        ServoBackend()
 
 
 def test_clamp_layer_limits_targets_before_apply() -> None:

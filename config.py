@@ -152,8 +152,18 @@ TELEOP_SPEED_SCALE_STEP = 0.1
 # --- Timing and bridge ---------------------------------------------------
 PHYSICS_HZ = 240.0  # PyBullet step, driven by wall-clock time
 CONTROL_HZ = 50.0  # control tick, driven by wall-clock time
-BACKENDS = ("sim", "dryrun")  # body backends main.py can start (the servo backend comes at 11e)
+BACKENDS = ("sim", "dryrun", "servo")  # body backends main.py can start (servo = real Pi hardware)
 BACKEND_DEFAULT = os.environ.get("HEXA_BACKEND", "sim")  # the Pi build sets dryrun (no pybullet)
+# --- Servo backend (Pi, real hardware; the per-joint table lives in body/servo_backend.py) ---
+SERVO_PWM_HZ = 50  # PCA9685 and GPIO PWM frequency (analog servo: TowerPro MG995)
+PCA9685_I2C_BUS = 1  # /dev/i2c-1 (Pi pins 3 and 5)
+PCA9685_ADDRESS = 0x40  # one board, all address jumpers open
+GPIO_PWM_CHIP = 2  # /sys/class/pwm/pwmchipN of the Pi 5 (RP1); needs dtoverlay=pwm-2chan
+SERVO_US_PER_DEG = 2000.0 / 180.0  # MG995: 500..2500 us over about 180 deg (PiHexa18 reference)
+SERVO_PULSE_ABS_MIN_US = 450  # nothing is ever sent outside this window, whatever the table says
+SERVO_PULSE_ABS_MAX_US = 2550
+SERVO_SLEW_DEG_S = 120.0  # a servo output never moves faster than this (first power-up safety)
+TERMINAL_KEY_HOLD_S = 0.6  # terminal teleop: a movement key counts as held this long after a press
 DRYRUN_LOG_FILE = LOG_DIR / "dryrun.log"  # per-leg joint targets the gait would send (tail -f it)
 DRYRUN_LOG_HZ = 2.0  # at most this many lines per second while the targets are changing ...
 DRYRUN_LOG_EPS_DEG = 0.5  # ... a change smaller than this on every joint is not "moving"
