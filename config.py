@@ -388,7 +388,8 @@ STT_GRAMMAR_EXTRA_WORDS = 1  # free text may have this many words more than the 
 STT_STOP_EXTRA_WORDS = 2  # the same for a stop word (a false stop is harmless, a miss is not)
 TRANSCRIPT_LOG = LOG_DIR / "transcripts.jsonl"  # one JSON line per final result (dataset, Step 9b)
 VOSK_MODEL_PATH = VOSK_DIR / VOSK_MODELS[VOSK_MODEL_DEFAULT]
-PIPER_BINARY = PIPER_DIR / "piper" / "piper"  # standalone binary, ONE long-lived subprocess
+# standalone binary, ONE long-lived subprocess (piper.exe from the Windows zip on Windows)
+PIPER_BINARY = PIPER_DIR / "piper" / ("piper.exe" if os.name == "nt" else "piper")
 # TO REPLACE THE SPEAKING VOICE: change PIPER_VOICE (a path in https://huggingface.co/rhasspy/
 # piper-voices without the extension), delete assets/phrases/*.wav, run scripts/fetch_models.sh.
 PIPER_VOICE = "en/en_US/amy/low/en_US-amy-low"
