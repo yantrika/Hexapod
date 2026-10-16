@@ -64,3 +64,11 @@ ruff check . && mypy .
 ```
 
 Read `AGENTS.md` before changing code. Heavy runs on a slow machine should go through `python scripts/cool_run.py -- <command>`.
+
+
+
+
+
+   W / S  forward / back     A / D  strafe left / right     Q / E  turn left / right
+    Space  stop               1 stand    2 sit    3 wave     + / -  speed up / down
+    X      stop, sit and quit
