@@ -6,6 +6,25 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 enum LinkState { disconnected, connecting, connected }
 
+/// One line of the voice log: what the person said, what Arya did with it, what Arya said.
+class VoiceLine {
+  VoiceLine({required this.fromYou, required this.text, required this.at});
+
+  final bool fromYou;
+  String text;
+  final DateTime at;
+  String? route; // for `fromYou` lines: "walk fwd", "chat", ...
+}
+
+/// One person Arya remembers (from the `persona` event).
+class Person {
+  const Person(this.id, this.name, this.facts, this.roastOk);
+  final int id;
+  final String name;
+  final int facts;
+  final bool roastOk;
+}
+
 /// The phone's side of the robot's phone-page protocol (`web/protocol.py` on `main`).
 ///
 /// The robot only ever gets high-level requests: walk axes in [-1, 1], stop, stand, sit,
@@ -13,12 +32,30 @@ enum LinkState { disconnected, connecting, connected }
 /// message arrives within `deadman_s`), so a held move is repeated at `send_hz`.
 class RobotLink extends ChangeNotifier {
   static const int port = 8765;
+  static const int _maxLog = 60;
 
   LinkState state = LinkState.disconnected;
   String? error;
+  String host = '';
   String robotState = 'idle'; // the server's label, from `hello` and `status`
   String lastDetail = '';
-  int? pingMs;
+
+  // from `hello`
+  bool pttAvailable = true;
+  String? pttReason;
+  bool sayAvailable = true;
+  String? sayReason;
+  int sayMaxChars = 120;
+  double deadmanS = 0.3; // the robot stops a moving walk if no move message arrives for this long
+
+  // from the `persona` event (null: this robot has no persona)
+  String mode = 'calm';
+  List<String> modes = const ['calm', 'funny', 'roast'];
+  String speaker = 'guest';
+  List<Person> people = const [];
+  bool hasPersona = false;
+
+  final List<VoiceLine> log = [];
 
   double _sendHz = 10;
   WebSocketChannel? _channel;
@@ -31,19 +68,21 @@ class RobotLink extends ChangeNotifier {
 
   bool get connected => state == LinkState.connected;
 
-  Future<void> connect(String host, String pin) async {
+  Future<void> connect(String address, String pin) async {
     await disconnect();
     state = LinkState.connecting;
     error = null;
+    host = address;
     notifyListeners();
     try {
       final uri = Uri.parse(
-        'ws://$host:$port/ws?pin=${Uri.encodeQueryComponent(pin)}',
+        'ws://$address:$port/ws?pin=${Uri.encodeQueryComponent(pin)}',
       );
       final channel = WebSocketChannel.connect(uri);
       await channel.ready.timeout(const Duration(seconds: 6));
       _channel = channel;
       state = LinkState.connected;
+      log.clear();
       _subscription = channel.stream.listen(
         _onMessage,
         onDone: _onClosed,
@@ -78,7 +117,7 @@ class RobotLink extends ChangeNotifier {
     final channel = _channel;
     _channel = null;
     if (channel != null) {
-      _send({'action': 'stop'});
+      channel.sink.add(jsonEncode({'action': 'stop'}));
       await channel.sink.close();
     }
     _forward = _strafe = _yaw = 0;
@@ -105,19 +144,88 @@ class RobotLink extends ChangeNotifier {
 
   void _onMessage(dynamic raw) {
     if (raw is! String) return;
-    final Object? message = jsonDecode(raw);
+    final Object? message;
+    try {
+      message = jsonDecode(raw);
+    } on FormatException {
+      return;
+    }
     if (message is! Map<String, dynamic>) return;
     switch (message['type']) {
       case 'hello':
         _sendHz = (message['send_hz'] as num?)?.toDouble() ?? _sendHz;
+        deadmanS = (message['deadman_s'] as num?)?.toDouble() ?? deadmanS;
         robotState = (message['state'] as String?) ?? robotState;
+        final ptt = message['ptt'];
+        if (ptt is Map<String, dynamic>) {
+          pttAvailable = ptt['available'] == true;
+          pttReason = ptt['reason'] as String?;
+        }
+        final say = message['say'];
+        if (say is Map<String, dynamic>) {
+          sayAvailable = say['available'] == true;
+          sayReason = say['reason'] as String?;
+          sayMaxChars = (say['max_chars'] as num?)?.toInt() ?? sayMaxChars;
+        }
+        final persona = message['persona'];
+        if (persona is Map<String, dynamic>) _onPersona(persona);
       case 'status':
         robotState = (message['state'] as String?) ?? robotState;
         lastDetail = (message['detail'] as String?) ?? '';
+      case 'persona':
+        _onPersona(message);
+      case 'heard':
+        _addLine(true, (message['text'] as String?) ?? '');
+      case 'route':
+        _onRoute(message);
+      case 'said':
+        _addLine(false, (message['text'] as String?) ?? '');
+      case 'deadman' || 'ptt_timeout' || 'error':
+        break; // the page just keeps going; the robot already stopped
       default:
         return;
     }
     notifyListeners();
+  }
+
+  void _onPersona(Map<String, dynamic> p) {
+    hasPersona = true;
+    mode = (p['mode'] as String?) ?? mode;
+    speaker = (p['speaker'] as String?) ?? speaker;
+    final list = p['modes'];
+    if (list is List) modes = list.whereType<String>().toList();
+    final folks = p['people'];
+    if (folks is List) {
+      people = [
+        for (final f in folks.whereType<Map<String, dynamic>>())
+          Person(
+            (f['id'] as num).toInt(),
+            (f['name'] as String?) ?? '?',
+            (f['facts'] as num?)?.toInt() ?? 0,
+            f['roast_ok'] == true,
+          ),
+      ];
+    }
+  }
+
+  void _onRoute(Map<String, dynamic> m) {
+    final route = (m['route'] as String?) ?? '';
+    final action = m['action'] as String?;
+    final label = route == 'command' && action != null
+        ? action
+        : (route == 'chat' ? 'chat' : route);
+    for (var i = log.length - 1; i >= 0; i--) {
+      if (log[i].fromYou) {
+        log[i].route = label;
+        return;
+      }
+    }
+  }
+
+  void _addLine(bool fromYou, String text) {
+    if (text.isEmpty) return;
+    log.add(VoiceLine(fromYou: fromYou, text: text, at: DateTime.now()));
+    if (log.length > _maxLog) log.removeAt(0);
   }
 
   // --- motion ---------------------------------------------------------------------------
@@ -165,7 +273,17 @@ class RobotLink extends ChangeNotifier {
 
   void pttRelease() => _send({'action': 'ptt_release'});
 
-  void setMode(String mode) => _send({'action': 'set_mode', 'mode': mode});
+  void setMode(String value) {
+    mode = value; // shown at once; the robot's `persona` event confirms it
+    notifyListeners();
+    _send({'action': 'set_mode', 'mode': value});
+  }
+
+  void setSpeaker(String name) {
+    speaker = name;
+    notifyListeners();
+    _send({'action': 'set_speaker', 'name': name});
+  }
 
   void _send(Map<String, Object?> message) {
     final channel = _channel;

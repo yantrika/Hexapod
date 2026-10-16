@@ -1,54 +1,63 @@
 import 'package:flutter/material.dart';
 
+import 'drive_mode.dart';
+import 'landscape_screen.dart';
+import 'motion.dart';
+import 'prefs.dart';
 import 'robot_link.dart';
+import 'settings_screen.dart';
 import 'theme.dart';
+import 'widgets/common.dart';
 import 'widgets/hold_button.dart';
+import 'widgets/icons.dart';
 import 'widgets/joystick.dart';
 
-enum ControlMode { stick, pad, dual }
+/// Shared by Drive and Landscape: the speed steps (fractions of the top-speed setting).
+const speedSteps = [('slow', 0.4), ('normal', 0.7), ('fast', 1.0)];
 
 class DriveScreen extends StatefulWidget {
-  const DriveScreen({super.key, required this.link});
+  const DriveScreen({
+    super.key,
+    required this.link,
+    required this.prefs,
+    required this.motion,
+  });
   final RobotLink link;
+  final Prefs prefs;
+  final MotionInput motion;
 
   @override
   State<DriveScreen> createState() => _DriveScreenState();
 }
 
 class _DriveScreenState extends State<DriveScreen> {
-  ControlMode _mode = ControlMode.stick;
-
-  // One value per input; the move sent to the robot is their sum, clamped.
-  double _stickX = 0, _stickY = 0; // move stick (x right+, y forward+)
-  double _turnStick = 0; // dual mode turn stick (right+)
-  double _padForward = 0,
-      _padStrafe = 0,
-      _padYaw = 0; // held pad buttons (left/forward +)
+  late DriveMode _mode = widget.prefs.defaultMode;
   int _speedIndex = 1;
-  static const _speeds = [('slow', 0.3), ('normal', 0.5), ('fast', 0.8)];
   String _posture = 'stand';
-  bool _talking = false;
 
   RobotLink get link => widget.link;
+  Prefs get prefs => widget.prefs;
+  MotionInput get motion => widget.motion;
 
-  void _push() {
-    link.setMove(
-      forward: _stickY + _padForward,
-      strafe: -_stickX + _padStrafe,
-      yaw: -_turnStick + _padYaw,
-    );
+  @override
+  void initState() {
+    super.initState();
+    _applySpeed();
+    prefs.addListener(_applySpeed);
   }
 
-  void _setMode(ControlMode mode) {
+  @override
+  void dispose() {
+    prefs.removeListener(_applySpeed);
+    super.dispose();
+  }
+
+  void _applySpeed() =>
+      link.speed = prefs.topSpeed * speedSteps[_speedIndex].$2;
+
+  void _setMode(DriveMode mode) {
     setState(() => _mode = mode);
-    _stickX = _stickY = _turnStick = _padForward = _padStrafe = _padYaw = 0;
-    _push();
-  }
-
-  void _stop() {
-    _stickX = _stickY = _turnStick = _padForward = _padStrafe = _padYaw = 0;
-    link.stop();
-    setState(() {});
+    motion.reset();
   }
 
   @override
@@ -59,20 +68,38 @@ class _DriveScreenState extends State<DriveScreen> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 460),
             child: ListenableBuilder(
-              listenable: link,
+              listenable: Listenable.merge([link, prefs, motion]),
               builder: (context, _) => Padding(
-                padding: const EdgeInsets.fromLTRB(18, 10, 18, 18),
+                padding: const EdgeInsets.fromLTRB(18, 18, 18, 22),
                 child: Column(
                   children: [
-                    _header(),
+                    _header(context),
                     const SizedBox(height: 14),
                     _statusStrip(),
                     const SizedBox(height: 14),
-                    _modeTabs(),
-                    Expanded(child: Center(child: _controls())),
+                    _heard(),
+                    const SizedBox(height: 14),
+                    _tabs(),
+                    Expanded(
+                      child: Center(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: _controls(context),
+                        ),
+                      ),
+                    ),
                     _postureRow(),
-                    const SizedBox(height: 12),
-                    _bottomRow(),
+                    const SizedBox(height: 14),
+                    SizedBox(
+                      height: 76,
+                      child: Row(
+                        children: [
+                          Expanded(child: VoiceButton(link: link)),
+                          const SizedBox(width: 10),
+                          StopButton(onStop: motion.stop),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -83,20 +110,23 @@ class _DriveScreenState extends State<DriveScreen> {
     );
   }
 
-  Widget _header() => SizedBox(
+  // --- header, status, last heard -------------------------------------------------------------
+
+  Widget _header(BuildContext context) => SizedBox(
     height: 44,
     child: Row(
       children: [
-        const Icon(Icons.hexagon_outlined, size: 22),
+        const AIcon(Shapes.hexagon, size: 22, color: Ar.text),
         const SizedBox(width: 10),
         Column(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Arya',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+              style: sans(15, weight: 600, spacing: 0.3, height: 1.1),
             ),
+            const SizedBox(height: 2),
             Row(
               children: [
                 Container(
@@ -108,16 +138,55 @@ class _DriveScreenState extends State<DriveScreen> {
                   ),
                 ),
                 const SizedBox(width: 6),
-                Text('connected', style: mono(11)),
+                Text(link.host, style: mono(11)),
               ],
             ),
           ],
         ),
         const Spacer(),
-        IconButton(
-          tooltip: 'Disconnect',
-          onPressed: link.disconnect,
-          icon: const Icon(Icons.link_off, color: Ar.muted),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+            border: Border.all(color: Ar.line),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              const AIcon(
+                Shapes.battery,
+                size: 16,
+                color: Ar.textDim,
+                stroke: 1.4,
+              ),
+              const SizedBox(width: 6),
+              Text('— V', style: mono(11, color: Ar.textDim)),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) =>
+                  SettingsScreen(link: link, prefs: prefs, motion: motion),
+            ),
+          ),
+          child: Semantics(
+            button: true,
+            label: 'Settings',
+            excludeSemantics: true,
+            child: Container(
+              width: 44,
+              height: 44,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Ar.line),
+              ),
+              child: const AIcon(Shapes.sliders, size: 18, color: Ar.text),
+            ),
+          ),
         ),
       ],
     ),
@@ -130,13 +199,32 @@ class _DriveScreenState extends State<DriveScreen> {
     ),
     child: Row(
       children: [
-        _cell('STATE', link.robotState, border: true),
-        _cell('SPEED', _speeds[_speedIndex].$1),
+        _cell(
+          'STATE',
+          _title(link.robotState),
+          sans(16, weight: 500),
+          border: true,
+        ),
+        _cell(
+          'SPEED',
+          '${(link.speed * 100).round()} %',
+          mono(16, color: Ar.text, weight: 500),
+          border: true,
+        ),
+        _cell('PI TEMP', '—', mono(16, color: Ar.text, weight: 500)),
       ],
     ),
   );
 
-  Widget _cell(String label, String value, {bool border = false}) => Expanded(
+  String _title(String s) =>
+      s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+
+  Widget _cell(
+    String label,
+    String value,
+    TextStyle style, {
+    bool border = false,
+  }) => Expanded(
     child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
@@ -145,18 +233,55 @@ class _DriveScreenState extends State<DriveScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: mono(10, spacing: 0.8)),
+          CapLabel(label),
           const SizedBox(height: 4),
           Text(
             value,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: style,
           ),
         ],
       ),
     ),
   );
 
-  Widget _modeTabs() => Container(
+  Widget _heard() {
+    VoiceLine? last;
+    for (final l in link.log.reversed) {
+      if (l.fromYou) {
+        last = l;
+        break;
+      }
+    }
+    return SizedBox(
+      height: 18,
+      child: last == null
+          ? null
+          : Row(
+              children: [
+                Text('heard', style: mono(12, color: Ar.text)),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    '“${last.text}”',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: mono(12),
+                  ),
+                ),
+                if (last.route != null) ...[
+                  const SizedBox(width: 8),
+                  Text('→', style: mono(12, color: Ar.tick)),
+                  const SizedBox(width: 8),
+                  Text(last.route!, style: mono(12, color: Ar.signal)),
+                ],
+              ],
+            ),
+    );
+  }
+
+  Widget _tabs() => Container(
     padding: const EdgeInsets.all(4),
     decoration: BoxDecoration(
       color: Ar.raised,
@@ -164,27 +289,30 @@ class _DriveScreenState extends State<DriveScreen> {
     ),
     child: Row(
       children: [
-        for (final (mode, label) in [
-          (ControlMode.stick, 'Stick'),
-          (ControlMode.pad, 'Pad'),
-          (ControlMode.dual, 'Dual'),
-        ])
+        for (final mode in DriveMode.values)
           Expanded(
-            child: GestureDetector(
-              onTap: () => _setMode(mode),
-              child: Container(
-                height: 40,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: _mode == mode ? Ar.text : Colors.transparent,
-                  borderRadius: BorderRadius.circular(9),
-                ),
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: _mode == mode ? Ar.ground : Ar.muted,
+            child: Semantics(
+              button: true,
+              selected: _mode == mode,
+              label: mode.label,
+              excludeSemantics: true,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _setMode(mode),
+                child: Container(
+                  height: 40,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: _mode == mode ? Ar.text : Colors.transparent,
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Text(
+                    mode.label,
+                    style: sans(
+                      14,
+                      weight: 500,
+                      color: _mode == mode ? Ar.ground : Ar.muted,
+                    ),
                   ),
                 ),
               ),
@@ -194,51 +322,113 @@ class _DriveScreenState extends State<DriveScreen> {
     ),
   );
 
-  Widget _controls() => switch (_mode) {
-    ControlMode.stick => _stickControls(),
-    ControlMode.pad => _padControls(),
-    ControlMode.dual => _dualControls(),
+  // --- the three layouts -------------------------------------------------------------------
+
+  Widget _controls(BuildContext context) => switch (_mode) {
+    DriveMode.stick => _stick(),
+    DriveMode.pad => _pad(),
+    DriveMode.dual => _dual(context),
   };
 
-  Widget _stickControls() => Row(
+  Widget _turnRound(String shapes, String label, double sign) => HoldButton(
+    shapes: shapes,
+    label: label,
+    width: 48,
+    height: 48,
+    round: true,
+    iconSize: 18,
+    iconStroke: 1.6,
+    style: HoldStyle.ghost,
+    haptics: prefs.haptics,
+    onHold: (held) {
+      motion.padYaw = held ? sign : 0;
+      motion.push();
+    },
+  );
+
+  Widget _stick() => Column(
     mainAxisSize: MainAxisSize.min,
     children: [
-      _turnButton(Icons.rotate_left, 'Turn left', 1),
-      const SizedBox(width: 12),
-      Joystick(
-        size: 232,
-        onChanged: (x, y) {
-          _stickX = x;
-          _stickY = y;
-          _push();
-        },
+      Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _turnRound(Shapes.turnLeft, 'Turn left', 1),
+          const SizedBox(width: 14),
+          Joystick(
+            size: 236,
+            knobSize: 76,
+            big: true,
+            deadZone: prefs.deadZone,
+            haptics: prefs.haptics,
+            onChanged: (x, y) {
+              motion.stickX = x;
+              motion.stickY = y;
+              motion.push();
+            },
+          ),
+          const SizedBox(width: 14),
+          _turnRound(Shapes.turnRight, 'Turn right', -1),
+        ],
       ),
-      const SizedBox(width: 12),
-      _turnButton(Icons.rotate_right, 'Turn right', -1),
+      const SizedBox(height: 14),
+      Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _readout('fwd', motion.forward),
+          const SizedBox(width: 18),
+          _readout('strafe', motion.strafe),
+          const SizedBox(width: 18),
+          _readout('yaw', motion.yaw),
+        ],
+      ),
     ],
   );
 
-  Widget _turnButton(IconData icon, String label, double sign) => SizedBox(
-    width: 48,
-    child: HoldButton(
-      icon: icon,
-      label: label,
-      height: 48,
-      onHold: (held) {
-        _padYaw = held ? sign : 0;
-        _push();
-      },
+  Widget _readout(String name, double v) => Text.rich(
+    TextSpan(
+      children: [
+        TextSpan(text: '$name '),
+        TextSpan(
+          text: v.toStringAsFixed(2),
+          style: mono(11, color: Ar.text),
+        ),
+      ],
     ),
+    style: mono(11),
   );
 
-  Widget _padControls() {
+  Widget _pad() {
     Widget hold(
-      IconData icon,
+      String shapes,
       String label,
       void Function(bool) onHold, {
-      bool primary = false,
-    }) =>
-        HoldButton(icon: icon, label: label, onHold: onHold, primary: primary);
+      HoldStyle style = HoldStyle.soft,
+      double iconSize = 24,
+      double stroke = 1.8,
+    }) => HoldButton(
+      shapes: shapes,
+      label: label,
+      onHold: onHold,
+      style: style,
+      iconSize: iconSize,
+      iconStroke: stroke,
+      haptics: prefs.haptics,
+    );
+    void yaw(bool h, double s) {
+      motion.padYaw = h ? s : 0;
+      motion.push();
+    }
+
+    void fwd(bool h, double s) {
+      motion.padForward = h ? s : 0;
+      motion.push();
+    }
+
+    void strafe(bool h, double s) {
+      motion.padStrafe = h ? s : 0;
+      motion.push();
+    }
+
     return SizedBox(
       width: 300,
       child: GridView.count(
@@ -247,230 +437,212 @@ class _DriveScreenState extends State<DriveScreen> {
         crossAxisCount: 3,
         mainAxisSpacing: 10,
         crossAxisSpacing: 10,
-        childAspectRatio: 1.05,
+        childAspectRatio: 94 / 84,
         children: [
-          hold(Icons.rotate_left, 'Turn left', (h) {
-            _padYaw = h ? 1 : 0;
-            _push();
-          }),
-          hold(Icons.arrow_upward, 'Forward', (h) {
-            _padForward = h ? 1 : 0;
-            _push();
-          }, primary: true),
-          hold(Icons.rotate_right, 'Turn right', (h) {
-            _padYaw = h ? -1 : 0;
-            _push();
-          }),
-          hold(Icons.arrow_back, 'Strafe left', (h) {
-            _padStrafe = h ? 1 : 0;
-            _push();
-          }),
+          hold(
+            Shapes.turnLeft,
+            'Turn left',
+            (h) => yaw(h, 1),
+            style: HoldStyle.ghost,
+            iconSize: 22,
+            stroke: 1.6,
+          ),
+          hold(
+            Shapes.up,
+            'Forward',
+            (h) => fwd(h, 1),
+            style: HoldStyle.primary,
+          ),
+          hold(
+            Shapes.turnRight,
+            'Turn right',
+            (h) => yaw(h, -1),
+            style: HoldStyle.ghost,
+            iconSize: 22,
+            stroke: 1.6,
+          ),
+          hold(Shapes.left, 'Strafe left', (h) => strafe(h, 1)),
           Center(
             child: Text(
               'HOLD\nTO MOVE',
               textAlign: TextAlign.center,
-              style: mono(10, color: Ar.faint),
+              style: mono(10, color: Ar.faint).copyWith(height: 1.5),
             ),
           ),
-          hold(Icons.arrow_forward, 'Strafe right', (h) {
-            _padStrafe = h ? -1 : 0;
-            _push();
-          }),
+          hold(Shapes.right, 'Strafe right', (h) => strafe(h, -1)),
           const SizedBox.shrink(),
-          hold(Icons.arrow_downward, 'Back', (h) {
-            _padForward = h ? -1 : 0;
-            _push();
-          }),
+          hold(Shapes.down, 'Back', (h) => fwd(h, -1)),
           const SizedBox.shrink(),
         ],
       ),
     );
   }
 
-  Widget _dualControls() => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Joystick(
-            size: 152,
-            onChanged: (x, y) {
-              _stickX = x;
-              _stickY = y;
-              _push();
-            },
-          ),
-          const SizedBox(height: 10),
-          Text('MOVE', style: mono(10, spacing: 0.8)),
-        ],
-      ),
-      const SizedBox(width: 22),
-      Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Joystick(
-            size: 152,
-            horizontalOnly: true,
-            filled: false,
-            onChanged: (x, _) {
-              _turnStick = x;
-              _push();
-            },
-          ),
-          const SizedBox(height: 10),
-          Text('TURN', style: mono(10, spacing: 0.8)),
-        ],
-      ),
-    ],
-  );
-
-  Widget _postureRow() => Row(
-    children: [
-      for (final (id, label) in [
-        ('stand', 'Stand'),
-        ('sit', 'Sit'),
-        ('wave', 'Wave'),
-      ]) ...[
-        GestureDetector(
-          onTap: () {
-            setState(() => _posture = id);
-            link.posture(id);
+  Widget _dual(BuildContext context) {
+    final moveStick = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Joystick(
+          size: 152,
+          knobSize: 58,
+          dashed: false,
+          deadZone: prefs.deadZone,
+          haptics: prefs.haptics,
+          onChanged: (x, y) {
+            motion.stickX = x;
+            motion.stickY = y;
+            motion.push();
           },
-          child: Container(
-            height: 44,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            alignment: Alignment.center,
-            margin: const EdgeInsets.only(right: 8),
-            decoration: BoxDecoration(
-              color: _posture == id ? Ar.raised : Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _posture == id ? Ar.text : Ar.line),
-            ),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                color: _posture == id ? Ar.text : Ar.muted,
+        ),
+        const SizedBox(height: 10),
+        const CapLabel('MOVE'),
+      ],
+    );
+    final turnStick = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Joystick(
+          size: 152,
+          knobSize: 58,
+          turn: true,
+          deadZone: prefs.deadZone,
+          haptics: prefs.haptics,
+          onChanged: (x, _) {
+            motion.turnStick = x;
+            motion.push();
+          },
+        ),
+        const SizedBox(height: 10),
+        const CapLabel('TURN'),
+      ],
+    );
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: prefs.leftHanded
+              ? [turnStick, const SizedBox(width: 22), moveStick]
+              : [moveStick, const SizedBox(width: 22), turnStick],
+        ),
+        const SizedBox(height: 14),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            motion.reset();
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) =>
+                    LandscapeScreen(link: link, prefs: prefs, motion: motion),
               ),
-            ),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Text('rotate for full dual view ↻', style: mono(11)),
           ),
         ),
       ],
+    );
+  }
+
+  // --- posture and speed ---------------------------------------------------------------------
+
+  Widget _postureRow() => Row(
+    children: [
+      for (final (id, label) in const [
+        ('stand', 'Stand'),
+        ('sit', 'Sit'),
+        ('wave', 'Wave'),
+      ])
+        Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: PostureChip(
+            label: label,
+            selected: _posture == id,
+            onTap: () {
+              setState(() => _posture = id);
+              link.posture(id);
+            },
+          ),
+        ),
       const Spacer(),
       GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: () {
-          setState(() => _speedIndex = (_speedIndex + 1) % _speeds.length);
-          link.speed = _speeds[_speedIndex].$2;
+          setState(() => _speedIndex = (_speedIndex + 1) % speedSteps.length);
+          _applySpeed();
         },
-        child: Container(
-          height: 44,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Ar.line),
-          ),
-          child: Text(_speeds[_speedIndex].$1, style: mono(12, color: Ar.text)),
-        ),
-      ),
-    ],
-  );
-
-  Widget _bottomRow() => SizedBox(
-    height: 76,
-    child: Row(
-      children: [
-        Expanded(
-          child: Listener(
-            onPointerDown: (_) {
-              setState(() => _talking = true);
-              link.pttPress();
-            },
-            onPointerUp: (_) {
-              setState(() => _talking = false);
-              link.pttRelease();
-            },
-            onPointerCancel: (_) {
-              setState(() => _talking = false);
-              link.pttRelease();
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                color: _talking ? Ar.raised : Colors.transparent,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(
-                  color: _talking ? Ar.text : const Color(0xFF3A3D44),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: _talking ? Ar.text : null,
-                      border: _talking
-                          ? null
-                          : Border.all(color: const Color(0xFF3A3D44)),
-                    ),
-                    child: Icon(
-                      Icons.mic_none,
-                      color: _talking ? Ar.ground : Ar.muted,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _talking ? 'Listening' : 'Hold to talk',
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      Text('robot’s microphone', style: mono(11)),
-                    ],
-                  ),
-                ],
-              ),
+        child: Semantics(
+          button: true,
+          label: 'Speed limit',
+          excludeSemantics: true,
+          child: Container(
+            height: 44,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              border: Border.all(color: Ar.line),
+              borderRadius: BorderRadius.circular(12),
             ),
-          ),
-        ),
-        const SizedBox(width: 10),
-        SizedBox(
-          width: 96,
-          child: FilledButton(
-            onPressed: _stop,
-            style: FilledButton.styleFrom(
-              backgroundColor: Ar.signal,
-              foregroundColor: Ar.ground,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
-              ),
-            ),
-            child: const Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+            child: Row(
               children: [
-                Icon(Icons.stop, size: 22),
-                SizedBox(height: 2),
+                const AIcon(
+                  Shapes.gauge,
+                  size: 14,
+                  color: Ar.muted,
+                  stroke: 1.8,
+                ),
+                const SizedBox(width: 8),
                 Text(
-                  'STOP',
-                  style: TextStyle(
-                    fontFamily: monoFamily,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.6,
-                  ),
+                  speedSteps[_speedIndex].$1,
+                  style: mono(12, color: Ar.text),
                 ),
               ],
             ),
           ),
         ),
-      ],
+      ),
+    ],
+  );
+}
+
+/// Stand / Sit / Wave chip.
+class PostureChip extends StatelessWidget {
+  const PostureChip({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.expand = false,
+  });
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  final bool expand;
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    behavior: HitTestBehavior.opaque,
+    onTap: onTap,
+    child: Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      excludeSemantics: true,
+      child: Container(
+        height: 44,
+        alignment: Alignment.center,
+        padding: expand ? null : const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: selected ? Ar.raised : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: selected ? Ar.text : Ar.line),
+        ),
+        child: Text(
+          label,
+          style: sans(14, color: selected ? Ar.text : Ar.muted),
+        ),
+      ),
     ),
   );
 }
