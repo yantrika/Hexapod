@@ -58,6 +58,7 @@ class Shapes {
       '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>';
   static const stop = '<rect x="5" y="5" width="14" height="14" rx="2.5"/>';
   static const back = '<path d="M15 6l-6 6 6 6"/>';
+  static const chevronDown = '<path d="M6 9l6 6 6-6"/>';
   static const check = '<path d="M20 6L9 17l-5-5"/>';
   static const plus = '<path d="M12 5v14M5 12h14"/>';
   static const battery =

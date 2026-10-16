@@ -539,7 +539,19 @@ class _DriveScreenState extends State<DriveScreen> {
           },
           child: Padding(
             padding: const EdgeInsets.all(10),
-            child: Text('rotate for full dual view ↻', style: mono(11)),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('rotate for full dual view', style: mono(11)),
+                const SizedBox(width: 6),
+                const AIcon(
+                  Shapes.turnRight,
+                  size: 12,
+                  color: Ar.muted,
+                  stroke: 1.6,
+                ),
+              ],
+            ),
           ),
         ),
       ],

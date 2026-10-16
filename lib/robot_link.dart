@@ -31,6 +31,11 @@ class Person {
 /// wave, ptt, say and persona actions. The server enforces the deadman (`stop` when no move
 /// message arrives within `deadman_s`), so a held move is repeated at `send_hz`.
 class RobotLink extends ChangeNotifier {
+  RobotLink({WebSocketChannel Function(Uri uri)? open})
+    : _open = open ?? WebSocketChannel.connect;
+
+  final WebSocketChannel Function(Uri uri) _open;
+
   static const int port = 8765;
   static const int _maxLog = 60;
 
@@ -78,7 +83,7 @@ class RobotLink extends ChangeNotifier {
       final uri = Uri.parse(
         'ws://$address:$port/ws?pin=${Uri.encodeQueryComponent(pin)}',
       );
-      final channel = WebSocketChannel.connect(uri);
+      final channel = _open(uri);
       await channel.ready.timeout(const Duration(seconds: 6));
       _channel = channel;
       state = LinkState.connected;

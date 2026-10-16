@@ -23,6 +23,8 @@ class VoiceScreen extends StatefulWidget {
 class _VoiceScreenState extends State<VoiceScreen>
     with SingleTickerProviderStateMixin {
   final _say = TextEditingController();
+  final _scroll = ScrollController();
+  int _seen = 0;
   late final AnimationController _wave = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 1100),
@@ -35,6 +37,7 @@ class _VoiceScreenState extends State<VoiceScreen>
   void dispose() {
     if (_held) link.pttRelease();
     _say.dispose();
+    _scroll.dispose();
     _wave.dispose();
     super.dispose();
   }
@@ -215,7 +218,15 @@ class _VoiceScreenState extends State<VoiceScreen>
   }
 
   Widget _logList() {
-    final lines = link.log.reversed.toList();
+    final lines = link.log;
+    if (lines.length != _seen) {
+      _seen = lines.length;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scroll.hasClients) {
+          _scroll.jumpTo(_scroll.position.maxScrollExtent);
+        }
+      });
+    }
     return Container(
       decoration: const BoxDecoration(
         border: Border(top: BorderSide(color: Ar.line)),
@@ -229,6 +240,7 @@ class _VoiceScreenState extends State<VoiceScreen>
               ),
             )
           : ListView.separated(
+              controller: _scroll,
               padding: EdgeInsets.zero,
               itemCount: lines.length,
               separatorBuilder: (_, _) => const Divider(

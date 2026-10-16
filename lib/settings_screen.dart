@@ -8,6 +8,7 @@ import 'robot_link.dart';
 import 'theme.dart';
 import 'voice_screen.dart';
 import 'widgets/common.dart';
+import 'widgets/icons.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({
@@ -297,7 +298,19 @@ class SettingsScreen extends StatelessWidget {
                 border: Border.all(color: Ar.line),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Text('${link.speaker} ▾', style: sans(14)),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(link.speaker, style: sans(14)),
+                  const SizedBox(width: 6),
+                  const AIcon(
+                    Shapes.chevronDown,
+                    size: 14,
+                    color: Ar.muted,
+                    stroke: 1.8,
+                  ),
+                ],
+              ),
             ),
           ),
         ],
