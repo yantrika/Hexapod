@@ -1,0 +1,24 @@
+# Leftovers from the robot repo (main) that live in this folder but not on this branch
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+assets/
+body/
+brain/
+data/
+logs/
+scripts/
+tests/
+voice/
+web/
+
+# Flutter / Dart
+.dart_tool/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.idea/
+*.iml
+local.properties
