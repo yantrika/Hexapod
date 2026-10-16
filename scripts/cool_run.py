@@ -119,6 +119,8 @@ def main() -> int:
               file=sys.stderr, flush=True)
     else:
         wait_until_below(args.start_below)
+    if command[0] in ("python", "python3"):
+        command[0] = sys.executable  # Windows would otherwise find the system Python, not the venv
     process = subprocess.Popen(command, start_new_session=True)  # its own process group
     paused = False
     peak = read_temperature_c() or 0.0
