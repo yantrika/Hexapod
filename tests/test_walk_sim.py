@@ -16,7 +16,15 @@ pytest.importorskip("pybullet")  # the simulator is not installed on the Pi
 import config  # noqa: E402
 from body.gait import BodyVelocity  # noqa: E402
 from body.sim_backend import SimBackend  # noqa: E402
-from tests.walk_harness import WalkStats, run_walk  # noqa: E402
+from tests.walk_harness import (  # noqa: E402
+    WALK_TEST_HEADING_DRIFT_DEG,
+    WALK_TEST_HEIGHT_TOL_M,
+    WALK_TEST_MAX_TILT_DEG,
+    WALK_TEST_POSITION_DRIFT_M,
+    WALK_TEST_SPEED_TOL,
+    WalkStats,
+    run_walk,
+)
 
 SECONDS = 10.0
 MAX_SPEED = config.GAIT_MAX_SPEED_M_S
@@ -40,10 +48,10 @@ def _report(name: str, stats: WalkStats) -> None:
 
 
 def _assert_stable(stats: WalkStats) -> None:
-    assert stats.max_roll_deg < config.WALK_TEST_MAX_TILT_DEG
-    assert stats.max_pitch_deg < config.WALK_TEST_MAX_TILT_DEG
-    assert stats.min_height_m > config.BODY_HEIGHT_STAND - config.WALK_TEST_HEIGHT_TOL_M
-    assert stats.max_height_m < config.BODY_HEIGHT_STAND + config.WALK_TEST_HEIGHT_TOL_M
+    assert stats.max_roll_deg < WALK_TEST_MAX_TILT_DEG
+    assert stats.max_pitch_deg < WALK_TEST_MAX_TILT_DEG
+    assert stats.min_height_m > config.BODY_HEIGHT_STAND - WALK_TEST_HEIGHT_TOL_M
+    assert stats.max_height_m < config.BODY_HEIGHT_STAND + WALK_TEST_HEIGHT_TOL_M
     assert stats.warnings == 0  # the planner never had to shrink the stride
 
 
@@ -52,9 +60,9 @@ def test_walk_forward(sim: SimBackend) -> None:
     _report("forward", stats)
     _assert_stable(stats)
     expected = MAX_SPEED * SECONDS
-    assert abs(stats.forward_m - expected) <= config.WALK_TEST_SPEED_TOL * expected
-    assert abs(stats.lateral_m) < config.WALK_TEST_POSITION_DRIFT_M
-    assert abs(stats.heading_drift_deg) < config.WALK_TEST_HEADING_DRIFT_DEG
+    assert abs(stats.forward_m - expected) <= WALK_TEST_SPEED_TOL * expected
+    assert abs(stats.lateral_m) < WALK_TEST_POSITION_DRIFT_M
+    assert abs(stats.heading_drift_deg) < WALK_TEST_HEADING_DRIFT_DEG
 
 
 def test_turn_in_place(sim: SimBackend) -> None:
@@ -62,8 +70,8 @@ def test_turn_in_place(sim: SimBackend) -> None:
     _report("turn", stats)
     _assert_stable(stats)
     expected_rate = math.degrees(MAX_YAW_RATE)
-    assert abs(stats.yaw_rate_deg_s - expected_rate) <= config.WALK_TEST_SPEED_TOL * expected_rate
-    assert stats.drift_m < config.WALK_TEST_POSITION_DRIFT_M
+    assert abs(stats.yaw_rate_deg_s - expected_rate) <= WALK_TEST_SPEED_TOL * expected_rate
+    assert stats.drift_m < WALK_TEST_POSITION_DRIFT_M
 
 
 def test_strafe_left(sim: SimBackend) -> None:
@@ -71,6 +79,6 @@ def test_strafe_left(sim: SimBackend) -> None:
     _report("strafe", stats)
     _assert_stable(stats)
     expected = MAX_SPEED * SECONDS
-    assert abs(stats.lateral_m - expected) <= config.WALK_TEST_SPEED_TOL * expected
-    assert abs(stats.forward_m) < config.WALK_TEST_POSITION_DRIFT_M
-    assert abs(stats.heading_drift_deg) < config.WALK_TEST_HEADING_DRIFT_DEG
+    assert abs(stats.lateral_m - expected) <= WALK_TEST_SPEED_TOL * expected
+    assert abs(stats.forward_m) < WALK_TEST_POSITION_DRIFT_M
+    assert abs(stats.heading_drift_deg) < WALK_TEST_HEADING_DRIFT_DEG

@@ -13,6 +13,8 @@ from body import kinematics as kin
 
 NEUTRAL = kin.NEUTRAL_FOOT_LOCAL
 
+IK_TOLERANCE_M = 1e-4
+
 
 def _reachable_points(count: int = 100, seed: int = 1234) -> np.ndarray:
     """Seeded points in a box around the neutral stance foot position.
@@ -43,7 +45,7 @@ def test_fk_of_ik_recovers_point_on_100_random_points() -> None:
     for point in points:
         angles = kin.ik(point)
         assert angles is not None, f"reachable point {point} returned None"
-        assert kin.fk(*angles) == pytest.approx(point, abs=config.IK_TOLERANCE_M)
+        assert kin.fk(*angles) == pytest.approx(point, abs=IK_TOLERANCE_M)
 
 
 def test_ik_returns_knee_up_branch() -> None:

@@ -19,6 +19,13 @@ from body import poses  # noqa: E402
 from body.controller import Controller, State  # noqa: E402
 from body.sim_backend import SimBackend  # noqa: E402
 from tests.fakes import FakeClock  # noqa: E402
+from tests.walk_harness import (  # noqa: E402
+    HOLD_TEST_MAX_BODY_SPEED_M_S,
+    HOLD_TEST_MAX_TILT_DEG,
+    WALK_TEST_HEIGHT_TOL_M,
+    WALK_TEST_MAX_TILT_DEG,
+    WALK_TEST_SPEED_TOL,
+)
 
 DT = 1.0 / config.CONTROL_HZ
 MAX_V = config.GAIT_MAX_SPEED_M_S
@@ -120,10 +127,10 @@ def test_held_pose_after_stop_is_stable(
         f"body speed after {HOLD_S:.0f} s {speed:.4f} m/s"
     )
     assert ctrl.angles == pytest.approx(held, abs=0.0)  # joint targets never moved
-    assert measure.tilt < config.HOLD_TEST_MAX_TILT_DEG
-    assert measure.low > config.BODY_HEIGHT_STAND - config.WALK_TEST_HEIGHT_TOL_M
-    assert measure.high < config.BODY_HEIGHT_STAND + config.WALK_TEST_HEIGHT_TOL_M
-    assert speed < config.HOLD_TEST_MAX_BODY_SPEED_M_S
+    assert measure.tilt < HOLD_TEST_MAX_TILT_DEG
+    assert measure.low > config.BODY_HEIGHT_STAND - WALK_TEST_HEIGHT_TOL_M
+    assert measure.high < config.BODY_HEIGHT_STAND + WALK_TEST_HEIGHT_TOL_M
+    assert speed < HOLD_TEST_MAX_BODY_SPEED_M_S
 
 
 def test_watchdog_expiry_reaches_zero_and_holds_a_stable_stand(
@@ -142,10 +149,10 @@ def test_watchdog_expiry_reaches_zero_and_holds_a_stable_stand(
         f"after watchdog: max tilt {measure.tilt:.2f} deg, height [{measure.low:.4f}, "
         f"{measure.high:.4f}] m, body speed {speed:.4f} m/s, joints {error:.2f} deg from stand"
     )
-    assert measure.tilt < config.HOLD_TEST_MAX_TILT_DEG
+    assert measure.tilt < HOLD_TEST_MAX_TILT_DEG
     assert abs(measure.low - config.BODY_HEIGHT_STAND) < 0.005
     assert abs(measure.high - config.BODY_HEIGHT_STAND) < 0.005
-    assert speed < config.HOLD_TEST_MAX_BODY_SPEED_M_S
+    assert speed < HOLD_TEST_MAX_BODY_SPEED_M_S
     assert error < 1.0
 
 
@@ -173,7 +180,7 @@ def test_distance_walked_does_not_depend_on_tick_length(tick_s: float) -> None:
         f"{other:.3f} m at {tick_s * 1000:.0f} ms"
     )
     assert other == pytest.approx(reference, rel=0.10)
-    assert reference == pytest.approx(MAX_V * 4.0, rel=config.WALK_TEST_SPEED_TOL)
+    assert reference == pytest.approx(MAX_V * 4.0, rel=WALK_TEST_SPEED_TOL)
 
 
 # --- Scripted sequences -----------------------------------------------------------------------
@@ -198,7 +205,7 @@ def test_scripted_stand_walk_stop_sit_stand(rig: tuple[SimBackend, Controller, F
         f"sequence: walked {start_x:.2f} m, sit height {sit_height:.4f} m, final height "
         f"[{stand.low:.4f}, {stand.high:.4f}] m, max tilt {max(measure.tilt, stand.tilt):.2f} deg"
     )
-    assert max(measure.tilt, stand.tilt) < config.WALK_TEST_MAX_TILT_DEG
+    assert max(measure.tilt, stand.tilt) < WALK_TEST_MAX_TILT_DEG
     assert abs(stand.high - config.BODY_HEIGHT_STAND) < 0.005
     assert abs(stand.low - config.BODY_HEIGHT_STAND) < 0.005
 
@@ -213,8 +220,8 @@ def test_wave_keeps_the_robot_upright(rig: tuple[SimBackend, Controller, FakeClo
         f"height [{measure.low:.4f}, {measure.high:.4f}] m"
     )
     assert ctrl.state is State.STANDING
-    assert measure.tilt < config.WALK_TEST_MAX_TILT_DEG
-    assert measure.low > config.BODY_HEIGHT_STAND - config.WALK_TEST_HEIGHT_TOL_M
+    assert measure.tilt < WALK_TEST_MAX_TILT_DEG
+    assert measure.low > config.BODY_HEIGHT_STAND - WALK_TEST_HEIGHT_TOL_M
 
 
 def test_sit_from_a_held_pose_ends_sitting_level(
@@ -227,5 +234,5 @@ def test_sit_from_a_held_pose_ends_sitting_level(
     assert ctrl.sit().ok
     measure = run_measured(ctrl, clock, sim, config.SETTLE_S + config.SIT_STAND_TRANSITION_S + 2.0)
     assert ctrl.state is State.SITTING
-    assert measure.tilt < config.WALK_TEST_MAX_TILT_DEG
+    assert measure.tilt < WALK_TEST_MAX_TILT_DEG
     assert abs(sim.body_height() - config.BODY_HEIGHT_SIT) < 0.01

@@ -22,6 +22,15 @@ RAMP_S = 1.0
 WARMUP_S = 2.0
 CONTROL_DT = 1.0 / config.CONTROL_HZ
 
+# Tolerances of the PyBullet walk and hold tests
+WALK_TEST_MAX_TILT_DEG = 10.0  # roll and pitch must stay under this
+WALK_TEST_HEIGHT_TOL_M = 0.02  # body height within this of stand height
+WALK_TEST_SPEED_TOL = 0.25  # measured motion within 25 % of commanded
+WALK_TEST_POSITION_DRIFT_M = 0.05  # unwanted displacement over 10 s
+WALK_TEST_HEADING_DRIFT_DEG = 5.0  # unwanted heading change over 10 s
+HOLD_TEST_MAX_TILT_DEG = 5.0  # roll/pitch while a pose is held
+HOLD_TEST_MAX_BODY_SPEED_M_S = 0.02  # body must be at rest after 3 s
+
 
 @dataclass(frozen=True)
 class WalkStats:

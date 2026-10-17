@@ -19,6 +19,8 @@ RAMP_TICKS = round(config.VELOCITY_RAMP_S / DT)
 BUSY = Result("busy")
 ACCEPTED = Result("accepted")
 
+FOOT_TARGET_MAX_SPEED_M_S = 0.4  # no foot target may move faster than this (walk, ramps, blends)
+
 
 def make(initial: State = State.STANDING) -> tuple[Controller, FakeBackend, FakeClock]:
     backend, clock = FakeBackend(), FakeClock()
@@ -86,7 +88,7 @@ def test_transition_takes_the_configured_time_and_moves_smoothly() -> None:
     ctrl.sit()
     run_until(ctrl, clock, State.SITTING)
     assert len(backend.history) * DT == pytest.approx(config.SIT_STAND_TRANSITION_S, abs=2 * DT)
-    assert foot_speed(backend.history) < config.FOOT_TARGET_MAX_SPEED_M_S
+    assert foot_speed(backend.history) < FOOT_TARGET_MAX_SPEED_M_S
 
 
 def test_posture_actions_and_motion_return_busy_during_a_transition() -> None:
@@ -159,8 +161,8 @@ def test_a_step_command_never_moves_a_foot_target_faster_than_the_limit() -> Non
     run(ctrl, clock, 4.0)
     peak = foot_speed(backend.history)
     print(f"max foot target speed during a step command: {peak:.3f} m/s "
-          f"(limit {config.FOOT_TARGET_MAX_SPEED_M_S})")
-    assert peak <= config.FOOT_TARGET_MAX_SPEED_M_S
+          f"(limit {FOOT_TARGET_MAX_SPEED_M_S})")
+    assert peak <= FOOT_TARGET_MAX_SPEED_M_S
 
 
 def test_walk_parameters_are_clamped_in_one_place() -> None:
@@ -224,7 +226,7 @@ def test_ramping_to_zero_ends_on_the_exact_stand_pose() -> None:
     run(ctrl, clock, 2.0)
     assert ctrl.state is State.STANDING
     assert backend.history[-1] == pytest.approx(poses.STAND_ANGLES, abs=1e-9)
-    assert foot_speed(backend.history) <= config.FOOT_TARGET_MAX_SPEED_M_S  # no snap at the end
+    assert foot_speed(backend.history) <= FOOT_TARGET_MAX_SPEED_M_S  # no snap at the end
 
 
 # --- Timing: wall clock, not iteration count --------------------------------------------------
@@ -316,7 +318,7 @@ def test_walk_after_stop_resumes_from_the_held_phase_without_jumps() -> None:
     ctrl.tick(DT)
     assert phase_gap(ctrl.phase, held_phase + DT / config.GAIT_PERIOD_S) < 1e-9  # continues
     run(ctrl, clock, 2.0)
-    assert foot_speed(backend.history[start:]) <= config.FOOT_TARGET_MAX_SPEED_M_S
+    assert foot_speed(backend.history[start:]) <= FOOT_TARGET_MAX_SPEED_M_S
 
 
 # --- Sit / stand from a held pose settle first ------------------------------------------------
@@ -375,7 +377,7 @@ def test_settle_is_a_smooth_move() -> None:
     start = len(backend.history) - 1
     ctrl.sit()
     _states_until(ctrl, clock, State.SITTING)
-    assert foot_speed(backend.history[start:]) <= config.FOOT_TARGET_MAX_SPEED_M_S
+    assert foot_speed(backend.history[start:]) <= FOOT_TARGET_MAX_SPEED_M_S
 
 
 def test_wave_is_rejected_from_a_held_pose() -> None:

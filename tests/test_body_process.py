@@ -28,6 +28,11 @@ from bridge import Bridge, Command, Status, make_bridge, new_command
 WALK: dict[str, Any] = {"direction": "fwd", "speed": 0.5}
 ROOT = Path(__file__).resolve().parent.parent
 
+# Bounds of the real-process timing tests
+BODY_TEST_STOP_MAX_S = 0.1  # send stop -> done status, even with a full queue
+BODY_TEST_FLOOD_TICK_RATIO = 2.0  # mean tick under a flood vs. idle, at most
+BODY_TEST_ACCEPT_MAX_S = 0.06  # send -> accepted (3 control ticks)
+
 
 class Body:
     """A running body plus helpers to talk to it like the brain would."""
@@ -152,8 +157,8 @@ def test_stop_with_a_full_queue_stops_within_the_bound(body: Body) -> None:
         body.answer(stop, "done")
         times.append(time.monotonic() - started)
     print(f"stop with a full queue -> done: median {statistics.median(times) * 1000:.0f} ms, "
-          f"worst {max(times) * 1000:.0f} ms (bound {config.BODY_TEST_STOP_MAX_S * 1000:.0f} ms)")
-    assert max(times) < config.BODY_TEST_STOP_MAX_S
+          f"worst {max(times) * 1000:.0f} ms (bound {BODY_TEST_STOP_MAX_S * 1000:.0f} ms)")
+    assert max(times) < BODY_TEST_STOP_MAX_S
 
 
 @pytest.mark.timing
@@ -169,7 +174,7 @@ def test_stop_event_alone_stops_the_body_and_is_answered(body: Body) -> None:
     elapsed = time.monotonic() - started
     print(f"stop_event alone -> done: {elapsed * 1000:.0f} ms")
     assert done.detail["source"] == "stop_event"
-    assert elapsed < config.BODY_TEST_STOP_MAX_S
+    assert elapsed < BODY_TEST_STOP_MAX_S
 
 
 def _flood(bridge: Bridge, stop: threading.Event) -> None:
@@ -205,7 +210,7 @@ def test_flooding_the_queue_does_not_slow_the_body_tick(body: Body) -> None:
     print(f"body tick work, walking: idle mean {idle[1] * 1000:.2f} ms (max {idle[2] * 1000:.2f}) "
           f"over {idle[0]} ticks; flooded mean {flooded[1] * 1000:.2f} ms "
           f"(max {flooded[2] * 1000:.2f}) over {flooded[0]} ticks")
-    assert flooded[1] < idle[1] * config.BODY_TEST_FLOOD_TICK_RATIO
+    assert flooded[1] < idle[1] * BODY_TEST_FLOOD_TICK_RATIO
     assert flooded[0] > 0.8 * idle[0]  # and the loop kept its rate
 
 
@@ -355,8 +360,8 @@ def test_latency_from_walk_to_first_foot_target_change(body: Body) -> None:
           f"worst {max(accept) * 1000:.0f} ms")
     print(f"walk -> first target change: median {statistics.median(move) * 1000:.0f} ms, "
           f"worst {max(move) * 1000:.0f} ms (20 runs)")
-    assert statistics.median(accept) < config.BODY_TEST_ACCEPT_MAX_S
-    assert max(move) < 3 * config.BODY_TEST_ACCEPT_MAX_S
+    assert statistics.median(accept) < BODY_TEST_ACCEPT_MAX_S
+    assert max(move) < 3 * BODY_TEST_ACCEPT_MAX_S
 
 
 @pytest.mark.timing
