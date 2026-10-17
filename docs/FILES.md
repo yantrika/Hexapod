@@ -38,6 +38,9 @@ Legend: **STUB** = placeholder, not built yet. **DEV** = developer tool, not par
 | `body/dryrun_backend.py` | A body with no physics and no hardware: logs the joint targets (`main.py --backend dryrun`; the Pi before the servos). | You want it to log differently. |
 | `body/sim_backend.py` | The simulated robot in PyBullet (window or headless). | You change the simulation. |
 | `body/servo_backend.py` | The real servo driver for the Pi: PCA9685 (I2C) plus two GPIO hardware-PWM pins, the per-joint calibration table (channel, centre, direction, pulse window), slew limit (`main.py --backend servo`). | You re-wire or recalibrate. |
+| `body/servo_calibration.py` | The per-joint calibration file (`data/calibration/servo_cal.json`): output, centre pulse, direction sign, trim, safe pulse window; validation and the angle-to-pulse maths. | You change what is stored per joint. |
+| `body/servo_drivers.py` | The raw pulse drivers: PCA9685 over I2C, the two Pi hardware-PWM pins, the optional output-enable line. Only the servo backend may import it. | You change a board or a pin. |
+| `body/servo_safety.py` | The "type yes" gate, signal-driven shutdown (SIGINT/SIGTERM/SIGHUP) and the sit-then-release sequence. | You change the shutdown behaviour. |
 | `body/urdf.py` | Builds the robot model file from `config.py` sizes. | The model description changes. |
 | `body/clock.py` | A swappable clock (real or fake) and the fixed-rate loop timer. Lets tests run without waiting. | Rarely. |
 | `body/__init__.py` | Marks the folder as a package; pins maths threads to 1. | Never. |
@@ -168,6 +171,12 @@ Run one file at a time on the dev laptop (see `COMMANDS.md`).
 | `tests/test_backend.py` | The backend contract and the hard-limit clamp. |
 | `tests/test_dryrun_backend.py` | The dry-run backend (clamp, log, starts without PyBullet). |
 | `tests/test_servo_backend.py` | The servo backend with fake drivers: table, pulse maths, slew, release. |
+| `tests/servo_fakes.py` | Test doubles for the servo tests: a world clock, recording drivers, a calibrated table. |
+| `tests/test_servo_calibration.py` | The calibration file: validation, signs, pulse maths for all 18 joints. |
+| `tests/test_servo_drivers.py` | The raw drivers with a fake I2C bus, sysfs tree and gpiod line. |
+| `tests/test_servo_paths.py` | One PWM path: only the backend touches the drivers, real servos are never the default. |
+| `tests/test_servo_safety.py` | The "type yes" gate, real signals, sit-then-release. |
+| `tests/test_servo_scripts.py` | The pure parts of the servo tools: key mapping and teleop key hold. |
 | `tests/test_sim_backend.py` | The PyBullet backend (headless). |
 | `tests/test_urdf.py` | The robot model file matches `config.py`. |
 | `tests/test_gait.py` | The walking planner (pure). |
@@ -179,6 +188,7 @@ Run one file at a time on the dev laptop (see `COMMANDS.md`).
 | `tests/test_bridge.py` | Messages, validation and queues. |
 | `tests/test_body_runner.py` | The body core in one process. |
 | `tests/test_body_process.py` | Real body processes: stop speed, flood, shutdown. |
+| `tests/test_body_signals.py` | The body process powers up sitting; SIGHUP/SIGTERM end it cleanly. |
 | `tests/test_bridge_cli.py` | The typed-command parser and one end-to-end run. |
 | `tests/test_motion_keeper.py` | Heartbeat rules with a fake clock. |
 | `tests/test_router.py` | Sentence routing, including the dangerous near-misses. |

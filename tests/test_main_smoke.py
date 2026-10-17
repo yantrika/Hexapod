@@ -110,7 +110,7 @@ def test_main_sits_answers_a_chat_sentence_and_exits_cleanly(
     assert (tmp_path / "hexa.log").read_text().count("status <-") >= 2  # one line per status
 
 
-@pytest.mark.parametrize("sig", [signal.SIGTERM, signal.SIGINT])
+@pytest.mark.parametrize("sig", [signal.SIGTERM, signal.SIGINT, signal.SIGHUP])
 def test_a_signal_shuts_the_robot_down_cleanly(models: None, tmp_path: Path, sig: int) -> None:
     run = Running([], tmp_path)
     try:
