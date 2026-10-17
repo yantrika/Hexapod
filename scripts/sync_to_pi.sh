@@ -10,6 +10,9 @@
 #   --host NAME ssh host (default hexa-pi)
 # Always sends wheelhouse/*.whl (scripts/build_wheelhouse.sh builds it here when missing).
 # Never uses --delete, so nothing on the Pi (.venv, models, logs) is removed.
+# data/calibration/ is NOT overwritten: the Pi's copy of servo_cal.json is the one written by the
+# calibration tool on the bench. It is only seeded when the Pi has none (rsync --ignore-existing);
+# copy a measured file back with: scp hexa-pi:hexa/data/calibration/servo_cal.json data/calibration/
 set -euo pipefail
 
 host="hexa-pi"; dry=(); assets=0
@@ -31,9 +34,15 @@ rsync_opts=(-az --human-readable --itemize-changes "${dry[@]}")
 rsync "${rsync_opts[@]}" \
   --exclude='.git/' --exclude='.venv/' --exclude='/assets/' --exclude='/logs/' \
   --exclude='/wheelhouse/' --exclude='/.tmp/' --exclude='/data/memory/' \
+  --exclude='/data/calibration/' \
   --exclude='__pycache__/' --exclude='*.pyc' --exclude='.pytest_cache/' --exclude='.mypy_cache/' \
   --exclude='.ruff_cache/' --exclude='*.wav' --exclude='*.log' --exclude='*.jsonl' \
   "${root}/" "${host}:hexa/"
+
+# 1a. the calibration file: seeded once, never overwritten
+[[ ${#dry[@]} -gt 0 ]] || ssh "${host}" 'mkdir -p ~/hexa/data/calibration'
+rsync "${rsync_opts[@]}" --ignore-existing "${root}/data/calibration/" "${host}:hexa/data/calibration/" \
+  || [[ ${#dry[@]} -gt 0 ]]  # a dry run before the first sync has no data/ yet: not an error
 
 # 1b. the wheels PyPI has no wheel for (built here, never on the Pi): wheelhouse/*.whl
 "${root}/scripts/build_wheelhouse.sh" >/dev/null
