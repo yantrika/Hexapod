@@ -49,7 +49,7 @@ Scripts:
 |---|---|
 | `fetch_models.sh`, `prerender_phrases.py` | models and spoken phrases |
 | `sim_demo.py` | stand/sit/scripted motion in the window (`--script "walk:5,turn:90,stop"`, `--headless`) |
-| `teleop.py`, `control_window.py`, `joint_jog.py`, `viewer_check.py` | keyboard drive, key/button window, joint sliders, "does the window open" check |
+| `teleop.py`, `control_window.py`, `joint_jog.py` | keyboard drive, key/button window, joint sliders |
 | `cli.py` | typed commands: through the router (default) or raw Bridge commands (`--raw`) |
 | `say.py`, `mic_check.py`, `stt_check.py`, `web_check.py` | check speech out, microphone, recognition, the phone page |
 | `persona_eval.py` | a fixed conversation per persona mode against a chat model |
@@ -112,11 +112,11 @@ only (no side panels, no text drawn in it).
 | Without a phone | `python scripts/web_check.py --pin <PIN> --forward 1 --seconds 2` | the same page protocol driven from a script |
 | Servo tools without hardware | `python main.py --backend dryrun` and `tail -f logs/dryrun.log` | the per-leg joint targets the gait would send |
 
-A headless test (`tests/sim/test_viewer_setup.py`) checks the pieces the window depends on: a
+A headless test (in `tests/sim/test_sim_backend.py`) checks the pieces the window depends on: a
 fresh checkout generates its URDF, the URDF loads in PyBullet, the camera constants exist, and
 `--gui` is refused with `--backend dryrun|servo`. On a machine with a display,
-`python scripts/viewer_check.py` opens the window for two seconds, stands the robot up and exits 1
-(with the reason) if the window cannot open, so a broken viewer is noticed.
+`python scripts/sim_demo.py --pose stand --duration 2` opens the window for two seconds and exits 1
+(with the reason) if it cannot, so a broken viewer is noticed.
 
 ## Lint, types, commits
 

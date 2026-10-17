@@ -282,7 +282,8 @@ def test_the_script_runs_a_short_walk_end_to_end(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     out = tmp_path / "report.json"
-    code = tr.main(["--motions", "walk", "--seconds", "2", "--no-sensitivity", "--json", str(out)])
+    code = tr.main(["--motions", "walk", "--seconds", "2", "--no-sensitivity", "--json", str(out),
+                    "--markdown", str(out.with_suffix(".md"))])
     assert code == 0
     assert "## 1. What each joint type needs" in capsys.readouterr().out
     report = tr.load_report(out)

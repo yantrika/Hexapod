@@ -14,6 +14,7 @@ this machine only if it makes >= 3 tokens/s and the first token arrives within 5
 from __future__ import annotations
 
 import argparse
+import glob
 import json
 import os
 import statistics
@@ -35,7 +36,6 @@ import requests  # noqa: E402
 import config  # noqa: E402
 from body.process import BodyProbe, BodyProcess  # noqa: E402
 from bridge import make_bridge  # noqa: E402
-from scripts.thermal import read_temperature_c  # noqa: E402
 
 MIN_TOKENS_PER_S = 3.0
 MAX_FIRST_TOKEN_S = 5.0
@@ -44,6 +44,19 @@ PROMPTS = {
     60: "Tell me a short story about a small robot that learns to walk.",
 }
 
+
+
+def read_temperature_c() -> float | None:
+    """The hottest CPU/thermal-zone sensor in degrees C (None if none is exposed). Logged only."""
+    paths = glob.glob("/sys/class/thermal/thermal_zone*/temp")
+    values = []
+    for path in paths:
+        try:
+            with open(path) as handle:
+                values.append(int(handle.read().strip()) / 1000.0)
+        except (OSError, ValueError):
+            continue
+    return max(values) if values else None
 
 @dataclass
 class Reply:

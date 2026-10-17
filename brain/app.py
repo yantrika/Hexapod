@@ -23,6 +23,7 @@ from body.process import BodyProbe, BodyProcess
 from brain.arya import Arya, PersonaState
 from brain.brain_loop import BrainLoop
 from brain.chat import ChatBackend, ChatResponder, FakeChat, OllamaChat
+from brain.commandline import format_status
 from brain.context import ContextBuilder
 from brain.dialogue import Dialogue
 from brain.event_hub import EventHub
@@ -32,7 +33,6 @@ from brain.persona import Persona
 from brain.status_hub import StatusHub
 from brain.voice_loop import VoiceEvent, VoiceLoop
 from bridge import make_bridge, new_command
-from commandline import format_status
 from voice.audio import AudioSource, FileSource, MicSource, QueueSource
 from voice.playback import Playback, SoundDeviceSink
 from voice.ptt import PushToTalk, make_ptt

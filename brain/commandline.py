@@ -1,4 +1,4 @@
-"""Text commands for the manual front ends (``bridge_cli`` and the control window).
+"""Text commands for the manual front ends (``scripts/cli.py --raw`` and the control window).
 
 ``parse_line`` is the one parser both use: it turns a typed line into the
 ``(action, params)`` of a bridge command, and nothing else. ``format_status`` is the

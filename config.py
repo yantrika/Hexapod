@@ -259,10 +259,11 @@ ROUTER_ALIASES: dict[str, tuple[str, dict[str, object]]] = {
 # check, so every command phrase above routes exactly as before. Matched on the normalized text
 # after filler removal ("Arya, roast mode please" -> "roast mode").
 PERSONA_MODE_PHRASES = ("calm mode", "funny mode", "roast mode", "roast me")  # + "switch to ..."
-# Vosk small US hears "Arya" as "aria" (scripts/arya_check.py: 0 of 24 as "arya", 20 of 24 as "aria"
-# or "are you"), so a LEADING "aria" is dropped like the filler "arya" ("aria sit down"). Only
-# at the start, so a person called Aria ("my name is aria") keeps the name. The command grammar
-# lists "arya" (through the fillers) and hears it every time; "aria" is NOT in the grammar.
+# Vosk small US hears "Arya" as "aria" (measured with Piper speech: 0 of 24 as "arya", 20 of 24
+# as "aria" or "are you"), so a LEADING "aria" is dropped like the filler "arya" ("aria sit
+# down"). Only at the start, so a person called Aria ("my name is aria") keeps the name. The
+# command grammar lists "arya" (through the fillers) and hears it every time; "aria" is NOT in
+# the grammar.
 ROUTER_WAKE_VARIANTS = ("aria",)
 # "calm" is heard as "come" (the free text said "aria come mode" 3 times of 3).
 PERSONA_MODE_HEARD_AS = {"come": "calm"}

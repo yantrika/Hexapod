@@ -1,10 +1,13 @@
-"""End to end: typed text -> router -> bridge -> a real headless body (PyBullet DIRECT)."""
+"""scripts/cli.py: typed text -> router -> bridge -> a real headless body (PyBullet DIRECT), and the
+raw bridge-command mode (line parser and one end-to-end run)."""
 
 from __future__ import annotations
 
 import math
+import queue
 import subprocess
 import sys
+import threading
 import time
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -13,9 +16,10 @@ import pytest
 
 import config
 from body.process import BodyProbe, BodyProcess
+from brain.commandline import format_status, parse_line
 from brain.router import route
 from bridge import Status, make_bridge
-from scripts.brain_cli import BrainLoop, describe
+from scripts.cli import BrainLoop, describe
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -168,21 +172,112 @@ def test_describe_lines() -> None:
     assert "(nearest" in describe(route("I sat down"))
 
 
-def test_brain_cli_end_to_end_headless() -> None:
-    process = subprocess.Popen(
-        [sys.executable, "scripts/brain_cli.py", "--headless"],
-        cwd=ROOT, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-        text=True,
-    )
-    assert process.stdin is not None
-    for line, wait in (("walk forward", 2.5), ("what is a wave function", 0.3), ("stop", 0.7),
-                       ("quit", 0.0)):
-        process.stdin.write(line + "\n")
-        process.stdin.flush()
-        time.sleep(wait)
-    out, _ = process.communicate(timeout=30)
-    assert process.returncode == 0
-    assert "route: walk" in out and "<- accepted" in out
-    assert "[chat] what is a wave function" in out
-    assert "route: STOP" in out and "action=stop" in out
+class CliSession:
+    """scripts/cli.py as a real process: send a line, then wait for the output it must cause
+    (no fixed sleeps, so a loaded machine only makes it slower, not wrong)."""
+
+    def __init__(self, *args: str) -> None:
+        self.process = subprocess.Popen(
+            [sys.executable, "scripts/cli.py", *args, "--headless"],
+            cwd=ROOT, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            text=True,
+        )
+        self.out = ""
+        self._lines: queue.Queue[str | None] = queue.Queue()
+        threading.Thread(target=self._read, daemon=True).start()
+
+    def _read(self) -> None:
+        assert self.process.stdout is not None
+        for line in self.process.stdout:
+            self._lines.put(line)
+        self._lines.put(None)
+
+    def wait_for(self, text: str, timeout: float = 90.0) -> None:
+        end = time.monotonic() + timeout
+        while text not in self.out:
+            remaining = end - time.monotonic()
+            assert remaining > 0, f"timed out waiting for {text!r}; output so far:\n{self.out}"
+            try:
+                line = self._lines.get(timeout=remaining)
+            except queue.Empty:
+                continue
+            assert line is not None, f"cli exited before {text!r}; output:\n{self.out}"
+            self.out += line
+
+    def send(self, line: str) -> None:
+        assert self.process.stdin is not None
+        self.process.stdin.write(line + "\n")
+        self.process.stdin.flush()
+
+    def finish(self) -> str:
+        self.send("quit")
+        assert self.process.wait(timeout=30) == 0
+        while (line := self._lines.get(timeout=5)) is not None:
+            self.out += line
+        return self.out
+
+
+def test_router_mode_end_to_end_headless() -> None:
+    cli = CliSession()
+    cli.wait_for("ready.")
+    cli.send("walk forward")
+    cli.wait_for("<- accepted")
+    time.sleep(2.5)  # longer than the 1 s watchdog: only the keeper's heartbeats hold the walk
+    cli.send("what is a wave function")
+    cli.wait_for("[chat] what is a wave function")
+    cli.send("stop")
+    cli.wait_for("action=stop")
+    out = cli.finish()
+    assert "route: walk" in out and "route: STOP" in out
     assert "reason=watchdog" not in out  # the keeper held the walk for the 2.5 s
+
+
+
+@pytest.mark.parametrize(
+    ("line", "expected"),
+    [
+        ("stand", ("stand", {})),
+        ("  SIT  ", ("sit", {})),
+        ("wave", ("wave", {})),
+        ("stop", ("stop", {})),
+        ("walk", ("walk", {"direction": "fwd", "speed": 0.5})),
+        ("walk fwd 0.5", ("walk", {"direction": "fwd", "speed": 0.5})),
+        ("walk back 1", ("walk", {"direction": "back", "speed": 1.0})),
+        ("turn left", ("turn", {"direction": "left", "angle_deg": 90.0})),
+        ("turn right 45", ("turn", {"direction": "right", "angle_deg": 45.0})),
+        ("", None),
+        ("dance", None),
+        ("walk sideways", None),
+        ("walk fwd fast", None),
+        ("strafe left", ("walk", {"strafe": 1.0, "speed": 0.5})),
+        ("strafe right 0.8", ("walk", {"strafe": -1.0, "speed": 0.8})),
+        ("strafe", None),
+        ("strafe up", None),
+        ("turn", None),
+        ("turn up 10", None),
+        ("stand now", None),
+    ],
+)
+def test_parse_line(line: str, expected: tuple[str, dict] | None) -> None:
+    assert parse_line(line) == expected
+
+
+def test_format_status() -> None:
+    text = format_status(Status("rejected", 7, {"reason": "invalid_state"}, 1, 0.0))
+    assert "rejected" in text and "ref=7" in text and "reason=invalid_state" in text
+
+
+def test_raw_mode_end_to_end_headless() -> None:
+    cli = CliSession("--raw")
+    cli.wait_for("ready.")
+    cli.send("walk fwd 0.5")
+    cli.wait_for("<- accepted")
+    cli.send("bogus")
+    cli.wait_for("not a command")
+    cli.send("stop")
+    cli.wait_for("action=stop")
+    cli.send("sit")
+    cli.wait_for("action=sit")
+    out = cli.finish()
+    assert "<- accepted" in out and "not a command" in out
+    assert "<- done" in out and "action=stop" in out and "action=sit" in out

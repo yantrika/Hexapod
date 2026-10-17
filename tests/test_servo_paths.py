@@ -21,7 +21,7 @@ CODE_FOLDERS = ("body", "brain", "voice", "scripts", "web")
 
 
 def python_files() -> list[Path]:
-    found = [ROOT / name for name in ("config.py", "bridge.py", "commandline.py", "main.py")]
+    found = [ROOT / name for name in ("config.py", "bridge.py", "main.py")]
     for folder in CODE_FOLDERS:
         found += sorted((ROOT / folder).rglob("*.py"))
     return found

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Control window: keys, buttons and a command box for the hexapod. Tkinter, parent process.
 
-It owns the body process (like ``bridge_cli``) and talks to it ONLY through the
+It owns the body process (like ``scripts/cli.py``) and talks to it ONLY through the
 Bridge: it never touches the controller or a backend. All key logic is in
 ``scripts/control_logic.py`` (pure, unit tested); typed lines go through the shared
-``commandline.parse_line``. The PyBullet window is only the viewer; click this
+``brain.commandline.parse_line``. The PyBullet window is only the viewer; click this
 window to drive. On the dev laptop the PyBullet window needs the Mesa override (README).
 """
 
@@ -25,9 +25,9 @@ for _var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
     os.environ.setdefault(_var, "1")  # single-threaded BLAS, before numpy loads (also in the child)
 
 from body.process import BodyProcess  # noqa: E402
+from brain.commandline import HELP, format_status, parse_line  # noqa: E402
 from brain.status_hub import StatusHub  # noqa: E402
 from bridge import Status, make_bridge, new_command  # noqa: E402
-from commandline import HELP, format_status, parse_line  # noqa: E402
 from scripts.control_logic import (  # noqa: E402
     KEY_HELP,
     STATUS_COLOURS,

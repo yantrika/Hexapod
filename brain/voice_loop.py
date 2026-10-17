@@ -8,7 +8,7 @@
   (``brain/stt_decision.py``) chooses between the free-text result and the command-grammar
   result; every final is appended to the transcript log with both texts and confidences.
   Commands go through the bridge and the motion keeper exactly like
-  ``scripts/brain_cli.py``; the voice side never touches the controller or any joint angle.
+  ``scripts/cli.py``; the voice side never touches the controller or any joint angle.
 - Audio captured while hexa speaks is discarded (``SelfHearingGate``) and never fed to Vosk.
 - The voice loop itself says nothing about commands: speech after a command comes from the body's
   STATUS (``brain/dialogue.py``). A chat sentence goes to the LLM (``brain/chat.py``) only while
