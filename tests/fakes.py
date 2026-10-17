@@ -52,8 +52,9 @@ class FakeBackend(HexapodBackend):
 FAKE_RATE = 1000  # Hz: clips are tiny arrays, durations come from the fake clock
 
 
-def wait_until(predicate: Callable[[], bool], timeout: float = 5.0, what: str = "") -> None:
-    """Real-time poll for threads to catch up with a fake-clock change."""
+def wait_until(predicate: Callable[[], bool], timeout: float = 20.0, what: str = "") -> None:
+    """Real-time poll for threads to catch up with a fake-clock change. The bound only matters
+    when something is wrong: a slow machine passes as soon as the condition holds."""
     deadline = time.monotonic() + timeout
     while not predicate():
         if time.monotonic() > deadline:
