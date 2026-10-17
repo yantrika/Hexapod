@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """End-to-end latency: end of a spoken "sit down" (a WAV) to the first joint-target change.
 
-    python scripts/cool_run.py -- nice -n 19 python scripts/measure_e2e.py --trials 5
+    python scripts/measure_e2e.py --trials 5
 
 Piper renders "sit down" once (the voice from ``config``), then a real ``HexaApp`` (body process
 with the ``HEXA_BACKEND`` backend, real Vosk, fake chat, no audio output) listens to it through a
@@ -27,7 +27,7 @@ for _var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
 import config  # noqa: E402
 from body.process import BodyProbe  # noqa: E402
 from brain.app import AppOptions, HexaApp  # noqa: E402
-from scripts.cool_run import read_temperature_c  # noqa: E402
+from scripts.thermal import read_temperature_c  # noqa: E402
 from voice.audio import FileSource  # noqa: E402
 from voice.tts import PiperEngine, write_wav  # noqa: E402
 

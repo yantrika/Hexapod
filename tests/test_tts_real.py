@@ -1,6 +1,6 @@
 """The one real-audio check: real Piper, no speaker. Excluded by default (marker ``audio``).
 
-Run on a quiet machine: ``nice -n 19 pytest -m audio -s tests/test_tts_real.py``.
+Run it with ``pytest -m audio -s tests/test_tts_real.py``.
 It reports time to first audio and the real-time factor of the long-lived engine.
 """
 

@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """What push-to-talk saves: Vosk CPU and body tick time with PTT idle, PTT listening, and always.
 
-    python scripts/cool_run.py -- nice -n 19 python scripts/measure_ptt.py
+    python scripts/measure_ptt.py
 
 A speech mix (Piper renders it once, then Piper is closed) streams in real time into a real
 ``VoiceLoop`` (Vosk, 2 recognizers) beside a headless body. Three windows: ptt idle (nobody
 presses: the recognizers get no audio), ptt listening (held on the whole window) and always.
 For each: this process's CPU share (Vosk is the load) and the body's mean/worst tick work time.
-One process at a time; no sound is played.
+No sound is played.
 """
 
 from __future__ import annotations

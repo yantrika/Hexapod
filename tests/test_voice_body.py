@@ -1,7 +1,6 @@
 """End to end: Piper-rendered speech -> real Vosk -> router -> bridge -> a headless body.
 
-Skipped without the models. Run this file on its own (it spawns the body process):
-``nice -n 19 pytest tests/test_voice_body.py``.
+Skipped without the models. It spawns the body process.
 """
 
 from __future__ import annotations

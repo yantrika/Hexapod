@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """What the phone page costs: press-to-motion and release-to-command latency, idle CPU, peak temp.
 
-    python scripts/cool_run.py -- nice -n 19 python scripts/measure_web.py
+    python scripts/measure_web.py
 
 A real ``HexaApp`` (headless body process, fake STT and chat, no audio) with the web server on
 127.0.0.1 and a ``WebClient`` in this process:
@@ -18,7 +18,7 @@ A real ``HexaApp`` (headless body process, fake STT and chat, no audio) with the
             real Vosk decoding time comes on top and is measured by measure_voice.py).
   idle CPU  the web-server thread's CPU (from /proc, user + system) over 10 s with a client
             connected and idle, and over 10 s with nobody connected; the whole brain process too.
-  peak      the hottest sensor, sampled every second (the same sensors ``cool_run.py`` guards).
+  peak      the hottest sensor, sampled every second (``scripts/thermal.py``).
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ import config  # noqa: E402
 from body.process import BodyProbe  # noqa: E402
 from brain.app import AppOptions, HexaApp  # noqa: E402
 from brain.chat import FakeChat  # noqa: E402
-from scripts.cool_run import read_temperature_c  # noqa: E402
+from scripts.thermal import read_temperature_c  # noqa: E402
 from scripts.web_check import WebClient  # noqa: E402
 from tests.fakes import FakeStt, marker_block  # noqa: E402
 from voice.audio import QueueSource  # noqa: E402

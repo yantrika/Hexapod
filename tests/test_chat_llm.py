@@ -1,5 +1,5 @@
 """The one real-LLM check: a running Ollama with the configured model pulled. Excluded by default
-(marker ``llm``): ``pytest -m llm -s tests/test_chat_llm.py``. It heats the laptop; run it alone.
+(marker ``llm``): ``pytest -m llm -s tests/test_chat_llm.py``.
 It prints the streamed reply and the timings (first token, tokens per second)."""
 
 from __future__ import annotations

@@ -3,7 +3,6 @@
 Piper-rendered "sit down" and a chat sentence go in as an audio file (real Vosk, headless body,
 FakeChat): the robot sits, the chat sentence gets a fake reply, the process exits 0 and leaves no
 orphan. A second test sends SIGTERM / SIGINT to a running ``main.py``. Both skip without models.
-Run alone if the laptop is hot: ``pytest tests/test_main_smoke.py``.
 """
 
 from __future__ import annotations

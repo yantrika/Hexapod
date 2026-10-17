@@ -2,8 +2,7 @@
 """Measure the local Ollama model: first token, tokens per second, RAM, peak temperature, and the
 body's tick time while it generates. Needs a running Ollama server (config.OLLAMA_URL).
 
-    python scripts/cool_run.py --start-below 62 --kill-at 82 -- nice -n 19 \
-        python scripts/measure_chat.py
+    python scripts/measure_chat.py
     python scripts/measure_chat.py --with-voice       # plus Vosk listening and Piper idle
 
 Asks for a 20-token and a 60-token reply (``num_predict``), after one warm-up request that loads
@@ -36,7 +35,7 @@ import requests  # noqa: E402
 import config  # noqa: E402
 from body.process import BodyProbe, BodyProcess  # noqa: E402
 from bridge import make_bridge  # noqa: E402
-from scripts.cool_run import read_temperature_c  # noqa: E402
+from scripts.thermal import read_temperature_c  # noqa: E402
 
 MIN_TOKENS_PER_S = 3.0
 MAX_FIRST_TOKEN_S = 5.0
