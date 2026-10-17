@@ -1,4 +1,4 @@
-"""Step 5 checks: pure command arbitration."""
+"""Pure command arbitration."""
 
 from __future__ import annotations
 

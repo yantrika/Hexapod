@@ -1,4 +1,4 @@
-"""Step 3 checks: the pure tripod gait planner (no PyBullet)."""
+"""The pure tripod gait planner (no PyBullet)."""
 
 from __future__ import annotations
 

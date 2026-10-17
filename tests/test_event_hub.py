@@ -1,4 +1,4 @@
-"""Step 12b: the brain event hub: ordered, bounded, drop-oldest, never blocking a publisher."""
+"""The brain event hub: ordered, bounded, drop-oldest, never blocking a publisher."""
 
 from __future__ import annotations
 

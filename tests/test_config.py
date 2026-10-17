@@ -1,4 +1,4 @@
-"""Step 0 checks: the revised config is symmetric and complete."""
+"""The revised config is symmetric and complete."""
 
 from __future__ import annotations
 

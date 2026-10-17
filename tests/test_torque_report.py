@@ -1,4 +1,4 @@
-"""Step 10c: the torque report. Parsing, units, statistics and rendering need no simulation;
+"""The torque report. Parsing, units, statistics and rendering need no simulation;
 one short DIRECT-mode run checks that the script itself works end to end."""
 
 from __future__ import annotations

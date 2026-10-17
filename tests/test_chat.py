@@ -1,4 +1,4 @@
-"""Step 9: chat backends and the reply streamer (no real LLM: a stub HTTP server and FakeChat)."""
+"""Chat backends and the reply streamer (no real LLM: a stub HTTP server and FakeChat)."""
 
 from __future__ import annotations
 

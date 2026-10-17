@@ -1,4 +1,4 @@
-"""Step 13 (P1): the persona routes ("my name is X", "forget me", modes) and the regression that
+"""The persona routes ("my name is X", "forget me", modes) and the regression that
 every existing command phrase still routes exactly as before."""
 
 from __future__ import annotations
@@ -90,7 +90,7 @@ def test_ordinary_chat_that_mentions_the_words_is_still_chat(text: str) -> None:
     assert route(text).kind == "chat", text
 
 
-# -- the regression: the commands as they were before Step 13 ---------------------------------
+# -- the regression: the commands as they were before the persona routes -----------------------
 @pytest.mark.parametrize("phrase,expected", sorted(config.ROUTER_PHRASES.items()))
 def test_every_command_phrase_routes_as_before(phrase: str, expected: tuple[str, dict]) -> None:
     for text in (phrase, f"please {phrase}", f"hexa {phrase}", f"Arya, {phrase}"):

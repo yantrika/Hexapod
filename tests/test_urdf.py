@@ -1,4 +1,4 @@
-"""Step 2 checks: the generated URDF matches config and kinematics conventions."""
+"""The generated URDF matches config and kinematics conventions."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Step 13 (P1): the hard limits as code. Pass/fail tables for every sentence the robot speaks,
+"""The hard limits as code. Pass/fail tables for every sentence the robot speaks,
 and for every fact the memory may keep."""
 
 from __future__ import annotations

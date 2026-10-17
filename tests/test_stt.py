@@ -1,4 +1,4 @@
-"""Step 8b: VoskStt runs ONE model with TWO recognizers; both are fed, reset and flushed together.
+"""VoskStt runs ONE model with TWO recognizers; both are fed, reset and flushed together.
 
 Uses fake Vosk classes (no model needed); the real model runs in ``test_voice_loop.py``.
 """

@@ -1,4 +1,4 @@
-"""Step 9: chat in the voice loop. The safety rule: chat reaches the LLM only while the body is
+"""Chat in the voice loop. The safety rule: chat reaches the LLM only while the body is
 idle; any motion or stop silences it. FakeChat, a fake recognizer and an in-process bridge."""
 
 from __future__ import annotations

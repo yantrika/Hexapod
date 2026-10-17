@@ -1,4 +1,4 @@
-"""Step 13 (P1): the persona evaluation harness, run with FakeChat."""
+"""The persona evaluation harness, run with FakeChat."""
 
 from __future__ import annotations
 

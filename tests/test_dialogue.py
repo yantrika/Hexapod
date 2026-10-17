@@ -1,4 +1,4 @@
-"""Step 9: status -> pre-rendered phrase (brain/dialogue.py), with a fake clock."""
+"""Status -> pre-rendered phrase (brain/dialogue.py), with a fake clock."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Step 13 (P1): the persona section of the phone page: protocol validation, controller-only
+"""The persona section of the phone page: protocol validation, controller-only
 actions, and the whole path over a real loopback socket (page -> server -> Arya -> memory -> page).
 """
 

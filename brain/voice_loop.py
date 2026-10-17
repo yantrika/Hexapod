@@ -19,13 +19,13 @@
   between press and release (plus a short tail); other blocks are read and dropped, so Vosk spends
   no CPU, and the end of the utterance flushes the recognizer. A press is barge-in: hexa is
   silenced at once (``playback.clear(skip_tail=True)``) and the chat reply is cancelled. Without
-  one ("always") every block is fed, as in Step 8. In ptt mode a voice "stop" works only while
+  one ("always") every block is fed. In ptt mode a voice "stop" works only while
   listening; the control window STOP button and Space are the always-available stop.
-- Typed text (the phone page's ``say``, Step 12b) enters through ``submit_text()``: it is queued on
+- Typed text (the phone page's ``say``) enters through ``submit_text()``: it is queued on
   the same worker as a spoken final and routed and acted on identically (a stop goes out first,
   chat only while the body is idle, else "tell me after I stop"). It does not need listening, so
   a typed "stop" always works. Like a press it silences hexa and cancels a chat reply first.
-- Persona (Step 13): the router runs first and does not know the persona. A ``persona`` route ("my
+- Persona: the router runs first and does not know the persona. A ``persona`` route ("my
   name is X", "forget me", "roast mode" ...) is handed to ``PersonaHooks`` and never reaches the
   body or the LLM; a pending "say yes to confirm" is answered before anything else (but a stop word
   always goes out first); every utterance feeds the mood. "Stop roasting" only switches to calm

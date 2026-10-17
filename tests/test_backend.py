@@ -1,4 +1,4 @@
-"""Step 2 checks: the backend ABC and its hard-limit clamp layer."""
+"""The backend ABC and its hard-limit clamp layer."""
 
 from __future__ import annotations
 

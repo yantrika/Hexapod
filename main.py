@@ -15,7 +15,7 @@ SIGINT, SIGTERM and SIGHUP stop the robot, silence it, cancel chat, join the thr
 body process (real servos: sit down first, then let go), then exit 0. A startup problem exits 1
 with one clear line per problem on stderr.
 No TTY is needed (systemd): push-to-talk is then driven through ``HexaApp.set_listening`` (the
-phone page, Step 12). On a terminal, Enter toggles listening and `stop` + Enter sends stop.
+phone page). On a terminal, Enter toggles listening and `stop` + Enter sends stop.
 In push-to-talk mode a voice "stop" only works while listening; the control window STOP button
 and Space (``scripts/control_window.py``) are the always-available stop.
 """
@@ -56,9 +56,9 @@ def build_parser() -> argparse.ArgumentParser:
                         help="chat backend (fake = scripted)")
     parser.add_argument("--no-speak", action="store_true", help="no Piper, nothing is said aloud")
     parser.add_argument("--no-mic", action="store_true",
-                        help="no microphone (audio comes from the phone page, Step 12)")
+                        help="no microphone (typing and the phone page still work)")
     parser.add_argument("--web", action="store_true",
-                        help="phone control page on 127.0.0.1 (Step 12a; PIN printed at start)")
+                        help="phone control page on 127.0.0.1 (PIN printed at start)")
     parser.add_argument("--lan", action="store_true",
                         help="serve the page on every interface and print the phone URL(s) "
                              "(implies --web; plain HTTP: trusted networks only)")

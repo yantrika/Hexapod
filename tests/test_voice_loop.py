@@ -1,4 +1,5 @@
-"""Step 8 with the REAL Vosk model and Piper-rendered speech (no microphone, no speaker, no body).
+"""The voice loop with the REAL Vosk model and Piper-rendered speech (no microphone, no speaker,
+no body).
 
 Skipped when the models are missing. Commands are read from an in-process bridge.
 """
@@ -139,7 +140,7 @@ def test_hexas_own_voice_is_ignored_and_the_same_audio_later_is_obeyed(
     assert [c.action for c in rig.bridge.drain()] == ["walk"]
 
 
-# --- Step 8b: the command grammar recognizer ------------------------------------------------
+# --- the command grammar recognizer ------------------------------------------------
 def finals(rig: Rig) -> list[VoiceEvent]:
     return [e for e in rig.events if e.kind == "final" and e.text]
 

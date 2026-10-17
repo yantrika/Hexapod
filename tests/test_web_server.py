@@ -1,4 +1,4 @@
-"""Step 12a: the server over a real loopback socket, with a local bridge (no body process).
+"""The server over a real loopback socket, with a local bridge (no body process).
 
 Covers the handshake (PIN, rate limit, second controller, Origin), the page itself, the deadman and
 stop-on-disconnect end to end, the status line, and the architecture rule: the web package never
@@ -298,7 +298,7 @@ def test_the_web_package_never_imports_the_controller_the_gait_or_a_backend() ->
     assert "from bridge import" in server and "new_command" in server
 
 
-# --- Step 12b: hold-to-talk, typed text and events over a real socket ------------------------
+# --- hold-to-talk, typed text and events over a real socket ------------------------
 class VoiceRig(Rig):
     def __init__(self, bridge: Bridge, hub: StatusHub, server: WebServer, voice: FakeVoice,
                  events: EventHub, clock: FakeClock) -> None:

@@ -1,4 +1,4 @@
-"""Step 12b: typed text from the phone takes the spoken path; the app wires hold-to-talk.
+"""Typed text from the phone takes the spoken path; the app wires hold-to-talk.
 
 The first tests use the voice loop with a fake recognizer and FakeChat (no audio, no body); the
 last one runs the whole app with a REAL headless body process, the real Vosk model and a WAV

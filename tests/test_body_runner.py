@@ -1,4 +1,4 @@
-"""Step 5 checks: the body core in one process (local queues, fake backend, fake clock)."""
+"""The body core in one process (local queues, fake backend, fake clock)."""
 
 from __future__ import annotations
 

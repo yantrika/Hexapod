@@ -1,4 +1,4 @@
-"""Step 7 checks: the Piper wrapper against a fake ``piper`` executable (no model, no audio).
+"""The Piper wrapper against a fake ``piper`` executable (no model, no audio).
 
 The fake speaks Piper's protocol: ``-m MODEL --output_dir DIR -q``, one text line on stdin, the
 path of a WAV it wrote on stdout. Special lines make it crash (CRASH) or hang (HANG).

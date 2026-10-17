@@ -1,4 +1,4 @@
-"""Step 2 checks: PyBullet backend in DIRECT mode (no GUI anywhere in tests)."""
+"""PyBullet backend in DIRECT mode (no GUI anywhere in tests)."""
 
 from __future__ import annotations
 

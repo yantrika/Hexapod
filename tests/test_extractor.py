@@ -1,4 +1,4 @@
-"""Step 13 (P1): the memory extractor: the JSON schema, the saving rules, the thread behaviour."""
+"""The memory extractor: the JSON schema, the saving rules, the thread behaviour."""
 
 from __future__ import annotations
 

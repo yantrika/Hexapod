@@ -1,4 +1,4 @@
-"""Step 4 checks: the injectable clock and the fixed-rate loop."""
+"""The injectable clock and the fixed-rate loop."""
 
 from __future__ import annotations
 

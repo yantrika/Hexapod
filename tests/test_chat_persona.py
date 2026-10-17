@@ -1,4 +1,4 @@
-"""Step 13 (P1): the chat responder with the persona hooks: the output check before the TTS, the
+"""The chat responder with the persona hooks: the output check before the TTS, the
 neutral line, the history, the context builder, the turn callback. FakeChat, a stub playback."""
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""Step 7 checks: the clearable playback thread, with a fake engine, fake sink and fake clock.
+"""The clearable playback thread, with a fake engine, fake sink and fake clock.
 
 No sound device, no Piper: durations come from the fake clock (``tests/fakes.py``).
 """

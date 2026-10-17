@@ -1,4 +1,4 @@
-"""Step 9: the streamed-text sentence splitter (pure, no I/O)."""
+"""The streamed-text sentence splitter (pure, no I/O)."""
 
 from __future__ import annotations
 

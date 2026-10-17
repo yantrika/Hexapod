@@ -1,4 +1,4 @@
-"""Step 12a: the PIN guard and the safety logic (one controller, deadman, stop on disconnect).
+"""The PIN guard and the safety logic (one controller, deadman, stop on disconnect).
 
 Everything runs on a fake clock and a recording sender; the last tests use a real local ``Bridge``
 to prove ``stop`` takes the ``stop_event`` path even with a walk queued.
@@ -266,7 +266,7 @@ def test_stop_survives_a_full_command_queue() -> None:
     assert bridge.stop_event.is_set()
 
 
-# --- Step 12b: hold-to-talk and typed text ---------------------------------------------------
+# --- hold-to-talk and typed text ---------------------------------------------------
 class FakeVoice:
     """The voice side: records listening changes and typed text, in order."""
 

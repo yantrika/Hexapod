@@ -1,4 +1,4 @@
-"""Step 1 checks: leg FK/IK and the single body-frame conversion."""
+"""Leg FK/IK and the single body-frame conversion."""
 
 from __future__ import annotations
 

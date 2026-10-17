@@ -1,4 +1,4 @@
-"""Step 13 (P1): the whole app with Arya: a REAL dry-run body process, FakeChat, the phone page.
+"""The whole app with Arya: a REAL dry-run body process, FakeChat, the phone page.
 
 Typed lines go through the page's ``say``: the persona routes, the persona prompt, the memory
 extractor (the rule-based stand-in) and the persona events back to the page. Heavy (starts the

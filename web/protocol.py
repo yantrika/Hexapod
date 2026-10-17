@@ -1,11 +1,12 @@
 """Messages from the phone page: strict validation and the bridge parameters they become.
 
 Pure functions, no I/O and no clock. The page may send only ``walk`` (one combined message for
-every held move button), ``stop``, ``stand``, ``sit`` and ``wave``; since Step 12b also
+every held move button), ``stop``, ``stand``, ``sit`` and ``wave``; also
 ``ptt_press`` / ``ptt_release`` (hold-to-talk with the robot's microphone) and ``say`` (typed
-text). Those three never become bridge messages. Step 13 adds ``set_mode`` (calm, funny, roast),
-``set_speaker`` (a name or "guest"), ``forget_person`` (an id) and ``set_roast_ok`` (an id and a
-true/false): brain-side persona and memory actions, also never bridge messages. Numbers are
+text). Those three never become bridge messages. The persona messages are ``set_mode`` (calm,
+funny, roast), ``set_speaker`` (a name or "guest"), ``forget_person`` (an id) and
+``set_roast_ok`` (an id and a true/false): brain-side persona and memory actions, also never
+bridge messages. Numbers are
 clamped to [-1, 1]; anything else (an unknown action or field, a bool, a string, NaN, a nested
 value, bad JSON) is rejected and never reaches the bridge. The page never sends joint data.
 """

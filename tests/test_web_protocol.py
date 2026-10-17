@@ -1,4 +1,4 @@
-"""Step 12a: validation of the phone page's messages and the walk parameters they become."""
+"""Validation of the phone page's messages and the walk parameters they become."""
 
 from __future__ import annotations
 
@@ -59,7 +59,7 @@ def test_rejected_messages(raw: str | bytes) -> None:
         parse_message(raw)
 
 
-# --- Step 12b: hold-to-talk and typed text ---------------------------------------------------
+# --- hold-to-talk and typed text ---------------------------------------------------
 @pytest.mark.parametrize(("raw", "expected"), [
     (message(action="ptt_press"), Request("ptt_press")),
     (message(action="ptt_release"), Request("ptt_release")),

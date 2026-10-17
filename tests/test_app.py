@@ -1,4 +1,4 @@
-"""Step 10b: HexaApp with fakes (a real headless body process, no Vosk, no audio devices)."""
+"""HexaApp with fakes (a real headless body process, no Vosk, no audio devices)."""
 
 from __future__ import annotations
 

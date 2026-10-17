@@ -1,4 +1,4 @@
-"""Step 13 (P1): the persona prompt per mode, the straight-answer triggers and the mood."""
+"""The persona prompt per mode, the straight-answer triggers and the mood."""
 
 from __future__ import annotations
 

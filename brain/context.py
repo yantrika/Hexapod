@@ -1,4 +1,4 @@
-"""Build the prompt for one reply and keep it under a token budget (Step 13).
+"""Build the prompt for one reply and keep it under a token budget.
 
 A small model on a Pi is slow in proportion to its prompt, so the prompt is short and capped:
 

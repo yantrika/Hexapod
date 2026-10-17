@@ -1,4 +1,4 @@
-"""Step 8: self-hearing protection and the voice loop's logic, with a fake recognizer.
+"""Self-hearing protection and the voice loop's logic, with a fake recognizer.
 
 No microphone, no speaker, no Vosk model: blocks are marked with a number and ``FakeStt`` turns
 a marker into scripted results. The real recognizer is exercised in ``test_voice_loop.py``.

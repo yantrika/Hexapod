@@ -1,4 +1,4 @@
-"""The phone page server (Step 12a): one static page and one WebSocket on one port.
+"""The phone page server: one static page and one WebSocket on one port.
 
 Runs in the brain process on its own thread and event loop. It talks to the body ONLY through the
 ``Bridge`` (``bridge.send(new_command(...))``) and reads statuses from a ``StatusHub``
@@ -8,7 +8,7 @@ gait or a backend (``tests/test_web_server.py`` enforces it).
 ``websockets`` answers plain HTTP too (``process_request``), so no second web framework is needed.
 The WebSocket handshake carries the PIN (``/ws?pin=...``) and is refused with 401 (wrong PIN),
 429 (locked out), 403 (foreign Origin) or 409 (someone else is in control). Plain HTTP on a LAN:
-use it only on a network you trust. Step 12b adds hold-to-talk with the ROBOT's microphone (no
+use it only on a network you trust. It also offers hold-to-talk with the ROBOT's microphone (no
 audio ever comes from the page, so no HTTPS) and typed text; brain events (heard, route, said,
 listening) reach the page through a bounded drop-oldest ``EventHub`` subscription.
 """

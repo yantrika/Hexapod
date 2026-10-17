@@ -1,4 +1,4 @@
-"""Step 6 end to end: typed text -> router -> bridge -> a real headless body (PyBullet DIRECT)."""
+"""End to end: typed text -> router -> bridge -> a real headless body (PyBullet DIRECT)."""
 
 from __future__ import annotations
 

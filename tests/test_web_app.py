@@ -1,4 +1,4 @@
-"""Step 12a: the phone page against a REAL headless body process (PyBullet DIRECT).
+"""The phone page against a REAL headless body process (PyBullet DIRECT).
 
 Heavy (it starts the physics body): run it alone, through the heat guard:
 ``python scripts/cool_run.py -- nice -n 19 pytest tests/test_web_app.py``.

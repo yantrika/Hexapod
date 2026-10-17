@@ -1,4 +1,4 @@
-"""Arya's character: three talking modes, a small mood, and the system prompt (Step 13).
+"""Arya's character: three talking modes, a small mood, and the system prompt.
 
 The persona changes ONLY how Arya talks. It never touches the router, a command, the body or any
 safety rule: ``route()`` runs first and is not told which mode is on. The character sheet (name,

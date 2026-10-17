@@ -1,4 +1,4 @@
-"""Step 10: the push-to-talk state machine (pure, fake clock) and the thread-safe wrapper."""
+"""The push-to-talk state machine (pure, fake clock) and the thread-safe wrapper."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Step 10: the instant filler. A slow reply gets ONE pre-rendered filler; a fast one gets none."""
+"""The instant filler. A slow reply gets ONE pre-rendered filler; a fast one gets none."""
 
 from __future__ import annotations
 

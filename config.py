@@ -2,7 +2,7 @@
 
 Single source of truth for geometry, joint limits, clamp ranges, timing,
 router, audio, paths and model settings. No other module should hard-code
-these values (see ``plan.md`` section 7).
+these values (see ``docs/DEVELOPMENT.md``).
 
 Lengths are metres; angles are radians unless a name ends in ``_DEG``.
 Values marked PLACEHOLDER are to be tuned against the URDF and real servos.
@@ -108,7 +108,7 @@ BODY_THICKNESS_M = 0.04
 LINK_RADIUS_M = 0.008
 # MASSES ARE PLACEHOLDERS, NOT MEASURED: weigh the real body (battery, Pi, boards, wiring) and
 # every servo + bracket + printed part, then replace these numbers. Every torque and power
-# figure from scripts/torque_report.py scales with them (see docs/TORQUE_REPORT.md).
+# figure from scripts/torque_report.py scales with them (see docs/HARDWARE.md).
 BODY_MASS_KG = 0.6  # PLACEHOLDER: plate, Pi 5, battery, PCA9685 boards, wiring
 LINK_MASS_KG = {  # PLACEHOLDER, per link, including the servo that moves it
     "coxa": 0.03,
@@ -255,7 +255,7 @@ ROUTER_ALIASES: dict[str, tuple[str, dict[str, object]]] = {
     "sat down": ("sit", {}),
 }
 
-# Persona routes (Step 13): handled by code in the brain, never by the LLM, and only after the stop
+# Persona routes: handled by code in the brain, never by the LLM, and only after the stop
 # check, so every command phrase above routes exactly as before. Matched on the normalized text
 # after filler removal ("Arya, roast mode please" -> "roast mode").
 PERSONA_MODE_PHRASES = ("calm mode", "funny mode", "roast mode", "roast me")  # + "switch to ..."
@@ -317,7 +317,7 @@ PTT_TAIL_S = 0.5  # after release the recognizer keeps listening this long, then
 # pre-rendered filler (the next of these, in turn) so the user never waits in silence.
 FILLER_DELAY_S = 0.8
 FILLER_PHRASES = ("hmm", "let_me_think", "one_moment")
-# --- Phone web page (Step 12a) --------------------------------------------
+# --- Phone web page --------------------------------------------
 WEB_PORT = 8765
 WEB_PIN: str | None = None  # None: HEXA_WEB_PIN, else a random 6-digit PIN printed at start
 WEB_PIN_MAX_FAILURES = 5  # wrong PINs from one address within WEB_PIN_WINDOW_S lock it out ...
@@ -333,7 +333,7 @@ WEB_MAX_INVALID = 20  # this many rejected messages close the connection
 WEB_PING_S = 5.0  # WebSocket keepalive ping (a vanished phone is noticed, then `stop`)
 WEB_CLOSE_S = 1.0  # a client that ignores the close handshake is dropped after this
 WEB_SENT_MEMORY = 64  # command seqs remembered to label statuses
-# --- Phone page: hold-to-talk with the robot's microphone (Step 12b) -------
+# --- Phone page: hold-to-talk with the robot's microphone -------
 WEB_PTT_MAX_S = 10.0  # the SERVER releases push-to-talk after this long, whatever the page does
 WEB_SAY_MAX_CHARS = 120  # longest typed `say` text
 WEB_SAY_MIN_INTERVAL_S = 0.3  # at most one typed `say` per this (a flood is refused)
@@ -370,7 +370,7 @@ TTS_PHRASES: dict[str, str] = {
     "something_wrong": "Something went wrong.",
     "cant_think": "I can't think right now.",
     "tell_me_after_stop": "Tell me after I stop.",
-    # Step 13 (P1): persona and memory answers that need no name in them
+    # Persona and memory answers that need no name in them
     "persona_blocked": "Let's talk about something else.",
     "say_yes_to_confirm": "Say yes to confirm.",
     "forget_done": "Okay, I have forgotten you.",
@@ -388,7 +388,7 @@ TTS_PHRASES: dict[str, str] = {
 # Short name -> directory under assets/vosk. The default is the one the robot uses and the only
 # one fetch_models.sh downloads; the others are fetched only with --all-models.
 VOSK_MODELS = {
-    "us": "vosk-model-small-en-us-0.15",  # the chosen model (owner decision, Step 8b)
+    "us": "vosk-model-small-en-us-0.15",  # the chosen model (owner decision)
     "in": "vosk-model-small-en-in-0.4",  # Indian English: slower, not used, kept for comparison
 }
 VOSK_MODEL_DEFAULT = "us"
@@ -401,7 +401,7 @@ STT_STOP_CONF = 0.5  # a grammar stop word at least this confident stops at once
 STT_GRAMMAR_CONF = 0.75  # mean word confidence a grammar command needs
 STT_GRAMMAR_EXTRA_WORDS = 1  # free text may have this many words more than the grammar phrase
 STT_STOP_EXTRA_WORDS = 2  # the same for a stop word (a false stop is harmless, a miss is not)
-TRANSCRIPT_LOG = LOG_DIR / "transcripts.jsonl"  # one JSON line per final result (dataset, Step 9b)
+TRANSCRIPT_LOG = LOG_DIR / "transcripts.jsonl"  # one JSON line per final result (dataset)
 VOSK_MODEL_PATH = VOSK_DIR / VOSK_MODELS[VOSK_MODEL_DEFAULT]
 PIPER_BINARY = PIPER_DIR / "piper" / "piper"  # standalone binary, ONE long-lived subprocess
 # TO REPLACE THE SPEAKING VOICE: change PIPER_VOICE (a path in https://huggingface.co/rhasspy/
@@ -412,7 +412,7 @@ PIPER_MODEL_PATH = PIPER_DIR / (PIPER_VOICE.rsplit("/", 1)[-1] + ".onnx")
 # threads take about 2.2 cores and double the body tick time on the dev laptop).
 PIPER_NICE = 0  # extra niceness for the Piper process (0 = none)
 PIPER_CPU_LIST: str | None = None  # taskset CPU list, e.g. "3"; None = any CPU
-# --- Chat (Step 9): the LLM is ONLY for conversation, never in the command path ------------------
+# --- Chat: the LLM is ONLY for conversation, never in the command path ------------------
 # Real-model speed on the dev laptop (no AVX): qwen2.5:0.5b makes about 1.5 tokens/s, so chat is
 # developed against FakeChat here and the real model is timed on the Pi 5. TO REPLACE THE MODEL:
 # change OLLAMA_MODEL and pull it yourself: docker exec -it ollama ollama pull <name>
@@ -432,7 +432,7 @@ CHAT_SYSTEM_PROMPT = (
     "asked directly."
 )
 
-# --- Persona, memory and context (Step 13, P1) ---------------------------------------------
+# --- Persona, memory and context ---------------------------------------------
 # The persona only changes how Arya TALKS. Commands, the router and safety are identical in every
 # mode. The word lists and the character sheet live in data/persona/*.toml, not in code.
 PERSONA_FILE = PERSONA_DIR / "arya.toml"

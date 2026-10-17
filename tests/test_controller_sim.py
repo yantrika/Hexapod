@@ -1,4 +1,4 @@
-"""Step 4 checks: the controller driving the PyBullet robot (DIRECT mode, fake clock).
+"""The controller driving the PyBullet robot (DIRECT mode, fake clock).
 
 Prints the measured numbers (``pytest -s``).
 """

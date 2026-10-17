@@ -1,4 +1,4 @@
-"""Step 10b: the end-to-end smoke test of ``main.py`` as a real process.
+"""The end-to-end smoke test of ``main.py`` as a real process.
 
 Piper-rendered "sit down" and a chat sentence go in as an audio file (real Vosk, headless body,
 FakeChat): the robot sits, the chat sentence gets a fake reply, the process exits 0 and leaves no

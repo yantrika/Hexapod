@@ -1,4 +1,4 @@
-"""Step 10b: the rotating log file."""
+"""The rotating log file."""
 
 from __future__ import annotations
 

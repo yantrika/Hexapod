@@ -1,4 +1,4 @@
-"""Step 13 (P1): Arya's state, speaker, forget flow, recall, mood events and chat hooks."""
+"""Arya's state, speaker, forget flow, recall, mood events and chat hooks."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Step 5 checks with real spawned body processes (PyBullet DIRECT), kept light.
+"""With real spawned body processes (PyBullet DIRECT), kept light.
 
 Wall-clock bound tests carry ``@pytest.mark.timing`` (run them on a quiet machine with
 ``pytest -m timing``). One body is shared by most tests (spawning costs about a second);

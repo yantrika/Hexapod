@@ -1,4 +1,4 @@
-"""Step 5 checks: the bridge_cli line parser and one end-to-end run."""
+"""The bridge_cli line parser and one end-to-end run."""
 
 from __future__ import annotations
 

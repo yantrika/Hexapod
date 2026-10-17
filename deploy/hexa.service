@@ -1,7 +1,7 @@
 # systemd unit for hexa on the Raspberry Pi. WRITTEN, NOT INSTALLED, NOT ENABLED.
 #
 # RULE (AGENTS.md): a unit with a hardware backend must NEVER be enabled at boot until the kill
-# switch and the servo calibration steps (plan.md 11e/11f) are done. This copy runs the DRY-RUN
+# switch and the servo calibration steps (docs/ROADMAP.md, servo bring-up) are done. This copy runs the DRY-RUN
 # backend, which moves nothing. Installing it is the owner's job, in the owner's own session:
 #   sudo cp ~/hexa/deploy/hexa.service /etc/systemd/system/hexa.service
 #   sudo systemctl daemon-reload

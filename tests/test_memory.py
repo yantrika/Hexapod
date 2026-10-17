@@ -1,4 +1,4 @@
-"""Step 13 (P1): the memory database: CRUD, forget, migrations, file mode, threads."""
+"""The memory database: CRUD, forget, migrations, file mode, threads."""
 
 from __future__ import annotations
 

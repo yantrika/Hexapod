@@ -1,4 +1,4 @@
-"""Step 6 checks: the motion keeper with a fake clock."""
+"""The motion keeper with a fake clock."""
 
 from __future__ import annotations
 

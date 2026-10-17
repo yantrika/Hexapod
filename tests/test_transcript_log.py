@@ -1,4 +1,4 @@
-"""Step 8b: the transcript log never raises and writes one JSON line per record."""
+"""The transcript log never raises and writes one JSON line per record."""
 
 from __future__ import annotations
 

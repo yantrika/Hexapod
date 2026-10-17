@@ -1,6 +1,6 @@
 """Arya's memory: people, facts, summaries and (later) face embeddings in one SQLite file.
 
-The brain process owns the database; nothing else opens it (vision, from P3 on, only sends
+The brain process owns the database; nothing else opens it (the planned vision process only sends
 events). All access goes through ONE class, ``Memory``, which is thread-safe (one connection, one
 lock) because the voice worker, the extractor thread and the web server all use it. The file is
 ``config.MEMORY_DB_PATH`` (``data/memory/arya.db``): gitignored, excluded from ``sync_to_pi.sh``
@@ -9,7 +9,7 @@ and created with mode 600 in a directory with mode 700.
 Schema versions are applied in order by ``MIGRATIONS`` (the version lives in ``meta``); a database
 from a newer program is refused rather than damaged. ``forget_person`` deletes the person's
 facts, summaries, face embeddings and row in ONE transaction. Face embeddings are created now but
-unused until P4; their bytes never go into a log.
+unused until face recognition is built (docs/ROADMAP.md); their bytes never go into a log.
 
 The unknown speaker is ``config.GUEST_NAME`` and has no row: nothing is remembered about a guest.
 """
@@ -215,8 +215,8 @@ class Memory:
         return [PersonSummary(row[0], row[1], row[2], row[3], bool(row[4])) for row in rows]
 
     def set_roast_ok(self, person_id: int, ok: bool) -> bool:
-        """Store whether Arya may roast this person on her own (P5). False: nobody has that id.
-        Roast MODE is not gated by it."""
+        """Store whether Arya may roast this person on her own (planned auto-roast). False: nobody
+        has that id. Roast MODE is not gated by it."""
         with self._lock:
             cursor = self._db.execute("UPDATE people SET roast_ok = ? WHERE id = ?",
                                       (int(ok), person_id))
@@ -287,7 +287,7 @@ class Memory:
             return int(self._db.execute(
                 "SELECT COUNT(*) FROM summaries WHERE person_id = ?", (person_id,)).fetchone()[0])
 
-    # -- face embeddings (unused until P4; the bytes are never logged) -------------------------
+    # -- face embeddings (unused until face recognition is built; the bytes are never logged) ----
     def add_embedding(self, person_id: int, vector: bytes) -> bool:
         with self._lock:
             if not vector or self.person_by_id(person_id) is None:

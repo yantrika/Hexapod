@@ -1,4 +1,4 @@
-"""Step 8: audio sources (no microphone, no sound card)."""
+"""Audio sources (no microphone, no sound card)."""
 
 from __future__ import annotations
 

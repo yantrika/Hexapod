@@ -1,4 +1,4 @@
-"""Step 8: one reader of the status queue, many subscribers, a stuck one blocks nobody."""
+"""One reader of the status queue, many subscribers, a stuck one blocks nobody."""
 
 from __future__ import annotations
 

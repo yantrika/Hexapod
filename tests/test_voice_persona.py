@@ -1,4 +1,4 @@
-"""Step 13 (P1): the voice loop with persona hooks: persona routes never reach the body or the
+"""The voice loop with persona hooks: persona routes never reach the body or the
 LLM, a yes answers "say yes to confirm", commands and stops are untouched in every mode."""
 
 from __future__ import annotations

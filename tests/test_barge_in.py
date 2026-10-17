@@ -1,4 +1,4 @@
-"""Step 10: push-to-talk in the voice loop and barge-in. No microphone, no real LLM."""
+"""Push-to-talk in the voice loop and barge-in. No microphone, no real LLM."""
 
 from __future__ import annotations
 
@@ -221,7 +221,7 @@ def test_a_stop_word_while_listening_still_stops_at_once() -> None:
         made.close()
 
 
-# --- "always" mode: the Step 8 behaviour is unchanged --------------------------------------------
+# --- "always" mode: the earlier behaviour is unchanged --------------------------------------------
 def test_always_mode_feeds_every_block_and_still_gates_hexas_voice() -> None:
     speaking = threading.Event()
     made = Rig(ptt=False, speaking=speaking)

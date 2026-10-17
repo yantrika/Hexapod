@@ -1,4 +1,4 @@
-"""Step 10b: startup checks give one clear line per problem, and main exits 1 on them."""
+"""Startup checks give one clear line per problem, and main exits 1 on them."""
 
 from __future__ import annotations
 

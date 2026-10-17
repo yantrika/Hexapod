@@ -1,4 +1,4 @@
-"""Step 3 checks: the gait walks the PyBullet robot (DIRECT mode, no GUI).
+"""The gait walks the PyBullet robot (DIRECT mode, no GUI).
 
 Each test runs 10 s of sim time after a 2 s ramp-up (see ``walk_harness``) and
 prints the measured numbers (``pytest -s`` to see them).

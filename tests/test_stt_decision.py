@@ -1,4 +1,4 @@
-"""Step 8b: which recognizer to trust. Pure functions; the hypotheses below are the REAL results
+"""Which recognizer to trust. Pure functions; the hypotheses below are the REAL results
 the grammar recognizer gave on Piper-rendered speech (see test_voice_loop.py for the live run)."""
 
 from __future__ import annotations

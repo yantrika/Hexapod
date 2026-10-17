@@ -48,7 +48,7 @@ class FakeBackend(HexapodBackend):
         pass
 
 
-# --- speech doubles (Step 7): fake engine and sink driven by a fake clock ---------------------
+# --- speech doubles fake engine and sink driven by a fake clock ---------------------
 FAKE_RATE = 1000  # Hz: clips are tiny arrays, durations come from the fake clock
 
 
@@ -157,7 +157,7 @@ class FakeSink:
         self.closed = True
 
 
-# --- recognizer double (Step 8) -----------------------------------------------------------------
+# --- recognizer double -----------------------------------------------------------------
 class FakeStt:
     """An SttEngine driven by block markers: a block filled with value *v* makes ``feed`` return
     ``script[v]`` as events (value 0 = silence, no events). Records what it was fed."""
@@ -197,7 +197,7 @@ def marker_block(value: int, size: int = 100) -> np.ndarray:
     return np.full(size, value, dtype=np.int16)
 
 
-# --- chat and dialogue doubles (Step 9) ---------------------------------------------------------
+# --- chat and dialogue doubles ---------------------------------------------------------
 class StubPlayback:
     """Records what the chat responder, the dialogue and the voice loop ask a Playback to do."""
 

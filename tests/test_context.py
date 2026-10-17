@@ -1,4 +1,4 @@
-"""Step 13 (P1): the context builder and its trimming (oldest first, under the budget)."""
+"""The context builder and its trimming (oldest first, under the budget)."""
 
 from __future__ import annotations
 

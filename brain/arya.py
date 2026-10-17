@@ -1,4 +1,4 @@
-"""Arya: the persona, the speaker, the memory and the mode, in one object (Step 13, P1).
+"""Arya: the persona, the speaker, the memory and the mode, in one object.
 
 Arya never touches the body. She decides how replies TALK (mode, mood, who is speaking, what is
 remembered) and answers the persona routes the router found ("my name is X", "forget me", "what do
@@ -205,7 +205,8 @@ class Arya:
 
     def set_roast_ok(self, person_id: int, ok: bool) -> bool:
         """The page's roast_ok toggle. It does not change what roast MODE does (that applies to
-        everyone who is talking to Arya); it is what the later auto-roast (P5) asks first."""
+        everyone who is talking to Arya); it is what the planned auto-roast (docs/ROADMAP.md)
+        asks first."""
         if self.memory is None or not self.memory.set_roast_ok(person_id, ok):
             return False
         self._changed()

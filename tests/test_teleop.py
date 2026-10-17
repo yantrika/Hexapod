@@ -1,4 +1,4 @@
-"""Step 4 checks: teleop's key mapping is pure and tested without a GUI."""
+"""Teleop's key mapping is pure and tested without a GUI."""
 
 from __future__ import annotations
 

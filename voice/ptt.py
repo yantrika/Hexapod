@@ -2,8 +2,8 @@
 
 ``ptt_step`` is the state machine as a pure function (no clock, no threads): a state, an event and
 the time in, the next state out. ``PushToTalk`` wraps it with a lock and an injected clock so any
-thread may call ``press()`` / ``release()`` (a terminal key, the control window, later the phone
-page of Step 12).
+thread may call ``press()`` / ``release()`` (a terminal key, the control window, the phone
+page).
 
     idle --press--> listening --release--> tail --(PTT_TAIL_S passes)--> idle
                         ^                    |

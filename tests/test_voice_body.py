@@ -1,4 +1,4 @@
-"""Step 8 end to end: Piper-rendered speech -> real Vosk -> router -> bridge -> a headless body.
+"""End to end: Piper-rendered speech -> real Vosk -> router -> bridge -> a headless body.
 
 Skipped without the models. Run this file on its own (it spawns the body process):
 ``nice -n 19 pytest tests/test_voice_body.py``.

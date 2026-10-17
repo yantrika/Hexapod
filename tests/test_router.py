@@ -1,4 +1,4 @@
-"""Step 6 checks: the router is a pure function (no PyBullet, no processes, no clock)."""
+"""The router is a pure function (no PyBullet, no processes, no clock)."""
 
 from __future__ import annotations
 
@@ -89,7 +89,7 @@ def test_negative_goes_to_chat(text: str) -> None:
 
 
 def test_stop_anywhere_is_intentional_and_errs_on_the_safe_side() -> None:
-    """Documented tradeoff (plan.md defaults row 6): a stop word in ANY sentence stops the
+    """Documented tradeoff (a stop word anywhere stops): a stop word in ANY sentence stops the
     robot. A false stop is harmless; a missed stop is not."""
     for sentence in ("do not stop talking", "I can't stop laughing", "never stop believing"):
         result = route(sentence)

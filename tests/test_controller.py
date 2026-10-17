@@ -1,4 +1,4 @@
-"""Step 4 checks: the controller state machine (fake backend, fake clock, no PyBullet)."""
+"""The controller state machine (fake backend, fake clock, no PyBullet)."""
 
 from __future__ import annotations
 
