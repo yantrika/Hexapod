@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import math
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 import pytest
 
 import config
 from body import kinematics
-from body.urdf import build_urdf
+from body.urdf import build_urdf, ensure_urdf
 
 
 @pytest.fixture(scope="module")
@@ -27,8 +28,21 @@ def _floats(text: str | None) -> list[float]:
     return [float(v) for v in text.split()]
 
 
-def test_committed_urdf_is_up_to_date() -> None:
-    assert config.URDF_PATH.read_text() == build_urdf()
+def test_ensure_urdf_creates_a_missing_file_and_its_folder(tmp_path: Path) -> None:
+    target = tmp_path / "assets" / "urdf" / "hexapod.urdf"
+    assert ensure_urdf(target) == target
+    assert target.read_text() == build_urdf()
+
+
+def test_ensure_urdf_rewrites_a_stale_file_and_leaves_a_fresh_one_alone(tmp_path: Path) -> None:
+    target = tmp_path / "hexapod.urdf"
+    target.write_text("<robot name='old geometry'/>")
+    ensure_urdf(target)
+    assert target.read_text() == build_urdf()
+    before = target.stat().st_mtime_ns
+    ensure_urdf(target)
+    assert target.stat().st_mtime_ns == before  # nothing rewritten, no stray partial files
+    assert [p.name for p in tmp_path.iterdir()] == ["hexapod.urdf"]
 
 
 def test_has_18_revolute_joints_in_config_names(robot: ET.Element) -> None:

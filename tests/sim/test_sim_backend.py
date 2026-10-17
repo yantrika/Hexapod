@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import math
+import os
+import subprocess
+import sys
 from collections.abc import Iterator
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -116,3 +120,48 @@ def test_physics_time_follows_elapsed_wall_time_at_240_hz(sim: SimBackend, tick_
         elapsed += dt
     one_step = 1.01 / config.PHYSICS_HZ  # less than one step is left over
     assert stepped == pytest.approx(2.0, abs=one_step)
+
+
+def test_the_window_settings_exist_and_are_sane() -> None:
+    """The viewer is only a camera on the same robot: these are all it needs from config."""
+    assert config.GUI_CAMERA_DISTANCE_M > 0 and -90.0 <= config.GUI_CAMERA_PITCH_DEG < 0.0
+    assert config.GUI_CAMERA_HZ > 0 and isinstance(config.GUI_FOLLOW_CAMERA, bool)
+    assert isinstance(config.GUI_SHADOWS, bool) and isinstance(config.SIM_HEADLESS, bool)
+
+
+def test_the_generated_urdf_loads_in_pybullet(tmp_path: Path) -> None:
+    from body.urdf import ensure_urdf
+
+    backend = SimBackend(gui=False, urdf_path=ensure_urdf(tmp_path / "hexapod.urdf"))
+    try:
+        assert len(backend.get_joint_angles()) == config.DOF
+    finally:
+        backend.close()
+
+
+def test_a_fresh_checkout_starts_the_simulator_headless(tmp_path: Path) -> None:
+    """Copy the tracked files only (no assets, no URDF), start the sim there, and see the model
+    appear: nobody has to run a generator first."""
+    try:
+        listing = subprocess.run(["git", "ls-files", "-z"], cwd=config.PROJECT_ROOT, check=True,
+                                 capture_output=True).stdout.split(b"\0")
+    except (OSError, subprocess.CalledProcessError):
+        pytest.skip("not a git checkout")
+    for raw in filter(None, listing):
+        name = raw.decode()
+        source = config.PROJECT_ROOT / name
+        if source.is_file():
+            (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
+            (tmp_path / name).write_bytes(source.read_bytes())
+    assert not (tmp_path / "assets" / "urdf" / "hexapod.urdf").exists()
+    script = ("from body.sim_backend import SimBackend\n"
+              "backend = SimBackend(gui=False)\n"
+              "print('joints', len(backend.get_joint_angles()))\n"
+              "backend.close()\n")
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    result = subprocess.run([sys.executable, "-c", script], cwd=tmp_path, env=env, text=True,
+                            capture_output=True, timeout=120)
+    assert result.returncode == 0, result.stderr
+    assert f"joints {config.DOF}" in result.stdout
+    assert (tmp_path / "assets" / "urdf" / "hexapod.urdf").is_file()
+

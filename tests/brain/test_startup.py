@@ -131,6 +131,15 @@ def test_main_rejects_a_bad_log_level_and_a_missing_audio_file(
     assert code == 1  # a missing file (or a missing model) both end in a clean exit 1
 
 
+@pytest.mark.parametrize("backend", ["dryrun", "servo"])
+def test_the_window_is_refused_without_the_simulator(
+    backend: str, capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    code = main.main(["--gui", "--backend", backend, "--no-speak", "--no-mic", "--chat", "fake",
+                      "--log-file", str(tmp_path / "x.log")])
+    assert code == 1 and "--gui needs the simulator" in capsys.readouterr().err
+
+
 def test_the_defaults_and_flag_exclusion() -> None:
     args = main.build_parser().parse_args([])
     assert args.listen == config.LISTEN_MODE and not args.gui and args.chat == "ollama"
