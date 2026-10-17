@@ -103,10 +103,10 @@ class ScriptRunner:
         while self.alive and elapsed < seconds:
             elapsed += self.tick(heartbeat)
 
-    def run_until_idle(self, limit_s: float = 15.0) -> None:
+    def run_until_idle(self, limit_s: float = 15.0, heartbeat: bool = False) -> None:
         elapsed = 0.0
         while self.alive and self.controller.state not in IDLE and elapsed < limit_s:
-            elapsed += self.tick()
+            elapsed += self.tick(heartbeat)
 
     def step(self, name: str, value: float | None) -> None:
         c = self.controller
@@ -123,7 +123,7 @@ class ScriptRunner:
         elif name == "turn":
             result = c.turn("left", value if value is not None else 90.0)
             if result.ok:
-                self.run_until_idle()
+                self.run_until_idle(heartbeat=True)  # a turn is cut short by the watchdog without
         elif name in ("stand", "sit", "wave"):
             result = getattr(c, name)()
             if result.ok:

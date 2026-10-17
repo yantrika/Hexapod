@@ -1,4 +1,4 @@
-# Arya's character sheet (Step 13). Data, not code: edit the words here.
+# Arya's character sheet. Data, not code: edit the words here.
 # The persona only changes how Arya TALKS; commands and safety are the same in every mode.
 
 name = "Arya"

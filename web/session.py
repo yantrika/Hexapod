@@ -8,13 +8,13 @@ within ``deadman_s`` (the page's own stop on blur/hidden/cancel is only a second
 disconnect always sends ``stop``. ``stop`` is never rate-limited or merged: it goes out at once
 (the ``Bridge`` puts it on the ``stop_event`` fast path).
 
-Step 12b adds hold-to-talk and typed text. ``ptt_press`` / ``ptt_release`` / ``say`` are NOT
+It also handles hold-to-talk and typed text. ``ptt_press`` / ``ptt_release`` / ``say`` are NOT
 bridge messages: they go to ``VoiceControls`` (``HexaApp.set_listening`` and the same routing as
 spoken text). The server owns the safety: a press is forced to release after ``ptt_max_s``; a
 disconnect and every ``stop`` message (the page sends one on blur and when hidden) release too;
 only the controller may press, and only a press made here is ever released here.
 
-Step 13 adds four persona actions (``set_mode``, ``set_speaker``, ``forget_person``,
+It also handles four persona actions (``set_mode``, ``set_speaker``, ``forget_person``,
 ``set_roast_ok``). They go to
 ``PersonaControls`` (``HexaApp`` provides it; ``Arya`` does the work) and are never bridge
 messages. Like every other action they are honoured ONLY from the controller (the one connected

@@ -1,4 +1,4 @@
-"""The hard limits as code: a small check on every reply sentence before the TTS (Step 13).
+"""The hard limits as code: a small check on every reply sentence before the TTS.
 
 The persona prompt asks a small model to behave, but a small model forgets. This module is the
 second line: each sentence the model produced is checked against the word lists in

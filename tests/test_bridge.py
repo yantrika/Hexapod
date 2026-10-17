@@ -1,4 +1,4 @@
-"""Step 5 checks: messages, validation and the bridge queues."""
+"""Messages, validation and the bridge queues."""
 
 from __future__ import annotations
 

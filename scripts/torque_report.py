@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Servo sizing from the simulation: the torque and speed each joint type needs (DIRECT mode).
 
-    python scripts/torque_report.py                       # full report, printed as markdown
-    python scripts/torque_report.py --markdown docs/TORQUE_REPORT.md --json logs/torque_report.json
+    python scripts/torque_report.py          # full report, saved to .tmp/torque_report.*
     python scripts/torque_report.py --motions walk --seconds 3 --no-sensitivity   # quick look
-    python scripts/torque_report.py --render logs/torque_report.json   # re-print, no simulation
+    python scripts/torque_report.py --markdown out.md --json out.json   # choose the files
+    python scripts/torque_report.py --render .tmp/torque_report.json    # re-print, no simulation
 
 Motions: stand (up from sit, then hold), sit (down, then hold), wave, walk (forward at the maximum
 speed), strafe (maximum speed) and turn (in place at the maximum yaw rate). The motor torque is
@@ -57,6 +57,7 @@ NEAR_PEAK = 0.8  # "near peak" = at least this share of the reference torque
 DEFAULT_MASS_SCALES = (0.7, 1.0, 1.3)
 DEFAULT_HEIGHTS_M = (0.10, 0.16)  # body heights beside the default stand height (0.13 m)
 DEFAULT_WALK_S = 8.0
+OUT_DIR = config.PROJECT_ROOT / ".tmp"  # reports are scratch output, never committed
 CONTROL_DT = 1.0 / config.CONTROL_HZ
 SETTLE_S = 1.0  # before measuring
 RAMP_S = 1.0  # a gait command ramps up over this time (as the controller does)
@@ -715,8 +716,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                         help="body heights (m) for the sensitivity table")
     parser.add_argument("--no-sensitivity", action="store_true",
                         help="skip the sensitivity table and the velocity-gain check")
-    parser.add_argument("--json", type=Path, help="also write the raw report here")
-    parser.add_argument("--markdown", type=Path, help="also write the markdown here")
+    parser.add_argument("--json", type=Path, default=OUT_DIR / "torque_report.json",
+                        help="write the raw report here (default %(default)s)")
+    parser.add_argument("--markdown", type=Path, default=OUT_DIR / "torque_report.md",
+                        help="write the markdown here (default %(default)s)")
     parser.add_argument("--render", type=Path,
                         help="print the report from this JSON; no simulation")
     args = parser.parse_args(argv)
@@ -740,10 +743,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     text = render_markdown(report)
     print(text)
-    if args.json is not None:
+    if args.render is None:  # a re-print writes nothing
         args.json.parent.mkdir(parents=True, exist_ok=True)
         args.json.write_text(json.dumps(asdict(report), indent=2) + "\n")
-    if args.markdown is not None:
+        args.markdown.parent.mkdir(parents=True, exist_ok=True)
         args.markdown.write_text(text)
     return 0
 

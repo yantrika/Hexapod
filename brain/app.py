@@ -5,7 +5,7 @@ app owns the shutdown order (stop the robot, silence it, cancel chat, join the t
 body process last) so a signal or an error never leaves an orphan behind.
 
 No TTY is assumed. Push-to-talk is driven through ``set_listening()`` / ``toggle_listening()``,
-which a terminal key thread (``main.py``) or, in Step 12, the phone page calls.
+which a terminal key thread (``main.py``) or the phone page calls.
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from body.process import BodyProbe, BodyProcess
 from brain.arya import Arya, PersonaState
 from brain.brain_loop import BrainLoop
 from brain.chat import ChatBackend, ChatResponder, FakeChat, OllamaChat
+from brain.commandline import format_status
 from brain.context import ContextBuilder
 from brain.dialogue import Dialogue
 from brain.event_hub import EventHub
@@ -32,7 +33,6 @@ from brain.persona import Persona
 from brain.status_hub import StatusHub
 from brain.voice_loop import VoiceEvent, VoiceLoop
 from bridge import make_bridge, new_command
-from commandline import format_status
 from voice.audio import AudioSource, FileSource, MicSource, QueueSource
 from voice.playback import Playback, SoundDeviceSink
 from voice.ptt import PushToTalk, make_ptt
@@ -60,11 +60,11 @@ class AppOptions:
     model: str | None = None
     ollama_model: str | None = None
     mic_device: int | None = config.MIC_DEVICE
-    web: bool = False  # the phone control page (Step 12a)
+    web: bool = False  # the phone control page
     lan: bool = False  # bind all interfaces instead of 127.0.0.1 (implies web)
     web_port: int = config.WEB_PORT
     web_pin: str | None = None  # None: HEXA_WEB_PIN, config.WEB_PIN, else a random 6-digit PIN
-    persona: bool = True  # Arya: modes, memory, context, output check (Step 13)
+    persona: bool = True  # Arya: modes, memory, context, output check
     memory: bool = True  # False: no database at all (nothing is remembered)
     memory_path: Path | None = None  # None: config.MEMORY_DB_PATH when the app starts
     mode: str | None = None  # start in this persona mode (None: the saved one, else calm)
@@ -252,7 +252,7 @@ class HexaApp:
                     "off" if options.no_speak else "on")
 
     def _start_persona(self, backend: ChatBackend | None) -> None:
-        """Arya, her memory and the memory extractor (Step 13). A database that cannot be opened is
+        """Arya, her memory and the memory extractor. A database that cannot be opened is
         logged and the persona runs without memory: it must never stop the robot starting."""
         options = self.options
         if not options.persona:
@@ -348,7 +348,7 @@ class HexaApp:
         if self.options.audio_file is not None:
             return FileSource(self.options.audio_file, realtime=True, pad_silence_s=2.0)
         if self.options.no_mic:
-            return QueueSource()  # the phone page pushes audio here (Step 12)
+            return QueueSource()  # reserved for the phone microphone (docs/ROADMAP.md, 12c)
         return MicSource(device=self.options.mic_device)
 
     # -- logging -------------------------------------------------------------------------------

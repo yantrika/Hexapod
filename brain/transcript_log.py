@@ -1,7 +1,7 @@
 """Append-only JSON-lines log of every final recognition result (``logs/transcripts.jsonl``).
 
 One line per final: both recognizers' texts and confidences, which path decided, and what the
-router did. It is the dataset for tuning the thresholds now and for Step 9b later. Writing never
+router did. It is the dataset for tuning the thresholds. Writing never
 raises: a full disk must not stop the robot from listening.
 """
 

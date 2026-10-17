@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Run a fixed conversation script per persona mode against a chat backend and count what the
-output check blocked (Step 13). The harness for P2, where real models are compared.
+output check blocked. The harness for comparing real models.
 
     python scripts/persona_eval.py                          FakeChat (a script with some bad lines)
     python scripts/persona_eval.py --backend ollama --model qwen2.5:0.5b       (this machine)
@@ -11,7 +11,7 @@ output check blocked (Step 13). The harness for P2, where real models are compar
 Persona quality does not depend on the machine, so this can run anywhere Ollama runs (an RTX
 machine is fine); only the speed numbers in the JSONL are specific to the machine. ``--model``
 takes a comma separated list: every model runs the same script and every record carries its
-model name. The steps for a teammate are in ``docs/PERSONA_EVAL.md``.
+model name. The steps for a teammate are in ``docs/DEVELOPMENT.md``.
 
 For every mode and every case it builds the prompt exactly like a real reply (persona, mode, mood,
 speaker, memory facts, token budget), streams the reply, splits it into sentences and runs the same

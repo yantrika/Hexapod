@@ -1,40 +1,53 @@
-"""The docs stay true: every code file is listed in docs/FILES.md, and every listed file exists."""
+"""The docs stay small and true: only the four doc pages exist, README or DEVELOPMENT mentions
+every top-level folder, and every repo path the docs name exists."""
 
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
+
+import pytest
 
 import config
 
 ROOT = Path(config.PROJECT_ROOT)
-FILES_DOC = ROOT / "docs" / "FILES.md"
-CODE_FOLDERS = ("body", "brain", "voice", "scripts", "tests")
-ROOT_FILES = ("config.py", "bridge.py", "commandline.py", "main.py")
+DOC_PAGES = {"ARCHITECTURE.md", "DEVELOPMENT.md", "HARDWARE.md", "ROADMAP.md"}
 
 
-def code_files() -> list[str]:
-    found = [name for name in ROOT_FILES if (ROOT / name).is_file()]
-    for folder in CODE_FOLDERS:
-        found += sorted(f"{folder}/{p.name}" for p in (ROOT / folder).glob("*.py"))
-        found += sorted(f"{folder}/{p.name}" for p in (ROOT / folder).glob("*.sh"))
-    return found
+def tracked_top_level_folders() -> set[str]:
+    try:
+        listing = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True,
+                                 check=True).stdout
+    except (OSError, subprocess.CalledProcessError):
+        pytest.skip("not a git checkout")
+    return {line.split("/")[0] for line in listing.splitlines() if "/" in line}
 
 
-def test_every_code_file_is_listed_in_the_files_doc() -> None:
-    text = FILES_DOC.read_text()
-    missing = [name for name in code_files() if f"`{name}`" not in text]
-    assert not missing, f"add these to docs/FILES.md: {missing}"
+def test_docs_folder_holds_only_the_four_pages() -> None:
+    found = {path.name for path in (ROOT / "docs").iterdir() if path.is_file()}
+    assert found == DOC_PAGES, f"docs/ must hold exactly {sorted(DOC_PAGES)}, found {sorted(found)}"
 
 
-def test_every_file_named_in_the_files_doc_exists() -> None:
-    text = FILES_DOC.read_text()
-    named = set(re.findall(r"`((?:body|brain|voice|scripts|tests|docs|assets)/[\w./-]+)`", text))
-    gone = sorted(name for name in named if not (ROOT / name).exists() and not name.endswith("/"))
-    assert not gone, f"docs/FILES.md names files that do not exist: {gone}"
+def test_every_top_level_folder_is_mentioned_in_readme_or_development() -> None:
+    text = (ROOT / "README.md").read_text() + (ROOT / "docs" / "DEVELOPMENT.md").read_text()
+    missing = sorted(name for name in tracked_top_level_folders() if f"`{name}/`" not in text)
+    assert not missing, f"mention these as `name/` in README.md or DEVELOPMENT.md: {missing}"
 
 
-def test_the_docs_folder_has_every_page_the_index_links_to() -> None:
-    index = (ROOT / "docs" / "README.md").read_text()
-    for target in re.findall(r"\]\(([\w./-]+\.md)\)", index):
-        assert (ROOT / "docs" / target).resolve().is_file(), f"docs/README.md links to {target}"
+PATH_PATTERN = re.compile(
+    r"`((?:body|brain|voice|web|scripts|tests|docs|data|deploy)/[\w./-]+|"
+    r"(?:main|config|bridge)\.py|AGENTS\.md|README\.md|requirements[\w-]*\.txt|pyproject\.toml)`"
+)
+RUNTIME_PATHS = {"data/memory/", "data/memory/arya.db"}  # made when the robot runs; git-ignored
+PLANNED_PATHS = {"brain/behaviour.py"}  # named by the docs as future work (docs/ROADMAP.md, P5)
+
+
+def test_every_repo_path_named_in_the_docs_exists() -> None:
+    pages = [ROOT / "README.md", ROOT / "AGENTS.md", *sorted((ROOT / "docs").glob("*.md"))]
+    missing = []
+    for page in pages:
+        for path in PATH_PATTERN.findall(page.read_text()):
+            if path not in RUNTIME_PATHS | PLANNED_PATHS and not (ROOT / path).exists():
+                missing.append(f"{page.name}: {path}")
+    assert not missing, f"the docs name paths that do not exist: {missing}"

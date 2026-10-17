@@ -1,4 +1,4 @@
-# The hard limits as word lists (Step 13). Used by brain/output_check.py on every reply sentence
+# The hard limits as word lists. Used by brain/output_check.py on every reply sentence
 # before the TTS, and by brain/extractor.py on every fact before it is saved.
 # Matching: lowercase, punctuation and simple letter tricks removed, whole words (a plural "s" is
 # fine). "Directed" means the sentence is about the listener (it has you / your / you're ...).

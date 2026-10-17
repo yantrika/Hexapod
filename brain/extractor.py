@@ -1,4 +1,4 @@
-"""Learn facts about a named speaker from a finished conversation (Step 13).
+"""Learn facts about a named speaker from a finished conversation.
 
 When the conversation has been quiet for ``EXTRACTOR_IDLE_S`` the extractor, in its own thread,
 asks the chat backend for facts as JSON ``{"facts": ["...", ...]}``. Code, not the model, decides

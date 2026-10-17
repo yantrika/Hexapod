@@ -1,0 +1,31 @@
+name: CI
+
+# Lint, types and the tests that need no PyBullet, no models, no audio device and no hardware.
+# The simulator tests (tests/sim) are skipped here: run `pytest tests/sim` locally before merging
+# a change to motion, gait, kinematics, the controller or the backend contract.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]  # the dev machines run 3.11, the Pi runs 3.12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - name: PortAudio (sounddevice needs the shared library to import)
+        run: sudo apt-get update && sudo apt-get install -y libportaudio2
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check .
+      - run: mypy .
+      - run: pytest -q

@@ -1,1 +1,1 @@
-"""The phone web page (Step 12a): validation, safety logic and the server."""
+"""The phone web page: validation, safety logic and the server."""

@@ -11,7 +11,7 @@
   partial matching fires on ordinary sentences.) Natural near-forms of single words
   ("waves") are explicit aliases in the table.
 - ``chat``: everything else; the original text goes to the chat model.
-- ``persona`` (Step 13): "my name is X", "forget me", "what do you remember about me", "roast
+- ``persona``: "my name is X", "forget me", "what do you remember about me", "roast
   mode", "stop roasting". Code in the brain acts on them, never the LLM, and they are looked at
   only AFTER the stop check, so every phrase above routes exactly as before. The one exception:
   the whole utterance "stop roasting" (``config.PERSONA_STOP_ROAST_PHRASES``) switches to calm

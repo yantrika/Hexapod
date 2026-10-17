@@ -2,8 +2,9 @@
 
 Everything downstream (the recognizer, the self-hearing gate) reads blocks of 16 kHz mono int16
 through ``AudioSource`` and never knows where they come from: the local microphone now, a
-network stream (the Step 12 phone page) later, a WAV file in tests. Only this module touches the
-audio input (sounddevice is imported here, lazily); ``voice/playback.py`` owns the output.
+network stream (the planned phone microphone) later, a WAV file in tests. Only this module
+touches the audio input (sounddevice is imported here, lazily); ``voice/playback.py`` owns the
+output.
 """
 
 from __future__ import annotations

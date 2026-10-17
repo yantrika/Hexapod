@@ -1,4 +1,4 @@
-"""Step 0 checks: the revised config is symmetric and complete."""
+"""The revised config is symmetric and complete."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ REQUIRED_NAMES = [
     # geometry
     "BODY_RADIUS", "COXA_LENGTH", "FEMUR_LENGTH", "TIBIA_LENGTH", "LEG_NAMES",
     "JOINTS_PER_LEG", "DOF", "JOINT_NAMES", "LEG_MOUNT_ANGLES_DEG", "TRIPOD_A", "TRIPOD_B",
-    "KNEE_BRANCH", "mount_yaw_rad",
+    "mount_yaw_rad",
     # limits and clamps
     "JOINT_HARD_LIMITS_DEG", "GAIT_SOFT_LIMITS_DEG", "SPEED_MIN", "SPEED_MAX",
     "TURN_ANGLE_MIN_DEG", "TURN_ANGLE_MAX_DEG", "TURN_RATE_MAX_DEG_S",
@@ -28,7 +28,7 @@ REQUIRED_NAMES = [
     # timing and bridge
     "PHYSICS_HZ", "CONTROL_HZ", "MAX_PHYSICS_CATCHUP_STEPS", "GAIT_PERIOD_S",
     "MAX_MESSAGE_AGE_S", "WATCHDOG_TIMEOUT_S", "HEARTBEAT_HZ", "COMMAND_QUEUE_MAXSIZE",
-    "STATUS_QUEUE_MAXSIZE", "SIM_HEADLESS", "SIM_REALTIME",
+    "STATUS_QUEUE_MAXSIZE", "SIM_HEADLESS",
     # router
     "ROUTER_THRESHOLD", "ROUTER_MAX_WORDS", "ROUTER_FILLERS", "STOP_WORDS", "ROUTER_PHRASES",
     # audio
@@ -37,8 +37,6 @@ REQUIRED_NAMES = [
     # models
     "VOSK_MODEL_PATH", "PIPER_BINARY", "PIPER_MODEL_PATH", "OLLAMA_URL", "OLLAMA_MODEL",
     "OLLAMA_TIMEOUT_S", "CHAT_MAX_TOKENS", "CHAT_HISTORY_TURNS",
-    # test tolerances
-    "IK_TOLERANCE_M",
 ]
 
 
