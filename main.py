@@ -4,14 +4,16 @@
     python main.py                          headless body, push-to-talk, Ollama chat, speech on
     python main.py --gui --chat fake        PyBullet window, scripted chat (the slow dev laptop)
     python main.py --backend dryrun         no PyBullet, no hardware: logs the joint targets
+    python main.py --backend servo          REAL servos (Pi): asks you to type yes first
     python main.py --listen always          listen all the time instead of push-to-talk
     python main.py --no-speak --no-mic      no audio devices at all (tests, systemd without sound)
     python main.py --web                    phone control page on 127.0.0.1 (PIN printed at start)
     python main.py --lan                    the same, reachable from a phone on the Wi-Fi
     python main.py --audio-file x.wav       recognise a recording in real time, then exit 0
 
-SIGINT and SIGTERM stop the robot, silence it, cancel chat, join the threads and end the body
-process, then exit 0. A startup problem exits 1 with one clear line per problem on stderr.
+SIGINT, SIGTERM and SIGHUP stop the robot, silence it, cancel chat, join the threads and end the
+body process (real servos: sit down first, then let go), then exit 0. A startup problem exits 1
+with one clear line per problem on stderr.
 No TTY is needed (systemd): push-to-talk is then driven through ``HexaApp.set_listening`` (the
 phone page, Step 12). On a terminal, Enter toggles listening and `stop` + Enter sends stop.
 In push-to-talk mode a voice "stop" only works while listening; the control window STOP button
@@ -43,9 +45,11 @@ def build_parser() -> argparse.ArgumentParser:
     view = parser.add_mutually_exclusive_group()
     view.add_argument("--gui", action="store_true", help="PyBullet window (needs a display)")
     view.add_argument("--headless", action="store_true", help="no window (the default)")
-    parser.add_argument("--backend", choices=config.BACKENDS, default=config.BACKEND_DEFAULT,
+    parser.add_argument("--backend", choices=config.BACKENDS, default=None,
                         help="sim = PyBullet (needs pybullet), dryrun = no physics, no hardware: "
-                             "logs the joint targets (the Pi before the servos)")
+                             "logs the joint targets (the Pi before the servos), servo = the REAL "
+                             "servos: only by this flag (HEXA_BACKEND=servo is refused) and after "
+                             "typing yes")
     parser.add_argument("--listen", choices=("ptt", "always"), default=config.LISTEN_MODE,
                         help="ptt = push-to-talk, always = listen all the time")
     parser.add_argument("--chat", choices=("fake", "ollama", "off"), default="ollama",
@@ -91,8 +95,36 @@ def read_keys(app: object, done: threading.Event) -> None:
             logger.info(">>> %s", "LISTENING" if listening else "IDLE")
 
 
+def resolve_backend(args: argparse.Namespace) -> str | None:
+    """The backend to run, or None (after printing why) when the environment asks for servos."""
+    import config
+
+    if args.backend is not None:
+        return str(args.backend)
+    if config.ENV_REQUESTS_SERVO:
+        print("error: HEXA_BACKEND=servo is refused: real servos need --backend servo on the "
+              "command line", file=sys.stderr)
+        return None
+    return config.BACKEND_DEFAULT
+
+
+def servo_problems() -> list[str]:
+    """What stops the real servos from starting: the calibration file and its contents."""
+    from body import servo_calibration
+
+    try:
+        servo_calibration.load().require_calibrated()
+    except servo_calibration.CalibrationError as error:
+        return [str(error)]
+    return []
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    backend = resolve_backend(args)
+    if backend is None:
+        return EXIT_STARTUP
+    args.backend = backend
 
     from brain.logsetup import setup_logging
 
@@ -116,12 +148,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         if find_spec("pybullet") is None:
             problems.append("pybullet is not installed: use --backend dryrun, or "
                             "pip install -r requirements-sim.txt")
+    if args.backend == "servo":
+        if args.gui:
+            problems.append("--gui needs the simulator: drop --gui or use --backend sim")
+        problems += servo_problems()
     if args.audio_file is not None and not args.audio_file.is_file():
         problems.append(f"audio file not found: {args.audio_file}")
     if problems:
         for problem in problems:
             print(f"error: {problem}", file=sys.stderr)
         return EXIT_STARTUP
+
+    if args.backend == "servo":
+        from body.servo_safety import confirm_hardware
+
+        if not confirm_hardware("  - this starts the body with all 18 servos attached\n"):
+            print("aborted: nothing was moved", file=sys.stderr)
+            return EXIT_STARTUP
 
     stop = threading.Event()
 
@@ -131,6 +174,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     signal.signal(signal.SIGINT, on_signal)
     signal.signal(signal.SIGTERM, on_signal)
+    signal.signal(signal.SIGHUP, on_signal)  # a closed terminal or dropped SSH is a shutdown too
 
     app = HexaApp(AppOptions(
         gui=args.gui, backend=args.backend, listen=args.listen, chat=args.chat,

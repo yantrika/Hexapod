@@ -27,7 +27,8 @@ import config
 from body.arbitration import arbitrate
 from body.backend import HexapodBackend
 from body.clock import Clock, FixedRateLoop, FixedStepper, MonotonicClock
-from body.controller import Controller, Event, Result
+from body.controller import Controller, Event, Result, State
+from body.servo_safety import sit_and_release
 from bridge import Bridge, Command, Status, make_bridge
 
 logger = logging.getLogger(__name__)
@@ -94,7 +95,9 @@ class BodyRunner:
         self.bridge = bridge
         self.backend = backend
         self._clock: Clock = clock if clock is not None else MonotonicClock()
-        self.controller = controller or Controller(backend, self._clock)
+        # A real robot powers up sitting; the simulated ones stand.
+        initial = State.SITTING if backend.is_physical else State.STANDING
+        self.controller = controller or Controller(backend, self._clock, initial_state=initial)
         self._probe = probe
         self._status_seq = 0
         self._refs: dict[str, int] = {}  # action -> seq of the command that started it
@@ -261,20 +264,29 @@ def run_body(
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(processName)s %(levelname)s %(message)s"
     )
-    signal.signal(signal.SIGINT, signal.SIG_IGN)  # the parent decides when the body stops
     terminated: list[bool] = []
-    signal.signal(signal.SIGTERM, lambda *_: terminated.append(True))
+
+    def on_signal(*_: object) -> None:
+        terminated.append(True)
+
+    # SIGTERM and SIGHUP (closed terminal, dropped SSH) end the body cleanly. SIGINT is the
+    # parent's to handle (it decides when the body stops) except for real servos, where the body
+    # must also sit down and let go if it is the one that receives Ctrl-C.
+    signal.signal(signal.SIGINT, on_signal if backend_kind == "servo" else signal.SIG_IGN)
+    signal.signal(signal.SIGTERM, on_signal)
+    signal.signal(signal.SIGHUP, on_signal)
     if probe is not None:
         probe.set("blas_threads", float(os.environ.get("OPENBLAS_NUM_THREADS", "-1")))
 
     backend = make_backend(headless, backend_kind)
-    runner = BodyRunner(bridge, backend, probe=probe)
+    runner: BodyRunner | None = None
     loop = FixedRateLoop(config.CONTROL_HZ)
     stepper = FixedStepper(config.CONTROL_HZ)
-    bridge.mark_ready()
-    logger.info("body ready (%s, %s)", backend_kind, "headless" if headless else "gui")
     count = 0
     try:
+        runner = BodyRunner(bridge, backend, probe=probe)
+        bridge.mark_ready()
+        logger.info("body ready (%s, %s)", backend_kind, "headless" if headless else "gui")
         while not bridge.shutdown_requested() and not terminated:
             count += 1
             if parent_pid is not None and count % config.PARENT_CHECK_TICKS == 0 \
@@ -293,7 +305,16 @@ def run_body(
         logger.exception("body loop crashed")
         raise SystemExit(1) from None
     finally:
-        backend.close()
+        if runner is not None and backend.is_physical:
+            controller = runner.controller
+
+            def sit_tick() -> None:
+                for _ in range(stepper.steps(loop.wait())):
+                    controller.tick(stepper.period)
+
+            sit_and_release(controller, backend, sit_tick)  # sit if standing, then let go
+        else:
+            backend.close()
         logger.info("body stopped")
 
 
@@ -310,6 +331,7 @@ class BodyProcess:
     ) -> None:
         self.bridge = bridge
         self._args = (bridge, headless, probe, tip_event, os.getpid(), backend)
+        self._backend_kind = backend
         self._process: Any = None
 
     def start(self) -> None:
@@ -343,6 +365,8 @@ class BodyProcess:
         process = self._process
         if process is None:
             return None
+        if self._backend_kind == "servo":  # the body sits the robot down before letting go
+            timeout = max(timeout, config.SERVO_SHUTDOWN_SIT_TIMEOUT_S + 3.0)
         self.bridge.request_shutdown()
         process.join(timeout)
         if process.is_alive():

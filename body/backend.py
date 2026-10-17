@@ -45,6 +45,10 @@ class BasePose:
 class HexapodBackend(ABC):
     """Interface implemented by the simulation and servo backends."""
 
+    is_physical = False
+    """True for a backend that drives a real robot: it powers up sitting, and the body process
+    sits it down before ``close()`` lets go of the servos (``body/servo_safety.py``)."""
+
     def __init__(self) -> None:
         self._joint_targets: JointArray = np.zeros(config.DOF)
 
