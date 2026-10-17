@@ -10,6 +10,7 @@
     python main.py --web                    phone control page on 127.0.0.1 (PIN printed at start)
     python main.py --lan                    the same, reachable from a phone on the Wi-Fi
     python main.py --audio-file x.wav       recognise a recording in real time, then exit 0
+    python main.py --lan --audio-source phone    the robot hears the phone app, not its own mic
 
 SIGINT, SIGTERM and SIGHUP stop the robot, silence it, cancel chat, join the threads and end the
 body process (real servos: sit down first, then let go), then exit 0. A startup problem exits 1
@@ -57,6 +58,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-speak", action="store_true", help="no Piper, nothing is said aloud")
     parser.add_argument("--no-mic", action="store_true",
                         help="no microphone (typing and the phone page still work)")
+    parser.add_argument("--audio-source", choices=("robot", "phone"), default="robot",
+                        help="robot = the robot's microphone (default); phone = the app's "
+                             "microphone, streamed over the web connection (needs --web or "
+                             "--lan; the robot's microphone is not opened)")
+    parser.add_argument("--debug-save-audio", action="store_true",
+                        help="with --audio-source phone: save each press as a WAV in .tmp/ "
+                             "(off by default: phone audio is otherwise never written anywhere)")
     parser.add_argument("--web", action="store_true",
                         help="phone control page on 127.0.0.1 (PIN printed at start)")
     parser.add_argument("--lan", action="store_true",
@@ -119,6 +127,22 @@ def servo_problems() -> list[str]:
     return []
 
 
+def phone_audio_problems(args: argparse.Namespace) -> list[str]:
+    """Option combinations that cannot work with ``--audio-source phone``."""
+    problems = []
+    if args.debug_save_audio and args.audio_source != "phone":
+        problems.append("--debug-save-audio needs --audio-source phone")
+    if args.audio_source != "phone":
+        return problems
+    if not (args.web or args.lan):
+        problems.append("--audio-source phone needs --web or --lan: the audio arrives over it")
+    if args.listen == "always":
+        problems.append("--audio-source phone needs push-to-talk: drop --listen always")
+    if args.audio_file is not None:
+        problems.append("--audio-source phone cannot be combined with --audio-file")
+    return problems
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     backend = resolve_backend(args)
@@ -137,8 +161,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     from brain.app import AppOptions, HexaApp, StartupError
     from brain.startup import CheckOptions, run_checks
 
+    no_mic = args.no_mic or args.audio_file is not None or args.audio_source == "phone"
     problems = run_checks(CheckOptions(
-        model=args.model, no_speak=args.no_speak, no_mic=args.no_mic or args.audio_file is not None,
+        model=args.model, no_speak=args.no_speak, no_mic=no_mic,
         chat=args.chat, ollama_model=args.ollama_model, mic_device=args.device))
     if args.backend == "dryrun" and args.gui:
         problems.append("--gui needs the simulator: drop --gui or use --backend sim")
@@ -152,6 +177,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.gui:
             problems.append("--gui needs the simulator: drop --gui or use --backend sim")
         problems += servo_problems()
+    problems += phone_audio_problems(args)
     if args.audio_file is not None and not args.audio_file.is_file():
         problems.append(f"audio file not found: {args.audio_file}")
     if problems:
@@ -181,7 +207,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         no_speak=args.no_speak, no_mic=args.no_mic, audio_file=args.audio_file, model=args.model,
         ollama_model=args.ollama_model, mic_device=args.device,
         web=args.web or args.lan, lan=args.lan, web_port=args.web_port, mode=args.mode,
-        memory=not args.no_memory, memory_path=args.memory_db))
+        memory=not args.no_memory, memory_path=args.memory_db,
+        audio_source=args.audio_source, debug_save_audio=args.debug_save_audio))
     code = EXIT_OK
     try:
         app.start()

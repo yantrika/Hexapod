@@ -2,8 +2,10 @@
 
 Pure functions, no I/O and no clock. The page may send only ``walk`` (one combined message for
 every held move button), ``stop``, ``stand``, ``sit`` and ``wave``; also
-``ptt_press`` / ``ptt_release`` (hold-to-talk with the robot's microphone) and ``say`` (typed
-text). Those three never become bridge messages. The persona messages are ``set_mode`` (calm,
+``ptt_press`` / ``ptt_release`` (hold-to-talk) and ``say`` (typed text). Those three never
+become bridge messages. A ``ptt_press`` may announce phone audio (``"audio": {"rate": 16000,
+"channels": 1, "format": "s16le"}``, exactly that); the raw PCM then follows in binary frames,
+checked by ``check_audio_frame``. The persona messages are ``set_mode`` (calm,
 funny, roast), ``set_speaker`` (a name or "guest"), ``forget_person`` (an id) and
 ``set_roast_ok`` (an id and a true/false): brain-side persona and memory actions, also never
 bridge messages. Numbers are
@@ -27,6 +29,9 @@ PERSONA_ACTIONS = ("set_mode", "set_speaker", "forget_person", "set_roast_ok")
 CLIENT_ACTIONS = ("walk", "stop", *POSTURE_ACTIONS, *PTT_ACTIONS, "say", *PERSONA_ACTIONS)
 _WALK_FIELDS = frozenset({"action", "forward", "strafe", "yaw", "speed"})
 _SAY_FIELDS = frozenset({"action", "text"})
+_PRESS_FIELDS = frozenset({"action", "audio"})
+_AUDIO_FORMAT = {"rate": config.WEB_AUDIO_RATE, "channels": config.WEB_AUDIO_CHANNELS,
+                 "format": config.WEB_AUDIO_FORMAT}
 _MODE_FIELDS = frozenset({"action", "mode"})
 _SPEAKER_FIELDS = frozenset({"action", "name"})
 _FORGET_FIELDS = frozenset({"action", "id"})
@@ -52,6 +57,7 @@ class Request:
     name: str = ""  # for ``set_speaker``: a name or "guest" (the server checks that it exists)
     person_id: int = 0  # for ``forget_person`` and ``set_roast_ok``
     roast_ok: bool = False  # for ``set_roast_ok``
+    audio: bool = False  # for ``ptt_press``: the audio comes from the phone, in binary frames
 
     @property
     def moving(self) -> bool:
@@ -105,6 +111,26 @@ def _person_id(value: Any) -> int:
     return value
 
 
+def _audio_format(value: Any) -> None:
+    """Accept exactly the one supported format; anything else is a clear error."""
+    if (not isinstance(value, dict) or set(value) != set(_AUDIO_FORMAT)
+            or any(type(value[key]) is not type(wanted) or value[key] != wanted
+                   for key, wanted in _AUDIO_FORMAT.items())):
+        raise ProtocolError(
+            "unsupported audio format: only rate 16000, channels 1, format s16le")
+
+
+def check_audio_frame(data: bytes) -> float:
+    """Validate one binary audio frame; returns its length in seconds. Raises ``ProtocolError``."""
+    if not data:
+        raise ProtocolError("audio frame is empty")
+    if len(data) % config.WEB_AUDIO_SAMPLE_BYTES:
+        raise ProtocolError("audio frame must hold whole 16-bit samples")
+    if len(data) > config.WEB_AUDIO_MAX_FRAME_BYTES:
+        raise ProtocolError(f"audio frame is longer than {config.WEB_AUDIO_MAX_FRAME_MS} ms")
+    return len(data) / (config.WEB_AUDIO_SAMPLE_BYTES * config.WEB_AUDIO_RATE)
+
+
 def parse_message(raw: str | bytes) -> Request:
     """Validate one client message. Raises ``ProtocolError`` with the reason."""
     if len(raw) > config.WEB_MAX_MESSAGE_BYTES:
@@ -147,6 +173,13 @@ def parse_message(raw: str | bytes) -> Request:
         if not isinstance(flag, bool):
             raise ProtocolError("roast_ok must be true or false")
         return Request("set_roast_ok", person_id=_person_id(message.get("id")), roast_ok=flag)
+    if action == "ptt_press":
+        if not set(message) <= _PRESS_FIELDS:
+            raise ProtocolError("unknown field")
+        if "audio" not in message:
+            return Request("ptt_press")
+        _audio_format(message["audio"])
+        return Request("ptt_press", audio=True)
     if action != "walk":
         if set(message) != {"action"}:
             raise ProtocolError("unknown field")

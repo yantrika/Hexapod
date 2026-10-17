@@ -8,9 +8,10 @@ gait or a backend (``tests/test_web_server.py`` enforces it).
 ``websockets`` answers plain HTTP too (``process_request``), so no second web framework is needed.
 The WebSocket handshake carries the PIN (``/ws?pin=...``) and is refused with 401 (wrong PIN),
 429 (locked out), 403 (foreign Origin) or 409 (someone else is in control). Plain HTTP on a LAN:
-use it only on a network you trust. It also offers hold-to-talk with the ROBOT's microphone (no
-audio ever comes from the page, so no HTTPS) and typed text; brain events (heard, route, said,
-listening) reach the page through a bounded drop-oldest ``EventHub`` subscription.
+use it only on a network you trust. It also offers hold-to-talk and typed text; brain events
+(heard, route, said, listening, partial) reach the page through a bounded drop-oldest ``EventHub``
+subscription. The audio is the ROBOT's microphone, or (``--audio-source phone``) raw PCM in binary
+WebSocket frames from the phone app, which needs no HTTPS: a native app may use plain ``ws://``.
 """
 
 from __future__ import annotations
@@ -95,6 +96,7 @@ class _Client:
         self.connection = connection
         self.outbox: asyncio.Queue[str] = asyncio.Queue(maxsize=_OUTBOX_SIZE)
         self.invalid = 0
+        self.next_audio_error_at = 0.0
 
     def post(self, message: dict[str, Any]) -> None:
         text = json.dumps(message, default=str)
@@ -196,7 +198,7 @@ class WebServer:
         self._stopping = asyncio.Event()
         server: Server = await serve(
             self._handler, self.host, self._port, process_request=self._process_request,
-            max_size=config.WEB_MAX_MESSAGE_BYTES, compression=None,
+            max_size=2 * config.WEB_AUDIO_MAX_FRAME_BYTES, compression=None,
             ping_interval=config.WEB_PING_S, ping_timeout=config.WEB_PING_S,
             close_timeout=config.WEB_CLOSE_S)
         self._port = server.sockets[0].getsockname()[1]
@@ -264,6 +266,7 @@ class WebServer:
                      "ptt": {"available": not self._voice.ptt_unavailable,
                              "reason": self._voice.ptt_unavailable,
                              "max_s": config.WEB_PTT_MAX_S},
+                     "audio": self._audio_state(),
                      "say": {"available": not self._voice.say_unavailable,
                              "reason": self._voice.say_unavailable,
                              "max_chars": config.WEB_SAY_MAX_CHARS},
@@ -284,6 +287,17 @@ class WebServer:
             writer.cancel()
             logger.info("web: controller disconnected")
 
+    def _audio_state(self) -> dict[str, Any]:
+        """How the phone may send audio (the app reads this before showing its talk button)."""
+        if not self._voice.phone_audio:
+            return {"available": False,
+                    "reason": "the robot listens with its own microphone "
+                              "(start it with --audio-source phone)"}
+        return {"available": True, "rate": config.WEB_AUDIO_RATE,
+                "channels": config.WEB_AUDIO_CHANNELS, "format": config.WEB_AUDIO_FORMAT,
+                "min_frame_ms": config.WEB_AUDIO_MIN_FRAME_MS,
+                "max_frame_ms": config.WEB_AUDIO_MAX_FRAME_MS}
+
     def _persona_state(self) -> dict[str, Any] | None:
         persona = self._voice.persona
         if persona is None:
@@ -295,6 +309,9 @@ class WebServer:
             return None
 
     def _on_message(self, client: _Client, raw: str | bytes) -> None:
+        if isinstance(raw, bytes):  # a binary frame is audio and nothing else
+            self._on_audio(client, raw)
+            return
         try:
             request = parse_message(raw)
         except ProtocolError as error:
@@ -308,6 +325,25 @@ class WebServer:
         except Exception:  # noqa: BLE001 - the voice side failed; the page is told, nothing else
             logger.exception("web: %s failed", request.action)
             client.post({"type": "error", "reason": f"{request.action} failed"})
+
+    def _on_audio(self, client: _Client, data: bytes) -> None:
+        try:
+            verdict = self._control.handle_audio(client, data)
+        except ProtocolError as error:
+            client.invalid += 1
+            self._audio_error(client, str(error))
+            return
+        except Exception:  # noqa: BLE001 - the audio side failed; the frame is lost, nothing else
+            logger.exception("web: could not take an audio frame")
+            return
+        if verdict == "rate":
+            self._audio_error(client, "audio arrives faster than real time: frames dropped")
+
+    def _audio_error(self, client: _Client, reason: str) -> None:
+        now = self._clock()
+        if now >= client.next_audio_error_at:  # a flood must not flood the phone back
+            client.next_audio_error_at = now + config.WEB_AUDIO_ERROR_INTERVAL_S
+            client.post({"type": "error", "reason": reason})
 
     @staticmethod
     async def _write(client: _Client) -> None:

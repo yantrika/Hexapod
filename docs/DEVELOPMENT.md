@@ -51,7 +51,7 @@ Scripts:
 | `sim_demo.py` | stand/sit/scripted motion in the window (`--script "walk:5,turn:90,stop"`, `--headless`) |
 | `teleop.py`, `control_window.py`, `joint_jog.py` | keyboard drive, key/button window, joint sliders |
 | `cli.py` | typed commands: through the router (default) or raw Bridge commands (`--raw`) |
-| `say.py`, `mic_check.py`, `stt_check.py`, `web_check.py` | check speech out, microphone, recognition, the phone page |
+| `say.py`, `mic_check.py`, `stt_check.py`, `web_check.py` | check speech out, microphone, recognition, the phone page (`--talk-wav FILE` streams a WAV as the phone's microphone) |
 | `persona_eval.py` | a fixed conversation per persona mode against a chat model |
 | `measure_chat.py`, `measure_voice.py` | time Ollama; time Piper, Vosk and the body under voice load |
 | `torque_report.py` | servo torque/speed needs from the sim (writes to `.tmp/`) |
@@ -110,6 +110,7 @@ only (no side panels, no text drawn in it).
 | Persona | `--mode roast`, or the page's Persona buttons; say "roast mode", "my name is Sam", "forget me" | the mode changes only how it talks; "forget me" asks for a yes; "stop roasting" while walking also stops the walk |
 | Phone page | `python main.py --gui --web --chat fake`, open the printed address, enter the PIN | hold an arrow: the robot walks in the window; release, close the tab or lock the phone: it stops; a second device is refused; Talk and the text box work |
 | Without a phone | `python scripts/web_check.py --pin <PIN> --forward 1 --seconds 2` | the same page protocol driven from a script |
+| Phone microphone | `python main.py --web --audio-source phone --chat fake --no-speak`, then `python scripts/web_check.py --pin <PIN> --talk-wav sit_down.wav` | the robot sits; `heard`, `route` and `said` events print; a WAV saying "stop" stops a walk |
 | Servo tools without hardware | `python main.py --backend dryrun` and `tail -f logs/dryrun.log` | the per-leg joint targets the gait would send |
 
 A headless test (in `tests/sim/test_sim_backend.py`) checks the pieces the window depends on: a
@@ -117,6 +118,54 @@ fresh checkout generates its URDF, the URDF loads in PyBullet, the camera consta
 `--gui` is refused with `--backend dryrun|servo`. On a machine with a display,
 `python scripts/sim_demo.py --pose stand --duration 2` opens the window for two seconds and exits 1
 (with the reason) if it cannot, so a broken viewer is noticed.
+
+## Phone app protocol
+
+For whoever builds or changes the phone app (the Flutter app is not in this repo). It speaks to the
+server of `web/server.py` over one WebSocket, `ws://<robot>:8765/ws?pin=<PIN>`. Plain `ws://` is
+enough: the app is not a browser, so no HTTPS and no certificate. The robot must run with
+`--audio-source phone` (and `--lan`); with the default `--audio-source robot` the app is refused
+phone audio with a clear error. A wrong PIN is HTTP 401, a lockout 429, another phone in control
+409. There is one controller; the PIN guards the control.
+
+**Server to app (JSON text frames).** `hello` first: `audio` is `{"available": true, "rate": 16000,
+"channels": 1, "format": "s16le", "min_frame_ms": 20, "max_frame_ms": 100}` or `{"available":
+false, "reason": ...}`, and `ptt.max_s` is the listening limit. Then `status`, `deadman`, `error`
+(`reason`) and these events: `listening` (`on`), `partial` (`text`, phone audio only, at most four
+a second), `heard` (`text`, the final text), `route` (`route`: stop | command | chat | persona,
+`action`, `text`, `early_stop`), `said` (`text`, each sentence of Arya's reply) and `ptt_timeout`
+(the server ended the press after `ptt.max_s`).
+
+**App to server.**
+
+| Message | When |
+|---|---|
+| `{"action":"ptt_press","audio":{"rate":16000,"channels":1,"format":"s16le"}}` | the talk button goes down. The audio object must be exactly this; anything else (another rate, stereo, another format, an extra field) is rejected. Without it the press is refused in phone mode. |
+| binary frames of raw little-endian 16-bit PCM, 16 kHz, mono | while pressed, 20-100 ms each (640-3200 bytes, whole samples), paced like a microphone. Shorter frames are accepted but count as 20 ms; longer ones are refused. |
+| `{"action":"ptt_release"}` | the button goes up (stop the audio first, then send it) |
+| `{"action":"stop"}` | the STOP button, any time. It also ends listening. |
+
+Limits: audio is accepted at most 1.5 times faster than real time (plus 1 s of saved-up burst);
+extra frames are dropped and one `error` (throttled to one a second) tells the app. Frames outside
+a press (the last ones in flight after a release, or after the 10 s limit) are dropped and counted,
+never heard. Frames from anyone but the controller are dropped. 20 rejected messages or malformed
+frames close the connection (a `stop` goes out first, as on every disconnect). Nothing the app
+sends can reach the body except through the router and the controller's own rules.
+
+**What the app must do.**
+
+- Hold-to-talk: on press send `ptt_press` and start recording 16 kHz mono PCM16, sending each chunk
+  as a binary frame (re-chunk to about 50 ms if the plugin's chunks are not 20-100 ms); on release
+  stop the recorder, then send `ptt_release`.
+- Release (stop the recorder, send `ptt_release`) on app background, lost focus, a pointer
+  cancel and a lost connection. The server also releases on a disconnect and sends `stop`.
+- Show listening state (`listening`), the partial and final text (`partial`, `heard`), the route
+  result (`route`) and Arya's reply (`said`); show `error` reasons.
+- Keep a STOP button visible on every screen.
+- Android: `<uses-permission android:name="android.permission.RECORD_AUDIO"/>`, ask at runtime
+  with a clear reason; allow cleartext traffic to local addresses only (a `network_security_config`
+  with `cleartextTrafficPermitted` for the robot's address or `.local`/private ranges, not for all
+  hosts). iOS: `NSMicrophoneUsageDescription` and `NSLocalNetworkUsageDescription` in `Info.plist`.
 
 ## Lint, types, commits
 

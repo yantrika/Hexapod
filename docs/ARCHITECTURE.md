@@ -69,6 +69,16 @@ stop, command, chat or persona; `brain_loop` sends the command and `motion_keepe
 heartbeats so the walk continues; the body answers with statuses; `dialogue` speaks a
 pre-rendered phrase from the status (never from assumption).
 
+Phone audio (`main.py --audio-source phone`): the robot's microphone is not opened. The phone app
+sends `ptt_press` (announcing 16 kHz mono `s16le`), then raw PCM in binary WebSocket frames. The web
+server hands each frame to `WebControl.handle_audio` (`web/session.py`), which feeds it to the
+`NetworkSource` (`voice/audio.py`) only from the controller, only while that press is held and
+within a data-rate limit; anything else is dropped and counted. `NetworkSource` is a bounded
+drop-oldest queue read by the same voice loop, so the audio takes the same push-to-talk gate,
+self-hearing gate, Vosk, `stt_decision`, router, motion keeper, chat and persona path as the robot's
+microphone. Nothing new decides motion. `partial`, `heard`, `route` and `said` events go back to
+the app.
+
 Chat: only when the body is idle, otherwise "tell me after I stop" and the LLM is not called. The
 reply streams in; every finished sentence passes `output_check` and goes to the speaker queue. A
 command, a stop or any motion cancels the reply and clears the speech. If the LLM is down Arya
@@ -107,6 +117,7 @@ it answers) and `detail`. Rejection reasons are a closed set: `stale`, `supersed
 | The robot ignores the microphone while it speaks | `voice/stt.py`, `voice/playback.py` |
 | Only `voice/audio.py` touches audio input; only `voice/playback.py` touches audio output | `voice/` |
 | Phone page: PIN, one controller, a deadman that sends `stop`, `stop` on every disconnect, no joint data | `web/session.py`, `web/protocol.py` |
+| Phone audio follows the same router and stop rules; it is accepted only from the controller, only during a press, rate-limited, released on `stop`, disconnect and after 10 s, and never written to disk or the log | `web/session.py`, `voice/audio.py`, `brain/voice_loop.py` |
 | Real servos: refused unless `--backend servo` and a typed `yes`; every joint must be calibrated; one pulse path with an absolute window and a slew limit; staggered attach; powers up sitting; idle release; signals end in sit-then-release | `main.py`, `body/servo_*.py` |
 | Persona hard limits in every mode, checked in the prompt and in code on every sentence | `brain/output_check.py`, `data/persona/limits.toml` |
 | Privacy: facts only after validation; "forget me" deletes everything in one transaction; the memory database never leaves the machine; no face data in logs | `brain/memory.py`, `brain/arya.py` |
@@ -126,7 +137,7 @@ control window STOP button and Space are the always-available stop.
 | `status-hub` | the body's status queue | every subscriber's own bounded queue |
 | `dialogue`, `motion-keeper` | their status subscription | phrases, heartbeats |
 | `chat-reply` | the LLM's streamed reply | sentences to the speaker queue |
-| web server (own event loop) | phone messages | Bridge commands, voice controls |
+| web server (own event loop) | phone messages, binary audio frames | Bridge commands, voice controls, the network audio source |
 
 Threads talk only through `queue.Queue` and one shared `speaking` event. Every queue is bounded and
 drops the oldest item when full, so nothing can block the robot or the microphone.
@@ -208,5 +219,6 @@ silence, not by compute. On the laptop, numpy's BLAS threads made ticks 7x slowe
 - The small US model writes "Arya" as "aria"; the router drops a leading "aria". Names heard once
   are often wrong ("Priya" as "prayer"); name confirmation is planned (`ROADMAP.md`).
 - The real LLM has not been timed on the Pi. No microphone or speaker has been tried on the Pi.
-- The phone page is plain HTTP (trusted networks only) and has no audio of its own.
+- The phone page and the app use plain HTTP / `ws://` (trusted networks only). The page has no audio
+  of its own; the app's microphone path (`--audio-source phone`) is not timed yet (`ROADMAP.md`).
 - No wake word. No vision process yet.

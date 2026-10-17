@@ -1,8 +1,8 @@
-"""Audio input: the ``AudioSource`` interface, the microphone and a WAV file source.
+"""Audio input: the ``AudioSource`` interface, the microphone, the phone and a WAV file source.
 
 Everything downstream (the recognizer, the self-hearing gate) reads blocks of 16 kHz mono int16
-through ``AudioSource`` and never knows where they come from: the local microphone now, a
-network stream (the planned phone microphone) later, a WAV file in tests. Only this module
+through ``AudioSource`` and never knows where they come from: the local microphone, the phone's
+microphone (``NetworkSource``, fed by the web server), a WAV file in tests. Only this module
 touches the audio input (sounddevice is imported here, lazily); ``voice/playback.py`` owns the
 output.
 """
@@ -21,7 +21,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 import config
-from voice.tts import read_wav
+from voice.tts import AudioClip, read_wav, write_wav
 
 logger = logging.getLogger(__name__)
 
@@ -225,3 +225,80 @@ class QueueSource:
         if block is None:
             raise EndOfAudio
         return block
+
+
+class NetworkSource:
+    """The phone's microphone: PCM frames pushed by the web server (``offer_pcm``) and read by the
+    voice loop like any source. The queue is bounded and drops the OLDEST block when the reader is
+    slow, and ``offer_pcm`` never blocks, so a slow recognizer can stall neither the web server nor
+    the voice loop. Audio is held in memory only; ``debug_dir`` (``--debug-save-audio``, ``.tmp/``)
+    is the one exception and is off by default."""
+
+    def __init__(
+        self,
+        queue_blocks: int = config.WEB_AUDIO_QUEUE_BLOCKS,
+        sample_rate: int = config.AUDIO_SAMPLE_RATE,
+        debug_dir: Path | None = None,
+        clock: Callable[[], float] = time.time,
+    ) -> None:
+        self.sample_rate = sample_rate
+        self.dropped = 0  # blocks lost because the reader was too slow
+        self.debug_dir = debug_dir
+        self._clock = clock
+        self._queue: queue.Queue[Block] = queue.Queue(maxsize=queue_blocks)
+        self._utterance: list[Block] = []  # debug copy of the current press (``debug_dir`` only)
+        self._saved = 0
+        self._lock = threading.Lock()
+
+    def start(self) -> None:
+        pass
+
+    def stop(self) -> None:
+        pass
+
+    def offer_pcm(self, data: bytes) -> None:
+        """Queue one frame of raw little-endian int16 PCM. Any thread; never blocks."""
+        self.offer(np.frombuffer(data, dtype="<i2").astype(np.int16))
+
+    def offer(self, block: Block) -> None:
+        if self.debug_dir is not None:
+            with self._lock:
+                self._utterance.append(block)
+        while True:
+            try:
+                self._queue.put_nowait(block)
+                return
+            except queue.Full:
+                try:
+                    self._queue.get_nowait()
+                    self.dropped += 1
+                except queue.Empty:
+                    pass
+
+    def clear(self) -> None:
+        """A new press begins: nothing left over from before may be heard."""
+        while True:
+            try:
+                self._queue.get_nowait()
+            except queue.Empty:
+                break
+        with self._lock:
+            self._utterance = []
+
+    def end_utterance(self) -> Path | None:
+        """The press ended. With ``debug_dir`` set, save what it held as a WAV; return its path."""
+        with self._lock:
+            blocks, self._utterance = self._utterance, []
+        if self.debug_dir is None or not blocks:
+            return None
+        self._saved += 1
+        stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime(self._clock()))
+        path = self.debug_dir / f"phone-{stamp}-{self._saved}.wav"
+        write_wav(path, AudioClip(np.concatenate(blocks), self.sample_rate))
+        return path
+
+    def read(self, timeout: float) -> Block | None:
+        try:
+            return self._queue.get(timeout=timeout)
+        except queue.Empty:
+            return None

@@ -14,6 +14,11 @@ spoken text). The server owns the safety: a press is forced to release after ``p
 disconnect and every ``stop`` message (the page sends one on blur and when hidden) release too;
 only the controller may press, and only a press made here is ever released here.
 
+With phone audio (``VoiceControls.phone_audio``) a press must announce the audio format, and the
+binary frames that follow are fed to ``VoiceControls.feed_audio`` ONLY from the controller, ONLY
+while that press is held, within a data-rate limit; any other frame is dropped and counted in
+``audio_stats`` and never fed. The same release rules apply (10 s limit, ``stop``, disconnect).
+
 It also handles four persona actions (``set_mode``, ``set_speaker``, ``forget_person``,
 ``set_roast_ok``). They go to
 ``PersonaControls`` (``HexaApp`` provides it; ``Arya`` does the work) and are never bridge
@@ -30,7 +35,14 @@ from dataclasses import dataclass
 from typing import Any
 
 import config
-from web.protocol import PERSONA_ACTIONS, POSTURE_ACTIONS, Request, walk_params
+from web.protocol import (
+    PERSONA_ACTIONS,
+    POSTURE_ACTIONS,
+    ProtocolError,
+    Request,
+    check_audio_frame,
+    walk_params,
+)
 
 Sender = Callable[[str, dict[str, Any]], "int | None"]
 
@@ -64,6 +76,19 @@ class VoiceControls:
     ptt_unavailable: str | None = None
     say_unavailable: str | None = None
     persona: PersonaControls | None = None
+    phone_audio: bool = False  # the robot hears the phone (--audio-source phone), not its own mic
+    feed_audio: Callable[[bytes], None] | None = None  # takes one validated PCM frame; never blocks
+
+
+@dataclass
+class AudioStats:
+    """What happened to the binary audio frames (counts only; the audio itself is never kept)."""
+
+    fed_frames: int = 0
+    fed_bytes: int = 0
+    dropped_outside: int = 0  # no press held (or not the controller): never fed
+    dropped_rate: int = 0  # arrived faster than ``WEB_AUDIO_MAX_RATE``
+    dropped_invalid: int = 0  # empty, odd length or too long
 
 
 NO_VOICE = VoiceControls(
@@ -142,6 +167,10 @@ class WebControl:
         self._ptt_lock = threading.RLock()  # apart from _lock: a slow press never delays a stop
         self._listening_since: float | None = None
         self._last_say_at = float("-inf")
+        self._audio_open = False  # a press that announced phone audio is held
+        self._audio_tokens = 0.0  # seconds of audio the rate limit still allows
+        self._audio_refilled_at = 0.0
+        self.audio_stats = AudioStats()
         self._clock = clock
         self._deadman_s = deadman_s
         self._min_forward_s = min_forward_s
@@ -227,6 +256,39 @@ class WebControl:
             self.release_listening()
             return True
 
+    def handle_audio(self, client: object, data: bytes) -> str:
+        """One binary frame from *client*: ``"fed"``, ``"ignored"`` (not the controller),
+        ``"outside"`` (no press held: frames in flight at a release land here) or ``"rate"``.
+        Raises ``ProtocolError`` for a malformed frame. Never blocks (the feed only queues)."""
+        with self._lock:
+            if self._controller is not client:
+                self.audio_stats.dropped_outside += 1
+                return "ignored"
+        feed = self._voice.feed_audio
+        with self._ptt_lock:
+            if not self._audio_open or feed is None:
+                self.audio_stats.dropped_outside += 1
+                return "outside"
+            try:
+                seconds = check_audio_frame(data)
+            except ProtocolError:
+                self.audio_stats.dropped_invalid += 1
+                raise
+            now = self._clock()
+            self._audio_tokens = min(
+                config.WEB_AUDIO_BURST_S,
+                self._audio_tokens + (now - self._audio_refilled_at) * config.WEB_AUDIO_MAX_RATE)
+            self._audio_refilled_at = now
+            cost = max(seconds, config.WEB_AUDIO_MIN_FRAME_MS / 1000.0)  # tiny frames cost as 20 ms
+            if self._audio_tokens + 1e-9 < cost:  # (float sums of 0.05 never land exactly)
+                self.audio_stats.dropped_rate += 1
+                return "rate"
+            self._audio_tokens -= cost
+            feed(data)
+            self.audio_stats.fed_frames += 1
+            self.audio_stats.fed_bytes += len(data)
+            return "fed"
+
     # --- voice (hold-to-talk and typed text) ------------------------------------------
     def _voice_request(self, request: Request) -> None:
         if request.action == "ptt_release":
@@ -235,13 +297,23 @@ class WebControl:
         if request.action == "ptt_press":
             if self._voice.ptt_unavailable:
                 raise Refused(self._voice.ptt_unavailable)
+            if request.audio and not self._voice.phone_audio:
+                raise Refused("the robot listens with its own microphone "
+                              "(start it with --audio-source phone)")
+            if self._voice.phone_audio and not request.audio:
+                raise Refused("the robot listens to the phone: announce the audio format "
+                              "with ptt_press")
             with self._ptt_lock:
                 if self._listening_since is None:  # a repeat press must not extend the limit
                     self._listening_since = self._clock()
+                    self._audio_open = request.audio
+                    self._audio_tokens = config.WEB_AUDIO_BURST_S
+                    self._audio_refilled_at = self._listening_since
                     try:
                         self._voice.set_listening(True)
                     except Exception:
                         self._listening_since = None
+                        self._audio_open = False
                         raise
             return
         if self._voice.say_unavailable:
@@ -275,6 +347,7 @@ class WebControl:
             if self._listening_since is None:
                 return
             self._listening_since = None
+            self._audio_open = False  # frames still in flight are dropped from here on
             self._voice.set_listening(False)
 
     # --- internals (the lock is held) ------------------------------------------------

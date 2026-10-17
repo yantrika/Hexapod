@@ -14,6 +14,7 @@ import logging
 import os
 import sys
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,7 +34,7 @@ from brain.persona import Persona
 from brain.status_hub import StatusHub
 from brain.voice_loop import VoiceEvent, VoiceLoop
 from bridge import make_bridge, new_command
-from voice.audio import AudioSource, FileSource, MicSource, QueueSource
+from voice.audio import AudioSource, FileSource, MicSource, NetworkSource, QueueSource
 from voice.playback import Playback, SoundDeviceSink
 from voice.ptt import PushToTalk, make_ptt
 from voice.stt import SttEngine, VoskStt
@@ -68,6 +69,8 @@ class AppOptions:
     memory: bool = True  # False: no database at all (nothing is remembered)
     memory_path: Path | None = None  # None: config.MEMORY_DB_PATH when the app starts
     mode: str | None = None  # start in this persona mode (None: the saved one, else calm)
+    audio_source: str = "robot"  # "robot" (its microphone) | "phone" (the app's, over the web)
+    debug_save_audio: bool = False  # phone mode only: each press is saved as a WAV in .tmp/
 
 
 class LoggedPlayback:
@@ -156,6 +159,7 @@ class HexaApp:
         self.extractor: MemoryExtractor | None = None
         self.events = EventHub()  # heard / route / said / listening, for the phone page
         self.speech = LoggedPlayback(None, self._on_said)
+        self._last_partial_at = float("-inf")
         self._engine: PiperEngine | None = None
         self._log_stop = threading.Event()
         self._log_thread: threading.Thread | None = None
@@ -312,9 +316,11 @@ class HexaApp:
             pin, generated = resolve_pin(config.WEB_PIN, dict(os.environ))
         self.web_pin = pin
         host = "0.0.0.0" if options.lan else "127.0.0.1"
+        source = self.source
         voice = VoiceControls(
             self.set_listening, self.submit_text, self._ptt_unavailable(), self._say_unavailable(),
-            self._persona_controls())
+            self._persona_controls(), phone_audio=isinstance(source, NetworkSource),
+            feed_audio=source.offer_pcm if isinstance(source, NetworkSource) else None)
         self.web = WebServer(self.bridge, self.hub, pin, host=host, port=options.web_port,
                              voice=voice, events=self.events)
         self.web.start()
@@ -333,7 +339,7 @@ class HexaApp:
 
     def _ptt_unavailable(self) -> str | None:
         """Why the phone's hold-to-talk button cannot work here (None: it can)."""
-        if self.options.no_mic:
+        if self.options.no_mic and not isinstance(self.source, NetworkSource):
             return "the robot runs with --no-mic: it has no microphone to hold"
         if self.ptt is None:
             return "the robot listens all the time (--listen always): there is nothing to hold"
@@ -347,8 +353,11 @@ class HexaApp:
             return self._source
         if self.options.audio_file is not None:
             return FileSource(self.options.audio_file, realtime=True, pad_silence_s=2.0)
+        if self.options.audio_source == "phone":  # the robot's own microphone is never opened
+            debug_dir = config.PROJECT_ROOT / ".tmp" if self.options.debug_save_audio else None
+            return NetworkSource(debug_dir=debug_dir)
         if self.options.no_mic:
-            return QueueSource()  # reserved for the phone microphone (docs/ROADMAP.md, 12c)
+            return QueueSource()
         return MicSource(device=self.options.mic_device)
 
     # -- logging -------------------------------------------------------------------------------
@@ -362,7 +371,9 @@ class HexaApp:
         self.hub.unsubscribe(subscription)
 
     def _on_voice_event(self, event: VoiceEvent) -> None:
-        if event.kind == "final":
+        if event.kind == "partial":
+            self._publish_partial(event.text)
+        elif event.kind == "final":
             logger.info("heard %r", event.text)
             if event.text:
                 self.events.publish({"type": "heard", "text": event.text})
@@ -373,6 +384,15 @@ class HexaApp:
             self.events.publish({"type": "route", "route": route.kind, "action": route.action,
                                  "text": route.text, "early_stop": event.early_stop})
 
+    def _publish_partial(self, text: str) -> None:
+        """Partial text for the phone (phone audio only), at most one per interval."""
+        if not isinstance(self.source, NetworkSource):
+            return
+        now = time.monotonic()
+        if now - self._last_partial_at >= config.WEB_PARTIAL_MIN_INTERVAL_S:
+            self._last_partial_at = now
+            self.events.publish({"type": "partial", "text": text})
+
     def _on_said(self, text: str) -> None:
         self.events.publish({"type": "said", "text": text})
 
@@ -381,10 +401,15 @@ class HexaApp:
         """Push-to-talk from any thread (a key, the phone page). No-op in 'always' mode."""
         if self.ptt is None:
             return
+        source = self.source
         if on:
+            if isinstance(source, NetworkSource):
+                source.clear()  # nothing from an earlier press may leak into this one
             self.ptt.press()
         else:
             self.ptt.release()
+            if isinstance(source, NetworkSource):
+                source.end_utterance()  # writes a WAV only with --debug-save-audio
 
     def submit_text(self, text: str) -> None:
         """Typed text (the phone page) takes the same route as a spoken final result."""

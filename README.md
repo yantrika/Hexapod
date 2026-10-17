@@ -38,6 +38,7 @@ small key/button panel (Space = stop).
 | Same, no sound and no microphone | `python main.py --gui --chat fake --no-speak --no-mic` |
 | Phone page (open the printed address, type the printed PIN) | `python main.py --web --chat fake` (this computer) or `--lan` (your phone on the same Wi-Fi) |
 | No window (default, lightest) | `python main.py --chat fake` |
+| Talk through the phone app's microphone (the robot's own is not opened) | `python main.py --lan --audio-source phone --chat fake` |
 | Always listening instead of push-to-talk | `python main.py --listen always` |
 | Real chat model (needs Ollama, see below) | `python main.py --chat ollama` |
 | Scripted motion demo in the window | `python scripts/sim_demo.py --script "stand,walk:5,turn:90,strafe:3,stop,sit"` |
@@ -52,9 +53,18 @@ push-to-talk mode a voice "stop" works only while you hold the button; the contr
 button and Space always work.
 
 Useful `main.py` switches: `--gui|--headless`, `--chat fake|ollama|off`, `--no-speak`, `--no-mic`,
-`--listen ptt|always`, `--web|--lan [--web-port N]`, `--mode calm|funny|roast`,
+`--listen ptt|always`, `--audio-source robot|phone`, `--debug-save-audio`, `--web|--lan [--web-port N]`, `--mode calm|funny|roast`,
 `--no-memory`, `--model us|in` (Vosk model), `--device N` (microphone, list with
 `scripts/mic_check.py`), `--log-level DEBUG`. Stop with Ctrl-C.
+
+Talking from the phone: start `python main.py --lan --audio-source phone --chat fake`, open the
+Flutter app, enter the printed address and PIN, and hold the talk button. The phone's microphone
+streams to the robot over the same connection (plain `ws://`, no HTTPS); the robot's own microphone
+is not opened. The same router, stop word and 10 s listening limit apply, and the app's STOP button
+and a typed "stop" always work. Without a phone, stream a recording:
+`python scripts/web_check.py --pin <PIN> --talk-wav sit_down.wav`. The audio is never written to
+disk or the log (`--debug-save-audio` saves each press under `.tmp/` for debugging only). The
+protocol the app speaks is in `docs/DEVELOPMENT.md`.
 
 Optional chat model: Ollama runs in Docker on a laptop (`docker start ollama`,
 `docker exec -it ollama ollama pull qwen2.5:0.5b`, stop it when done) and from a folder on the Pi

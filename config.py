@@ -372,7 +372,7 @@ WEB_CLIENT_SEND_HZ = 10.0  # the page repeats a held move at this rate (the serv
 WEB_WALK_SPEED = 0.5  # `speed` of a walk when the page sends none
 WEB_TICK_S = 0.05  # server loop: deadman check and status relay
 WEB_MIN_FORWARD_S = 0.05  # an unchanged move is forwarded as a heartbeat at most this often
-WEB_MAX_MESSAGE_BYTES = 1024  # larger messages close the connection (room for a full `say`)
+WEB_MAX_MESSAGE_BYTES = 1024  # larger text messages are refused (room for a full `say`)
 WEB_MAX_INVALID = 20  # this many rejected messages close the connection
 WEB_PING_S = 5.0  # WebSocket keepalive ping (a vanished phone is noticed, then `stop`)
 WEB_CLOSE_S = 1.0  # a client that ignores the close handshake is dropped after this
@@ -382,6 +382,21 @@ WEB_PTT_MAX_S = 10.0  # the SERVER releases push-to-talk after this long, whatev
 WEB_SAY_MAX_CHARS = 120  # longest typed `say` text
 WEB_SAY_MIN_INTERVAL_S = 0.3  # at most one typed `say` per this (a flood is refused)
 WEB_EVENT_QUEUE_SIZE = 64  # events waiting for the phone: the oldest is dropped when full
+# --- Phone page: the PHONE's microphone (main.py --audio-source phone) -------
+# Format of the binary frames: raw little-endian PCM, 16 kHz mono (what Vosk wants), sent while a
+# `ptt_press` that announced it is held. Anything else is refused, never converted.
+WEB_AUDIO_RATE = AUDIO_SAMPLE_RATE
+WEB_AUDIO_CHANNELS = 1
+WEB_AUDIO_FORMAT = "s16le"
+WEB_AUDIO_SAMPLE_BYTES = 2  # s16le
+WEB_AUDIO_MIN_FRAME_MS = 20  # shorter frames are accepted but charged as this much
+WEB_AUDIO_MAX_FRAME_MS = 100  # longer frames are refused
+WEB_AUDIO_MAX_FRAME_BYTES = WEB_AUDIO_RATE * WEB_AUDIO_MAX_FRAME_MS // 1000 * WEB_AUDIO_SAMPLE_BYTES
+WEB_AUDIO_MAX_RATE = 1.5  # at most this many seconds of audio per second (real time is 1.0) ...
+WEB_AUDIO_BURST_S = 1.0  # ... plus this much saved up (a Wi-Fi stall delivers late frames at once)
+WEB_AUDIO_QUEUE_BLOCKS = 128  # network source queue; the oldest block is dropped when it is full
+WEB_AUDIO_ERROR_INTERVAL_S = 1.0  # at most one audio error message to the phone per this
+WEB_PARTIAL_MIN_INTERVAL_S = 0.25  # at most one partial-text event to the phone per this
 
 # === Persona (Arya), memory and context ===========================================================
 

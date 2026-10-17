@@ -7,6 +7,10 @@
     python scripts/web_check.py --pin 123456 --say "walk forward"      (typed text, as spoken)
     python scripts/web_check.py --pin 123456 --talk 3                  (hold to talk 3 s: speak
                                                                         near the robot)
+    python scripts/web_check.py --pin 123456 --talk-wav sit_down.wav   (stream a WAV as the
+                                                                        phone's microphone; the
+                                                                        robot runs with
+                                                                        --audio-source phone)
     python scripts/web_check.py --pin 123456 --forward 1 --seconds 2 --leave drop
 
 It sends the same JSON messages as the page (a ``walk`` repeated at 10 Hz while held, then a
@@ -22,6 +26,7 @@ import argparse
 import json
 import sys
 import time
+import wave
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any, cast
@@ -29,7 +34,11 @@ from urllib.parse import quote
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import numpy as np  # noqa: E402
+from numpy.typing import NDArray  # noqa: E402
+
 import config  # noqa: E402
+from voice.audio import resample  # noqa: E402
 
 
 class Refused(Exception):
@@ -111,6 +120,31 @@ class WebClient:
     def release(self) -> None:
         self.send({"action": "ptt_release"})
 
+    def press_audio(self) -> None:
+        """Hold to talk with PHONE audio: announces the one supported format."""
+        self.send({"action": "ptt_press",
+                   "audio": {"rate": config.WEB_AUDIO_RATE, "channels": config.WEB_AUDIO_CHANNELS,
+                             "format": config.WEB_AUDIO_FORMAT}})
+
+    def send_audio(self, pcm: bytes) -> None:
+        """One binary frame of raw s16le PCM."""
+        self._ws.send(pcm)
+
+    def stream_samples(self, samples: NDArray[np.int16], frame_ms: int = 50,
+                       realtime: bool = True) -> list[dict[str, Any]]:
+        """Send *samples* (16 kHz mono) as binary frames, paced like a microphone (frame *i* leaves
+        when it would have been captured); returns what the server said meanwhile."""
+        frame = config.WEB_AUDIO_RATE * frame_ms // 1000
+        heard: list[dict[str, Any]] = []
+        start = time.monotonic()
+        for begin in range(0, len(samples), frame):
+            chunk = samples[begin:begin + frame]
+            deadline = start + (begin + len(chunk)) / config.WEB_AUDIO_RATE
+            if realtime and (wait := deadline - time.monotonic()) > 0:
+                heard += self.messages(wait)  # also drains the replies while we wait
+            self.send_audio(chunk.astype("<i2").tobytes())
+        return heard
+
     def say(self, text: str) -> None:
         """Typed text: routed exactly like spoken text."""
         self.send({"action": "say", "text": text})
@@ -129,6 +163,18 @@ class WebClient:
         self._ws.socket.close()
 
 
+def load_wav_16k_mono(path: Path) -> NDArray[np.int16]:
+    """A 16-bit WAV as 16 kHz mono samples: channels are averaged, the rate is converted."""
+    with wave.open(str(path), "rb") as wav:
+        if wav.getsampwidth() != 2:
+            raise ValueError(f"{path}: expected 16-bit audio")
+        channels, rate = wav.getnchannels(), wav.getframerate()
+        data = np.frombuffer(wav.readframes(wav.getnframes()), dtype="<i2")
+    if channels > 1:
+        data = data[: len(data) // channels * channels].reshape(-1, channels).mean(axis=1)
+    return resample(data.astype(np.int16), rate, config.WEB_AUDIO_RATE)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--url", default=f"ws://127.0.0.1:{config.WEB_PORT}")
@@ -144,6 +190,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                         help="send this typed text (routed like spoken text)")
     parser.add_argument("--talk", type=float, default=None, metavar="SECONDS",
                         help="hold to talk for this long (the robot's microphone hears you)")
+    parser.add_argument("--talk-wav", type=Path, default=None, metavar="FILE",
+                        help="hold to talk and stream this WAV as the phone's microphone in real "
+                             "time (resampled to 16 kHz mono if needed); the robot must run with "
+                             "--audio-source phone")
     parser.add_argument("--leave", choices=("stop", "drop"), default="stop",
                         help="end with a stop message, or just close the socket")
     args = parser.parse_args(argv)
@@ -166,6 +216,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     show(client.messages(0.3))  # the hello
     if args.say is not None:
         client.say(args.say)
+        show(client.messages(3.0))
+    elif args.talk_wav is not None:
+        try:
+            samples = load_wav_16k_mono(args.talk_wav)
+        except (OSError, ValueError, wave.Error) as error:
+            print(f"cannot read the WAV: {error}")
+            return 1
+        client.press_audio()
+        show(client.stream_samples(samples))
+        client.release()
         show(client.messages(3.0))
     elif args.talk is not None:
         client.press()
