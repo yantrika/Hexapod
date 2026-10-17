@@ -10,7 +10,6 @@ import sys
 import threading
 import time
 from collections.abc import Callable, Iterator
-from pathlib import Path
 
 import pytest
 
@@ -21,7 +20,7 @@ from brain.router import route
 from bridge import Status, make_bridge
 from scripts.cli import BrainLoop, describe
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = config.PROJECT_ROOT
 
 
 class Rig:

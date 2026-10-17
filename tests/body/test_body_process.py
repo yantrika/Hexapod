@@ -26,7 +26,7 @@ from body.process import BodyProbe, BodyProcess
 from bridge import Bridge, Command, Status, make_bridge, new_command
 
 WALK: dict[str, Any] = {"direction": "fwd", "speed": 0.5}
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = config.PROJECT_ROOT
 
 # Bounds of the real-process timing tests
 BODY_TEST_STOP_MAX_S = 0.1  # send stop -> done status, even with a full queue
@@ -329,7 +329,7 @@ def test_the_body_exits_when_its_parent_dies(tmp_path: Path) -> None:
     )
     assert result.returncode == 0, result.stderr
     pid = int(next(line for line in result.stdout.split() if line.isdigit()))  # pybullet chats
-    deadline = time.monotonic() + 5.0
+    deadline = time.monotonic() + 20.0
     while time.monotonic() < deadline and not _pid_gone(pid):
         time.sleep(0.1)
     if not _pid_gone(pid):

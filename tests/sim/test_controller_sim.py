@@ -19,7 +19,7 @@ from body import poses  # noqa: E402
 from body.controller import Controller, State  # noqa: E402
 from body.sim_backend import SimBackend  # noqa: E402
 from tests.fakes import FakeClock  # noqa: E402
-from tests.walk_harness import (  # noqa: E402
+from tests.sim.walk_harness import (  # noqa: E402
     HOLD_TEST_MAX_BODY_SPEED_M_S,
     HOLD_TEST_MAX_TILT_DEG,
     WALK_TEST_HEIGHT_TOL_M,

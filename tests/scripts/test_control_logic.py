@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 import config
@@ -220,7 +218,7 @@ def test_a_halt_when_already_idle_does_not_stick_on_walking() -> None:
 
 
 def test_the_window_talks_only_through_the_bridge() -> None:
-    source = (Path(__file__).resolve().parent.parent / "scripts" / "control_window.py").read_text()
+    source = (config.PROJECT_ROOT / "scripts" / "control_window.py").read_text()
     for forbidden in ("body.controller", "body.sim_backend", "body.backend", "body.gait",
                       "pybullet", "Controller("):
         assert forbidden not in source

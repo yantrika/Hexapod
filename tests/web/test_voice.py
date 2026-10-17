@@ -18,8 +18,8 @@ import pytest
 from brain.app import AppOptions, HexaApp
 from brain.chat import FakeChat
 from scripts.web_check import WebClient
+from tests.brain.test_chat_voice import CHAT, SCRIPT, STOP, WALK, Rig
 from tests.fakes import FakeStt, collect, wait_until
-from tests.test_chat_voice import CHAT, SCRIPT, STOP, WALK, Rig
 from voice.audio import Block, FileSource, QueueSource
 from voice.ptt import PushToTalk
 

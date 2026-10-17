@@ -16,7 +16,7 @@ pytest.importorskip("pybullet")  # the simulator is not installed on the Pi
 import config  # noqa: E402
 from body.gait import BodyVelocity  # noqa: E402
 from body.sim_backend import SimBackend  # noqa: E402
-from tests.walk_harness import (  # noqa: E402
+from tests.sim.walk_harness import (  # noqa: E402
     WALK_TEST_HEADING_DRIFT_DEG,
     WALK_TEST_HEIGHT_TOL_M,
     WALK_TEST_MAX_TILT_DEG,

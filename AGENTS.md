@@ -19,7 +19,7 @@ changes, `ruff check . && mypy .` before every commit. Python 3.11 venv in `.ven
   backend is enabled at boot.
 - One path to a servo: Controller -> `HexapodBackend.set_joint_targets` (hard limits) ->
   `ServoBackend` (calibrated pulse window, slew limit) -> `body/servo_drivers.py`. Nothing else
-  imports the drivers (`tests/test_servo_paths.py`).
+  imports the drivers (`tests/body/test_servo_paths.py`).
 - Every per-joint servo number lives in `data/calibration/servo_cal.json`; never in `config.py`
   and never in other code. A joint that is not calibrated is not driven.
 - The robot powers up sitting, attaches one leg at a time, releases after idling, and on SIGINT,

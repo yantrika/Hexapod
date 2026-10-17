@@ -14,7 +14,6 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Iterator
-from pathlib import Path
 from typing import Any
 
 import pytest
@@ -25,11 +24,11 @@ from brain.status_hub import StatusHub
 from bridge import Bridge, Command, Status, make_local_bridge
 from scripts.web_check import Refused, WebClient
 from tests.fakes import FakeClock, collect, wait_until
-from tests.test_web_session import FakeVoice
+from tests.web.test_session import FakeVoice
 from web.server import WebServer, lan_addresses, resolve_pin
 
 PIN = "246810"
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = config.PROJECT_ROOT
 FORBIDDEN = ("body.controller", "body.gait", "body.sim_backend", "body.servo_backend",
              "body.backend", "body.kinematics", "pybullet")
 

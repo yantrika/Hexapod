@@ -59,17 +59,27 @@ def test_a_web_walk_moves_the_body_and_a_dropped_connection_stops_it() -> None:
 
         started = time.monotonic()
         probe.set("change_time", 0.0)
-        heard = client.hold(1.0, forward=1.0, yaw=1.0)  # forward + turn: one combined walk
-        assert probe.get("change_time") > started, "the joint targets never moved"
+        # forward + turn: one combined walk, held until the body reports it is walking
+        heard = client.hold_until(lambda m: m.get("type") == "status" and m["state"] == "walking",
+                                  forward=1.0, yaw=1.0)
         assert any(m.get("type") == "status" and m["state"] == "walking" for m in heard), heard
+        wait_until(lambda: probe.get("change_time") > started, timeout=10,
+                   what="the joint targets to move")
 
         client.drop()  # a vanished phone: no stop message, no closing handshake
         dropped = time.monotonic()
-        time.sleep(0.8)
-        assert probe.get("change_time") - dropped < 0.35, "the body kept moving after the drop"
-        settled = probe.get("change_time")
-        time.sleep(0.4)
-        assert probe.get("change_time") == settled  # and it stays still (holding the pose)
+        last = [probe.get("change_time"), time.monotonic()]
+
+        def still_for_half_a_second() -> bool:  # the targets stopped changing
+            now = time.monotonic()
+            if probe.get("change_time") != last[0]:
+                last[:] = [probe.get("change_time"), now]
+            return now - last[1] >= 0.5
+
+        wait_until(still_for_half_a_second, timeout=20, what="the body to stop after the drop")
+        # the deadman stops it within WEB_DEADMAN_S (checked exactly in test_session with a fake
+        # clock); here a generous bound so a slow machine cannot fail the test
+        assert last[0] - dropped < config.WEB_DEADMAN_S + 2.0, "the body kept moving after the drop"
 
         second = WebClient(f"ws://127.0.0.1:{port}", PIN)  # the controller slot was freed
         assert (second.recv(2) or {}).get("type") == "hello"
@@ -81,8 +91,8 @@ def test_a_web_walk_moves_the_body_and_a_dropped_connection_stops_it() -> None:
         app.shutdown()
     assert pid is not None and not pid_alive(pid)  # no orphan body
     assert port_closed(port)
-    time.sleep(1)
-    assert [t.name for t in threading.enumerate() if t.name not in before] == []
+    wait_until(lambda: not [t for t in threading.enumerate() if t.name not in before], timeout=10,
+               what="the app's threads to end")
 
 
 @pytest.fixture()
@@ -108,7 +118,8 @@ def test_main_web_as_a_real_process_walks_stops_on_disconnect_and_exits_clean(
 
         client = WebClient(f"ws://127.0.0.1:{port}", pin)
         assert (client.recv(2) or {}).get("type") == "hello"
-        heard = client.hold(0.8, forward=1.0)
+        heard = client.hold_until(lambda m: m.get("type") == "status" and m["status"] == "accepted",
+                                  forward=1.0)
         assert any(m.get("type") == "status" and m["status"] == "accepted" for m in heard), heard
         client.drop()
         assert run.wait_for("web: controller disconnected", 10), run.text
