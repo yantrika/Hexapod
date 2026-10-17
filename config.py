@@ -153,16 +153,31 @@ TELEOP_SPEED_SCALE_STEP = 0.1
 PHYSICS_HZ = 240.0  # PyBullet step, driven by wall-clock time
 CONTROL_HZ = 50.0  # control tick, driven by wall-clock time
 BACKENDS = ("sim", "dryrun", "servo")  # body backends main.py can start (servo = real Pi hardware)
-BACKEND_DEFAULT = os.environ.get("HEXA_BACKEND", "sim")  # the Pi build sets dryrun (no pybullet)
-# --- Servo backend (Pi, real hardware; the per-joint table lives in body/servo_backend.py) ---
+_ENV_BACKEND = os.environ.get("HEXA_BACKEND", "sim")  # the Pi build sets dryrun (no pybullet)
+ENV_REQUESTS_SERVO = _ENV_BACKEND == "servo"  # refused: servo needs --backend servo
+BACKEND_DEFAULT = "sim" if ENV_REQUESTS_SERVO else _ENV_BACKEND  # never the real servos
+# --- Hardware section: the Pi servo backend (board-level numbers only) -------------------------
+# Per-joint numbers (channel, centre, sign, offset, pulse window, calibrated) are NOT here: they
+# live in the calibration file data/calibration/servo_cal.json (body/servo_calibration.py).
+SERVO_CAL_FILE = DATA_DIR / "calibration" / "servo_cal.json"
 SERVO_PWM_HZ = 50  # PCA9685 and GPIO PWM frequency (analog servo: TowerPro MG995)
-PCA9685_I2C_BUS = 1  # /dev/i2c-1 (Pi pins 3 and 5)
+PCA9685_I2C_BUS = 1  # /dev/i2c-1 (SDA1 = GPIO2 = pin 3, SCL1 = GPIO3 = pin 5)
 PCA9685_ADDRESS = 0x40  # one board, all address jumpers open
+PCA9685_OE_GPIO: int | None = None  # Pi GPIO wired to the PCA9685 OE pin (None: OE not wired)
+GPIO_CHIP_PATH = "/dev/gpiochip4"  # header GPIO chip of the Pi 5 (RP1); check with `gpiodetect`
 GPIO_PWM_CHIP = 2  # /sys/class/pwm/pwmchipN of the Pi 5 (RP1); needs dtoverlay=pwm-2chan
+GPIO_PWM_PINS = (12, 13)  # hardware PWM0 / PWM1 = pins 32 / 33 (the two rear coxas)
 SERVO_US_PER_DEG = 2000.0 / 180.0  # MG995: 500..2500 us over about 180 deg (PiHexa18 reference)
-SERVO_PULSE_ABS_MIN_US = 450  # nothing is ever sent outside this window, whatever the table says
+SERVO_PULSE_ABS_MIN_US = 450  # nothing is ever sent outside this window, whatever the file says
 SERVO_PULSE_ABS_MAX_US = 2550
-SERVO_SLEW_DEG_S = 120.0  # a servo output never moves faster than this (first power-up safety)
+SERVO_SLEW_DEG_S = 120.0  # an output never moves faster than this (measured in wall time)
+SERVO_SLEW_MAX_DT_S = 0.1  # one slew step covers at most this much time (a stalled loop)
+SERVO_STAGGER_S = 0.3  # delay between legs when the servos are attached (one leg at a time)
+SERVO_IDLE_RELEASE_S = 10.0  # sitting with no command this long releases every channel
+SERVO_SHUTDOWN_SIT_TIMEOUT_S = 4.5  # a signal shutdown sits for at most this long, then releases
+SERVO_SIT_TOLERANCE_DEG = 1.0  # "at the sit pose" for the idle release
+SERVO_JOG_STEP_US = 5  # servo_jog fine step (the coarse step is SERVO_JOG_COARSE_US)
+SERVO_JOG_COARSE_US = 25
 TERMINAL_KEY_HOLD_S = 0.6  # terminal teleop: a movement key counts as held this long after a press
 DRYRUN_LOG_FILE = LOG_DIR / "dryrun.log"  # per-leg joint targets the gait would send (tail -f it)
 DRYRUN_LOG_HZ = 2.0  # at most this many lines per second while the targets are changing ...

@@ -1,0 +1,8 @@
+# OPTIONAL, Raspberry Pi only: libgpiod bindings for the PCA9685 output-enable (OE) line.
+# Needed only when config.PCA9685_OE_GPIO is set (docs/HARDWARE.md, "Optional OE wire").
+# Install on the Pi (wheels only, like requirements-pi.txt):
+#   export TMPDIR=~/hexa/.tmp; .venv/bin/pip install --only-binary=:all: -r requirements-pi-oe.txt
+# If pip finds no aarch64 wheel for the Pi's Python, stop and report the name and version; the
+# alternative is the system package python3-libgpiod (owner-run apt, then a venv that sees it).
+# Pin an exact version here once `pip index versions gpiod` on the Pi shows which one has a wheel.
+gpiod>=2.2,<3
