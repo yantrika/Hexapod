@@ -7,4 +7,4 @@ smbus2==0.4.3  # I2C for the PCA9685 (pure Python, MIT, py2.py3-none-any wheel);
 --find-links wheelhouse
 -r requirements.txt
 srt==3.5.3
-pytest>=8.0
+pytest==9.1.1

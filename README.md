@@ -73,6 +73,7 @@ Optional chat model: Ollama runs in Docker on a laptop (`docker start ollama`,
 | `tests/` | The test suite (`docs/DEVELOPMENT.md`) |
 | `data/` | Persona files, the servo calibration file, the private memory database |
 | `deploy/` | The systemd unit (written, not installed) |
+| `.github/` | The CI workflow: ruff, mypy and the tests that need no PyBullet, models or hardware |
 | `assets/`, `logs/` | Downloaded models and phrases, the generated robot file, logs: created on demand, not committed |
 | `docs/` | `ARCHITECTURE.md`, `HARDWARE.md`, `DEVELOPMENT.md`, `ROADMAP.md` |
 

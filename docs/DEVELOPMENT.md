@@ -87,7 +87,7 @@ cases ("I sat down for lunch", "turn up the music"). Kinematics: test `FK(IK(p))
 `IK(FK(a)) == a`.
 
 **CI** (`.github/workflows/ci.yml`) runs ruff, mypy and `pytest` on Python 3.11 and 3.12 with no
-PyBullet, no models and no hardware: roughly 1480 tests run and about 30 skip. It does **not**
+PyBullet, no models and no hardware: roughly 1470 tests run and about 30 skip. It does **not**
 exercise the simulator, so run `pytest tests/sim` locally before merging a change to motion,
 gait, kinematics, the controller or the backend contract.
 
