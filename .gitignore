@@ -17,3 +17,9 @@ wheelhouse/
 
 # Arya memory database (Step 13): personal data, never committed or synced
 data/memory/
+
+# IDE and Flutter/Dart generated files (not source)
+.idea/
+*.iml
+.dart_tool/
+build/
