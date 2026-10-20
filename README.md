@@ -66,6 +66,11 @@ and a typed "stop" always work. Without a phone, stream a recording:
 disk or the log (`--debug-save-audio` saves each press under `.tmp/` for debugging only). The
 protocol the app speaks is in `docs/DEVELOPMENT.md`.
 
+Vision (standalone for now, no robot needed): `pip install -r requirements-vision.txt`,
+`python scripts/fetch_vision_models.py`, then `python scripts/vision_check.py --debug-preview`
+(webcam, boxes, track ids, events and a timing summary every 5 s; `--no-preview` for no window).
+On the Pi: `python scripts/vision_bench.py --load 4` (headless numbers with the cores busy).
+
 Optional chat model: Ollama runs in Docker on a laptop (`docker start ollama`,
 `docker exec -it ollama ollama pull qwen2.5:0.5b`, stop it when done) and from a folder on the Pi
 (`docs/HARDWARE.md`). The laptop is too slow for it (about 1.5 tokens/s), so use `--chat fake` there.
@@ -79,6 +84,7 @@ Optional chat model: Ollama runs in Docker on a laptop (`docker start ollama`,
 | `brain/` | Router, voice loop, chat, dialogue, persona, memory, status hub |
 | `voice/` | Audio in, Vosk, Piper, playback, push-to-talk |
 | `web/` | The phone control page |
+| `vision/` | The vision process: webcam, face detection, tracker, events only (not wired into `main.py` yet) |
 | `scripts/` | Tools you run: models, sim demos, servo calibration, Pi sync, checks |
 | `tests/` | The test suite (`docs/DEVELOPMENT.md`) |
 | `data/` | Persona files, the servo calibration file, the private memory database |

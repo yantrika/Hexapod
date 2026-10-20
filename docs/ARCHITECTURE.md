@@ -155,10 +155,36 @@ the TTS). The router runs first and does not know the persona: persona requests 
 check and never reach the body or the LLM. One exception: the whole utterance "stop roasting"
 switches to calm and, if the body is moving, sends a real `stop` first.
 
-Planned (not built): a third process, VISION (webcam, face detection, recognition on new tracks
-only), sends small events (`person_appeared`, `person_left`, `face_bearing`, never images) over its
-own bounded queue; it never touches the Bridge, the body or audio. A rule-based behaviour layer is
-the only code that turns perception into commands, and only `stand`, `wave` and small turns.
+### Vision
+
+`vision/` is a third process (spawn), built standalone: nothing in `body/`, `brain/`, `voice/` or
+`web/` starts it yet. `vision/process.py` reads the webcam at a fixed low rate
+(`VISION_FPS`, 4), resizes each frame to `VISION_DETECT_WIDTH` (320 px), finds faces with YuNet
+(`detector.py`), and an IoU tracker (`tracker.py`) gives stable track ids with appear/lost
+debounce. It sends only small events on its own bounded queue (oldest dropped when full):
+`person_appeared(track_id)`, `person_left(track_id)` and `face_bearing(track_id, angle_deg)`,
+at most `VISION_BEARING_MAX_HZ` per track per second. The bearing is the horizontal angle of the
+face centre from the camera axis (pinhole model, `VISION_HFOV_DEG`); positive means to the robot's
+left, like the body frame. While `pause_event` is set (the LLM is generating) the frame rate and
+the bearing rate drop to `VISION_PAUSED_FPS` and `VISION_PAUSED_BEARING_HZ`.
+
+- **Images never leave the process.** No frame or face crop is sent, written to disk or logged
+  (`tests/vision/test_privacy.py`); the optional `--debug-preview` window is drawn inside the
+  vision process.
+- **A bad camera never reaches the robot.** A camera error is logged and retried with backoff
+  (1 s doubling to 30 s); the tracker reports everyone as left; speech and the body never wait
+  for vision.
+- **Vision never moves the robot by itself.** It only reports. The behaviour layer (P5,
+  `brain/behaviour.py`, rules, not the LLM) will be the only code that turns these events into
+  commands, only when idle, only `stand`, `wave` and small turns, with STOP winning.
+- `vision/recognizer.py` (SFace embedding and cosine match against known embeddings passed in) is
+  the P4 stub: no storage, no enrolment, no names; the vision process does not call it yet.
+
+Models: `python scripts/fetch_vision_models.py` (YuNet `face_detection_yunet_2023mar.onnx`, SFace
+`face_recognition_sface_2021dec.onnx`, from the OpenCV Zoo, SHA-256 checked, into `assets/vision/`).
+Packages: `requirements-vision.txt` (opencv-python, numpy, psutil; wheels exist for Windows, Linux
+x86_64 and aarch64). Measured numbers: `scripts/vision_check.py` and `scripts/vision_bench.py`
+(not measured yet on the Pi).
 
 ## Design decisions
 

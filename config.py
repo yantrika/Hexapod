@@ -469,6 +469,34 @@ EXTRACTOR_POLL_S = 1.0
 # "forget me" asks for a yes first; the answer must come within this long
 FORGET_CONFIRM_S = 20.0
 
+# === Vision (the webcam process, vision/; events only, never images) ==============================
+
+VISION_DIR = ASSETS_DIR / "vision"  # models: scripts/fetch_vision_models.py (gitignored)
+VISION_YUNET_FILE = VISION_DIR / "face_detection_yunet_2023mar.onnx"
+VISION_SFACE_FILE = VISION_DIR / "face_recognition_sface_2021dec.onnx"
+VISION_CAMERA_INDEX = 0  # cv2.VideoCapture device index (--camera on the check scripts)
+VISION_CAPTURE_WIDTH = 640  # what the camera is asked for; frames are downsized for detection
+VISION_CAPTURE_HEIGHT = 480
+VISION_FPS = 4.0  # frames per second the loop reads and detects ...
+VISION_PAUSED_FPS = 1.0  # ... and while pause_event is set (the LLM is generating)
+VISION_FPS_RANGE = (0.5, 15.0)  # bounds for either rate
+VISION_DETECT_WIDTH = 320  # frames are resized to this width before detection (aspect kept)
+VISION_SCORE_THRESHOLD = 0.7  # YuNet face score; lower finds more faces and more false ones
+VISION_NMS_THRESHOLD = 0.3
+VISION_TOP_K = 5  # at most this many faces per frame
+VISION_CV_THREADS = 2  # cv2.setNumThreads in the vision process (the LLM needs the other cores)
+VISION_HFOV_DEG = 60.0  # horizontal field of view of the webcam; measure yours (spec sheets lie)
+VISION_TRACK_IOU = 0.3  # a detection continues a track when the boxes overlap at least this much
+VISION_APPEAR_FRAMES = 2  # a face must be seen in this many frames in a row before person_appeared
+VISION_LOST_FRAMES = 4  # a person is gone after this many frames in a row without their face
+VISION_BEARING_MAX_HZ = 2.0  # face_bearing events per second, per track ...
+VISION_PAUSED_BEARING_HZ = 0.5  # ... and while pause_event is set
+VISION_EVENT_QUEUE_SIZE = 32  # bounded; the oldest event is dropped when the consumer is behind
+VISION_RETRY_BACKOFF_S = (1.0, 30.0)  # camera error: first retry delay, doubled up to the second
+VISION_STATS_S = 5.0  # the vision process reports fps, detection time, CPU and RAM this often
+VISION_MATCH_THRESHOLD = 0.363  # SFace cosine score for "same person" (OpenCV's documented value;
+# P4 replaces it with a threshold taken from our own pairs)
+
 # === Hardware (the Pi servo backend; board-level numbers only) ====================================
 
 # Per-joint numbers (channel, centre, sign, offset, pulse window, calibrated) are NOT here: they
