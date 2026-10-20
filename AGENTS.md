@@ -59,9 +59,13 @@ changes, `ruff check . && mypy .` before every commit. Python 3.11 venv in `.ven
 - The hard limits (no remarks about looks, body, skin colour, race, religion, caste, gender,
   sexuality, disability, family or health; no slurs or threats; real-help questions get a straight
   answer) are enforced in every mode, in the prompt and in `brain/output_check.py`, and have tests.
-- Privacy: face enrolment only after a yes; embeddings and images never in logs or files;
-  "forget me" deletes everything in one transaction; `data/memory/` is private, ignored by git and
-  never synced; tests never touch the real database.
+- Privacy: face enrolment only after an explicit yes (recorded as `face_consent`; the database
+  refuses embeddings without it); embeddings live only on the robot, in `data/memory/`, and never
+  in logs, events' text or synced files; no image or face crop is ever saved (crops exist in
+  memory until embedded); "forget me" deletes everything in one transaction, face included;
+  `data/memory/` is private, ignored by git and never synced; tests never touch the real database
+  (`scripts/face_check.py` uses its own file). The brain owns the database: the vision process
+  never opens it and only gets embeddings by command. Vision still never moves the robot.
 
 ## Conventions
 

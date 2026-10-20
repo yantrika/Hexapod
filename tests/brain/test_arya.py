@@ -132,7 +132,8 @@ def test_forget_me_asks_first_then_deletes_everything(rig: Rig) -> None:
     assert person
     rig.memory.add_fact(person.id, "Likes tea.")
     rig.memory.add_summary(person.id, "Talked about tea.")
-    rig.memory.add_embedding(person.id, b"1234")
+    rig.memory.set_face_consent(person.id, True)
+    assert rig.memory.add_embedding(person.id, b"1234")
     rig.hear("forget me")
     assert rig.speech.phrases[-1] == "say_yes_to_confirm"
     assert rig.memory.get_person("anna") is not None  # nothing is deleted before the yes

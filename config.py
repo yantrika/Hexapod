@@ -452,6 +452,7 @@ MOOD_BUSY_WINDOW_S = 60.0
 # Memory (SQLite, owned by the brain only; schema version in `meta`)
 MEMORY_MAX_FACTS_PER_PERSON = 30  # the oldest fact is dropped when a new one would exceed this
 MEMORY_MAX_PEOPLE = 50
+MEMORY_MAX_EMBEDDINGS_PER_PERSON = 10  # face samples kept per person (enrolment collects fewer)
 MEMORY_NAME_MAX_CHARS = 24
 MEMORY_FACT_MAX_CHARS = 100
 MEMORY_SUMMARY_MAX_CHARS = 300
@@ -492,10 +493,23 @@ VISION_LOST_FRAMES = 4  # a person is gone after this many frames in a row witho
 VISION_BEARING_MAX_HZ = 2.0  # face_bearing events per second, per track ...
 VISION_PAUSED_BEARING_HZ = 0.5  # ... and while pause_event is set
 VISION_EVENT_QUEUE_SIZE = 32  # bounded; the oldest event is dropped when the consumer is behind
+VISION_COMMAND_QUEUE_SIZE = 16  # brain -> vision commands (set_known_faces, enroll, ...)
 VISION_RETRY_BACKOFF_S = (1.0, 30.0)  # camera error: first retry delay, doubled up to the second
 VISION_STATS_S = 5.0  # the vision process reports fps, detection time, CPU and RAM this often
-VISION_MATCH_THRESHOLD = 0.363  # SFace cosine score for "same person" (OpenCV's documented value;
-# P4 replaces it with a threshold taken from our own pairs)
+VISION_MATCH_THRESHOLD = 0.363  # SFace cosine score for "same person" (>=): the value OpenCV's own
+# face_detect sample and the OpenCV Zoo use (their L2 threshold is 1.128); tune with face_check.py
+VISION_VOTE_WINDOW = 5  # a name needs VOTE_NEEDED of the last VOTE_WINDOW matches to agree
+VISION_VOTE_NEEDED = 3
+VISION_UNKNOWN_AFTER = 5  # good-quality looks without a name, then person_unknown (once per track)
+VISION_RECHECK_S = 5.0  # an identified track is matched again this often (new/unnamed: every frame)
+VISION_MIN_FACE_PX = 48  # quality gate: faces with a shorter box side (detection frame) are skipped
+VISION_BLUR_MIN = 30.0  # quality gate: Laplacian variance of the 96x96 grey crop, below: blurry
+VISION_FRONTAL_MAX = 0.30  # quality gate: nose offset from the eye midpoint / eye distance
+VISION_ENROLL_SAMPLES = 5  # enrolment collects this many good crops (kept as embeddings only) ...
+VISION_ENROLL_TIMEOUT_S = 15.0  # ... within this long
+VISION_ENROLL_GAP_S = 0.4  # at least this long between two samples, so they differ a little
+VISION_ENROLL_LOST_FRAMES = 3  # enrolment fails when the face is missing this many frames in a row
+VISION_ENROLL_MULTI_FRAMES = 2  # ... or when more than one face is seen this many frames in a row
 
 # === Hardware (the Pi servo backend; board-level numbers only) ====================================
 

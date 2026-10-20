@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+import brain.memory as memory_module
 import config
 from brain.memory import SCHEMA_VERSION, Memory, MemoryDbError, clean_name
 
@@ -117,7 +118,8 @@ def test_forget_deletes_everything_about_the_person_and_only_them(memory: Memory
     for person in (anna, ben):
         memory.add_fact(person.id, f"Likes {person.name}.")
         memory.add_summary(person.id, f"Summary of {person.name}.")
-        memory.add_embedding(person.id, b"\x01\x02\x03\x04")
+        memory.set_face_consent(person.id, True)
+        assert memory.add_embedding(person.id, b"\x01\x02\x03\x04")
     assert memory.forget_person(anna.id)
     assert memory.get_person("anna") is None
     assert memory.facts(anna.id) == [] and memory.latest_summary(anna.id) is None
@@ -137,7 +139,8 @@ def test_forget_is_one_transaction(memory: Memory) -> None:
     anna = memory.ensure_person("anna")
     assert anna
     memory.add_fact(anna.id, "Likes tea.")
-    memory.add_embedding(anna.id, b"abcd")
+    memory.set_face_consent(anna.id, True)
+    assert memory.add_embedding(anna.id, b"abcd")
     with memory._lock:  # break the last statement: the person row's delete fails
         memory._db.execute("DROP TABLE face_embeddings")
     with pytest.raises(sqlite3.Error):
@@ -221,3 +224,95 @@ def test_many_threads_can_write_at_once(memory: Memory) -> None:
         thread.join(10)
     assert not errors
     assert memory.fact_count(person.id) == min(80, config.MEMORY_MAX_FACTS_PER_PERSON)
+
+
+# -- face embeddings and consent (P4) -------------------------------------------------------------
+
+def test_no_embedding_is_stored_without_consent(memory: Memory) -> None:
+    anna = memory.ensure_person("anna")
+    assert anna and not anna.face_consent and anna.face_consent_at is None
+    assert not memory.add_embedding(anna.id, b"abcd")
+    assert not memory.replace_embeddings(anna.id, [b"abcd"])
+    assert memory.embedding_count(anna.id) == 0 and memory.all_embeddings() == {}
+
+
+def test_consent_is_recorded_with_a_time_and_allows_storing(memory: Memory) -> None:
+    anna = memory.ensure_person("anna")
+    assert anna and memory.set_face_consent(anna.id, True)
+    person = memory.person_by_id(anna.id)
+    assert person and person.face_consent and person.face_consent_at is not None
+    assert memory.replace_embeddings(anna.id, [b"aaaa", b"bbbb"])
+    assert memory.embeddings(anna.id) == [b"aaaa", b"bbbb"]
+    assert memory.replace_embeddings(anna.id, [b"cccc"])  # a new enrolment replaces the old
+    assert memory.embeddings(anna.id) == [b"cccc"]
+    assert not memory.set_face_consent(999, True)  # nobody has that id
+
+
+def test_bad_embeddings_are_refused_and_change_nothing(
+        memory: Memory, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(config, "MEMORY_MAX_EMBEDDINGS_PER_PERSON", 2)
+    anna = memory.ensure_person("anna")
+    assert anna
+    memory.set_face_consent(anna.id, True)
+    assert memory.replace_embeddings(anna.id, [b"aaaa"])
+    assert not memory.replace_embeddings(anna.id, [])
+    assert not memory.replace_embeddings(anna.id, [b"aaaa", b""])
+    assert not memory.replace_embeddings(anna.id, [b"1", b"2", b"3"])  # over the cap
+    assert not memory.add_embedding(anna.id, b"")
+    assert memory.add_embedding(anna.id, b"bbbb") and not memory.add_embedding(anna.id, b"cccc")
+    assert memory.embeddings(anna.id) == [b"aaaa", b"bbbb"]
+
+
+def test_taking_consent_back_deletes_the_embeddings_but_keeps_the_person(memory: Memory) -> None:
+    anna = memory.ensure_person("anna")
+    assert anna
+    memory.add_fact(anna.id, "Likes tea.")
+    memory.set_face_consent(anna.id, True)
+    memory.replace_embeddings(anna.id, [b"aaaa"])
+    assert memory.forget_face(anna.id)
+    person = memory.person_by_id(anna.id)
+    assert person and not person.face_consent and person.face_consent_at is None
+    assert memory.embedding_count(anna.id) == 0 and memory.fact_count(anna.id) == 1
+    assert not memory.add_embedding(anna.id, b"aaaa")
+
+
+def test_vision_is_only_told_about_people_with_consent(memory: Memory) -> None:
+    anna, ben = memory.ensure_person("anna"), memory.ensure_person("ben")
+    assert anna and ben
+    for person in (anna, ben):
+        memory.set_face_consent(person.id, True)
+        memory.replace_embeddings(person.id, [b"1234"])
+    with memory._lock:  # a row that somehow outlived the consent is still not handed out
+        memory._db.execute("UPDATE people SET face_consent = 0 WHERE id = ?", (ben.id,))
+    assert memory.all_embeddings() == {anna.id: [b"1234"]}
+    assert memory.embeddings(ben.id) == []
+
+
+def test_the_listing_counts_face_samples_but_never_shows_them(memory: Memory) -> None:
+    anna, ben = memory.ensure_person("anna"), memory.ensure_person("ben")
+    assert anna and ben
+    memory.set_face_consent(anna.id, True)
+    memory.replace_embeddings(anna.id, [b"aaaa", b"bbbb", b"cccc"])
+    assert {p.name: p.faces for p in memory.list_people()} == {"Anna": 3, "Ben": 0}
+    assert "aaaa" not in repr(memory.list_people())
+
+
+def test_a_version_1_database_is_migrated_to_2_keeping_its_people(tmp_path: Path) -> None:
+    path = tmp_path / "old.db"
+    old = sqlite3.connect(path)
+    for statement in memory_module._MIGRATIONS[1].split(";"):
+        if statement.strip():
+            old.execute(statement)
+    old.execute("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+    old.execute("INSERT INTO meta VALUES('schema_version', '1')")
+    old.execute("INSERT INTO people(name, roast_ok, created, last_seen) VALUES('Anna', 1, 1, 2)")
+    old.commit()
+    old.close()
+    migrated = Memory(path)
+    try:
+        assert migrated.schema_version == 2 == SCHEMA_VERSION
+        person = migrated.get_person("anna")
+        assert person and person.name == "Anna" and not person.face_consent
+        assert migrated.set_face_consent(person.id, True)
+    finally:
+        migrated.close()

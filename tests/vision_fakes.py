@@ -11,7 +11,7 @@ import numpy as np
 
 from vision.camera import CameraError
 from vision.detector import Box, Detection
-from vision.events import FACE_BEARING, VisionEvent
+from vision.events import FACE_BEARING, EnrollResult, VisionEvent
 from vision.process import VisionLoop, VisionOptions
 from vision.stats import VisionStats
 from vision.tracker import IouTracker
@@ -113,3 +113,47 @@ def run_loop(camera: FakeCamera, clock: FakeClock, detector: FakeDetector,
 
 def bearings(events: list[VisionEvent]) -> list[VisionEvent]:
     return [e for e in events if e.kind == FACE_BEARING]
+
+
+class FakeRecognizer:
+    """``who(call_index)`` is the embedding the call returns, so a test decides who is "seen"."""
+
+    def __init__(self, who: Callable[[int], Any]) -> None:
+        self._who = who
+        self.calls = 0
+
+    def embed(self, frame: Any, face_row: Any) -> Any:
+        index = self.calls
+        self.calls += 1
+        return np.asarray(self._who(index), dtype=np.float32)
+
+
+def scripted(clock: FakeClock, script: list[tuple[float, Any]]) -> Callable[[], Any]:
+    """Commands for the loop: each ``(time, command)`` is handed out once its time has come."""
+    pending = list(script)
+
+    def poll() -> Any:
+        if pending and pending[0][0] <= clock.now:
+            return pending.pop(0)[1]
+        return None
+
+    return poll
+
+
+def run_face_loop(camera: FakeCamera, clock: FakeClock, detector: FakeDetector,
+                  recognizer: FakeRecognizer | None,
+                  script: list[tuple[float, Any]] | None = None,
+                  quality: Callable[[Any, Detection], str | None] | None = None,
+                  ) -> tuple[list[VisionEvent], list[EnrollResult]]:
+    """The loop with a fake recognizer and quality gate (good unless *quality* says otherwise)."""
+    events: list[VisionEvent] = []
+    replies: list[EnrollResult] = []
+    loop = VisionLoop(camera, detector, IouTracker(appear_frames=2, lost_frames=3),
+                      emit=events.append, options=OPTIONS, stop_event=clock.stop,
+                      pause_event=threading.Event(), clock=clock, wait=clock.wait,
+                      meter=lambda: (clock.now * 0.25, 40.0), recognizer=recognizer,
+                      quality=quality or (lambda frame, detection: None),
+                      commands=scripted(clock, script) if script else None,
+                      reply=replies.append)
+    loop.run()
+    return events, replies

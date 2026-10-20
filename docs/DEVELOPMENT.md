@@ -37,8 +37,8 @@ brain/             router, stt_decision, voice_loop, brain_loop, motion_keeper, 
 voice/             audio (only audio input), stt (Vosk + self-hearing gate), tts (Piper),
                    playback (only audio output), ptt
 web/               protocol (validation), session (PIN, controller, deadman), server, static/index.html
-vision/            camera, detector (YuNet + bearing), tracker (IoU), process (events), recognizer (P4 stub),
-                   events, stats
+vision/            camera, detector (YuNet + bearing), tracker (IoU), process (events, commands), recognizer (SFace, voting),
+                   quality (gate), enrollment, events, stats
 scripts/           tools you run (below)
 data/              persona/*.toml, calibration/servo_cal.json, memory/ (private, ignored)
 deploy/            hexa.service (dry-run unit; not installed)
@@ -55,6 +55,7 @@ Scripts:
 | `cli.py` | typed commands: through the router (default) or raw Bridge commands (`--raw`) |
 | `say.py`, `mic_check.py`, `stt_check.py`, `web_check.py` | check speech out, microphone, recognition, the phone page (`--talk-wav FILE` streams a WAV as the phone's microphone) |
 | `fetch_vision_models.py`, `vision_check.py`, `vision_bench.py` | vision models (SHA-256 checked); webcam check with `--debug-preview`; headless fps/CPU numbers, `--load N` busy workers |
+| `face_check.py` | `enroll NAME` (asks yes/no first), `watch`, `list`, `forget NAME` on a webcam, own database `data/memory/face_check.db`; `watch --no-recognition` for the CPU comparison |
 | `persona_eval.py` | a fixed conversation per persona mode against a chat model |
 | `measure_chat.py`, `measure_voice.py` | time Ollama; time Piper, Vosk and the body under voice load |
 | `torque_report.py` | servo torque/speed needs from the sim (writes to `.tmp/`) |

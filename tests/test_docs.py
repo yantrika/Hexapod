@@ -39,7 +39,8 @@ PATH_PATTERN = re.compile(
     r"`((?:body|brain|voice|web|scripts|tests|docs|data|deploy)/[\w./-]+|"
     r"(?:main|config|bridge)\.py|AGENTS\.md|README\.md|requirements[\w-]*\.txt|pyproject\.toml)`"
 )
-RUNTIME_PATHS = {"data/memory/", "data/memory/arya.db"}  # made when the robot runs; git-ignored
+RUNTIME_PATHS = {"data/memory/", "data/memory/arya.db",
+                 "data/memory/face_check.db"}  # made when the robot runs; git-ignored
 PLANNED_PATHS = {"brain/behaviour.py"}  # named by the docs as future work (docs/ROADMAP.md, P5)
 
 

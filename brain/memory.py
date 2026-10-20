@@ -8,8 +8,11 @@ and created with mode 600 in a directory with mode 700.
 
 Schema versions are applied in order by ``MIGRATIONS`` (the version lives in ``meta``); a database
 from a newer program is refused rather than damaged. ``forget_person`` deletes the person's
-facts, summaries, face embeddings and row in ONE transaction. Face embeddings are created now but
-unused until face recognition is built (docs/ROADMAP.md); their bytes never go into a log.
+facts, summaries, face embeddings and row in ONE transaction.
+
+Face embeddings (P4) are stored only for a person who gave ``face_consent`` (set after an explicit
+yes; taking consent back deletes their embeddings in the same transaction). No image is ever kept
+here: an embedding is 128 numbers. Their bytes never go into a log.
 
 The unknown speaker is ``config.GUEST_NAME`` and has no row: nothing is remembered about a guest.
 """
@@ -22,7 +25,7 @@ import re
 import sqlite3
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -30,7 +33,7 @@ import config
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 _MIGRATIONS = {
     1: """
     CREATE TABLE people (
@@ -63,7 +66,12 @@ _MIGRATIONS = {
     );
     CREATE INDEX face_person ON face_embeddings(person_id);
     """,
+    2: """
+    ALTER TABLE people ADD COLUMN face_consent INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE people ADD COLUMN face_consent_at REAL;
+    """,
 }
+_PERSON_COLUMNS = "id, name, roast_ok, created, last_seen, face_consent, face_consent_at"
 FACT_SOURCES = ("told", "inferred")
 _NAME = re.compile(r"[A-Za-z][A-Za-z'\-]*(?: [A-Za-z][A-Za-z'\-]*)?")
 
@@ -79,6 +87,8 @@ class Person:
     roast_ok: bool
     created: float
     last_seen: float
+    face_consent: bool = False  # said yes to "remember your face"
+    face_consent_at: float | None = None
 
 
 @dataclass(frozen=True)
@@ -90,6 +100,7 @@ class PersonSummary:
     facts: int
     last_seen: float
     roast_ok: bool = True
+    faces: int = 0  # face samples kept (never the samples themselves)
 
 
 @dataclass(frozen=True)
@@ -170,19 +181,21 @@ class Memory:
             self._db.close()
 
     # -- people -------------------------------------------------------------------------------
-    def _person(self, row: tuple[int, str, int, float, float] | None) -> Person | None:
-        return None if row is None else Person(row[0], row[1], bool(row[2]), row[3], row[4])
+    def _person(self, row: tuple[int, str, int, float, float, int, float | None] | None
+                ) -> Person | None:
+        return None if row is None else Person(row[0], row[1], bool(row[2]), row[3], row[4],
+                                               bool(row[5]), row[6])
 
     def get_person(self, name: str) -> Person | None:
         with self._lock:
             return self._person(self._db.execute(
-                "SELECT id, name, roast_ok, created, last_seen FROM people WHERE name = ?",
+                f"SELECT {_PERSON_COLUMNS} FROM people WHERE name = ?",
                 (name,)).fetchone())
 
     def person_by_id(self, person_id: int) -> Person | None:
         with self._lock:
             return self._person(self._db.execute(
-                "SELECT id, name, roast_ok, created, last_seen FROM people WHERE id = ?",
+                f"SELECT {_PERSON_COLUMNS} FROM people WHERE id = ?",
                 (person_id,)).fetchone())
 
     def ensure_person(self, name: str) -> Person | None:
@@ -211,8 +224,11 @@ class Memory:
         with self._lock:
             rows = self._db.execute(
                 "SELECT p.id, p.name, (SELECT COUNT(*) FROM facts f WHERE f.person_id = p.id), "
-                "p.last_seen, p.roast_ok FROM people p ORDER BY p.name COLLATE NOCASE").fetchall()
-        return [PersonSummary(row[0], row[1], row[2], row[3], bool(row[4])) for row in rows]
+                "p.last_seen, p.roast_ok, "
+                "(SELECT COUNT(*) FROM face_embeddings e WHERE e.person_id = p.id) "
+                "FROM people p ORDER BY p.name COLLATE NOCASE").fetchall()
+        return [PersonSummary(row[0], row[1], row[2], row[3], bool(row[4]), row[5])
+                for row in rows]
 
     def set_roast_ok(self, person_id: int, ok: bool) -> bool:
         """Store whether Arya may roast this person on her own (planned auto-roast). False: nobody
@@ -287,15 +303,82 @@ class Memory:
             return int(self._db.execute(
                 "SELECT COUNT(*) FROM summaries WHERE person_id = ?", (person_id,)).fetchone()[0])
 
-    # -- face embeddings (unused until face recognition is built; the bytes are never logged) ----
-    def add_embedding(self, person_id: int, vector: bytes) -> bool:
+    # -- face embeddings (only with consent; the bytes are never logged) ----------------------
+    def set_face_consent(self, person_id: int, consent: bool) -> bool:
+        """Record that the person said yes (or no) to "remember your face". Taking it back deletes
+        their embeddings in the same transaction. False: nobody has that id."""
         with self._lock:
-            if not vector or self.person_by_id(person_id) is None:
+            self._db.execute("BEGIN")
+            try:
+                changed = self._db.execute(
+                    "UPDATE people SET face_consent = ?, face_consent_at = ? WHERE id = ?",
+                    (int(consent), self._clock() if consent else None, person_id)).rowcount
+                if not consent:
+                    self._db.execute("DELETE FROM face_embeddings WHERE person_id = ?",
+                                     (person_id,))
+                self._db.execute("COMMIT")
+            except Exception:
+                self._db.execute("ROLLBACK")
+                raise
+            return changed > 0
+
+    def forget_face(self, person_id: int) -> bool:
+        """Delete the person's face embeddings and their consent; the rest of them is kept."""
+        return self.set_face_consent(person_id, False)
+
+    def add_embedding(self, person_id: int, vector: bytes) -> bool:
+        """Keep one face embedding. False without consent, for an unknown person or an empty
+        vector, and when the person already has ``MEMORY_MAX_EMBEDDINGS_PER_PERSON``."""
+        with self._lock:
+            person = self.person_by_id(person_id)
+            if (not vector or person is None or not person.face_consent
+                    or self.embedding_count(person_id) >= config.MEMORY_MAX_EMBEDDINGS_PER_PERSON):
                 return False
             self._db.execute(
                 "INSERT INTO face_embeddings(person_id, vector, created) VALUES(?, ?, ?)",
                 (person_id, vector, self._clock()))
             return True
+
+    def replace_embeddings(self, person_id: int, vectors: Sequence[bytes]) -> bool:
+        """Swap the person's embeddings for *vectors* in one transaction (a new enrolment). False,
+        and nothing changes, without consent or with no/empty/too many vectors."""
+        with self._lock:
+            person = self.person_by_id(person_id)
+            if (person is None or not person.face_consent or not vectors or not all(vectors)
+                    or len(vectors) > config.MEMORY_MAX_EMBEDDINGS_PER_PERSON):
+                return False
+            self._db.execute("BEGIN")
+            try:
+                self._db.execute("DELETE FROM face_embeddings WHERE person_id = ?", (person_id,))
+                now = self._clock()
+                self._db.executemany(
+                    "INSERT INTO face_embeddings(person_id, vector, created) VALUES(?, ?, ?)",
+                    [(person_id, vector, now) for vector in vectors])
+                self._db.execute("COMMIT")
+            except Exception:
+                self._db.execute("ROLLBACK")
+                raise
+            return True
+
+    def embeddings(self, person_id: int) -> list[bytes]:
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT e.vector FROM face_embeddings e JOIN people p ON p.id = e.person_id "
+                "WHERE e.person_id = ? AND p.face_consent = 1 ORDER BY e.id", (person_id,)
+            ).fetchall()
+        return [bytes(row[0]) for row in rows]
+
+    def all_embeddings(self) -> dict[int, list[bytes]]:
+        """Everything vision should know, for ``SetKnownFaces``: only people with consent."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT e.person_id, e.vector FROM face_embeddings e "
+                "JOIN people p ON p.id = e.person_id WHERE p.face_consent = 1 ORDER BY e.id"
+            ).fetchall()
+        result: dict[int, list[bytes]] = {}
+        for person_id, vector in rows:
+            result.setdefault(int(person_id), []).append(bytes(vector))
+        return result
 
     def embedding_count(self, person_id: int) -> int:
         with self._lock:

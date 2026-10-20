@@ -177,8 +177,42 @@ the bearing rate drop to `VISION_PAUSED_FPS` and `VISION_PAUSED_BEARING_HZ`.
 - **Vision never moves the robot by itself.** It only reports. The behaviour layer (P5,
   `brain/behaviour.py`, rules, not the LLM) will be the only code that turns these events into
   commands, only when idle, only `stand`, `wave` and small turns, with STOP winning.
-- `vision/recognizer.py` (SFace embedding and cosine match against known embeddings passed in) is
-  the P4 stub: no storage, no enrolment, no names; the vision process does not call it yet.
+
+#### Recognition and enrolment (P4a, vision side; the brain wiring is next)
+
+SFace runs only when a track is new or unnamed (every frame) and, once a track has a name, again
+every `VISION_RECHECK_S`. A face is embedded only if it passes the quality gate
+(`vision/quality.py`: box at least `VISION_MIN_FACE_PX`, roughly frontal by landmark symmetry
+`VISION_FRONTAL_MAX`, not blurry by Laplacian variance `VISION_BLUR_MIN`); bad crops are skipped,
+never matched. A name is given only when `VISION_VOTE_NEEDED` of the last `VISION_VOTE_WINDOW`
+matches agree (`IdentityVoter`); the match is cosine >= `VISION_MATCH_THRESHOLD` (0.363, the SFace
+value in OpenCV's own sample and the OpenCV Zoo). After `VISION_UNKNOWN_AFTER` good looks without a
+name the track gets `person_unknown(track_id)` once. New events: `person_identified(track_id,
+person_id, score)` and `person_unknown(track_id)`; vision knows person ids only, never names.
+
+**The brain owns the database; the vision process never opens it.** The two talk over queues of
+small dataclasses (`vision/events.py`):
+
+| Direction | Message | Meaning |
+| --- | --- | --- |
+| brain -> vision | `SetKnownFaces(((person_id, (embedding, ...)), ...))` | replace everything vision knows |
+| brain -> vision | `Enroll(track_id, person_id)` | collect samples of that person (after a yes) |
+| brain -> vision | `CancelEnroll()` | stop collecting |
+| brain -> vision | `Forget(person_id)` | drop that person from vision at once |
+| vision -> brain | `EnrollResult(person_id, embeddings or reason)` | success, or why not |
+
+Enrolment (`vision/enrollment.py`) collects `VISION_ENROLL_SAMPLES` good crops, at least
+`VISION_ENROLL_GAP_S` apart, within `VISION_ENROLL_TIMEOUT_S` while the person stays in view, embeds
+them and returns only the vectors. It fails cleanly (`person_left`, `multiple_faces`,
+`low_quality`, `timeout`, `inconsistent`, `cancelled`, `busy`, `unknown_track`) and keeps nothing;
+no image is ever kept, crops are dropped as soon as they are embedded.
+
+`brain/memory.py` (schema version 2) adds `people.face_consent` and its time; `add_embedding` and
+`replace_embeddings` refuse a person without consent, `set_face_consent(id, False)` /
+`forget_face` delete the embeddings, `all_embeddings()` feeds `SetKnownFaces` (consenting people
+only) and `forget_person` still deletes everything in one transaction. `scripts/face_check.py`
+(enroll / watch / list / forget) runs the whole thing on a webcam against its own database,
+`data/memory/face_check.db`, never the real one.
 
 Models: `python scripts/fetch_vision_models.py` (YuNet `face_detection_yunet_2023mar.onnx`, SFace
 `face_recognition_sface_2021dec.onnx`, from the OpenCV Zoo, SHA-256 checked, into `assets/vision/`).

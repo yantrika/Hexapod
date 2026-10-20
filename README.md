@@ -69,6 +69,7 @@ protocol the app speaks is in `docs/DEVELOPMENT.md`.
 Vision (standalone for now, no robot needed): `pip install -r requirements-vision.txt`,
 `python scripts/fetch_vision_models.py`, then `python scripts/vision_check.py --debug-preview`
 (webcam, boxes, track ids, events and a timing summary every 5 s; `--no-preview` for no window).
+Faces: `python scripts/face_check.py enroll NAME` (asks yes/no first), then `watch` (own database).
 On the Pi: `python scripts/vision_bench.py --load 4` (headless numbers with the cores busy).
 
 Optional chat model: Ollama runs in Docker on a laptop (`docker start ollama`,

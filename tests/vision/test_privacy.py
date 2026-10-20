@@ -15,7 +15,7 @@ ROOT = Path(config.PROJECT_ROOT)
 FORBIDDEN = re.compile(r"imwrite|imencode|VideoWriter|\.tofile\(|np\.save|numpy\.save|pickle|"
                        r"savez|\.write_bytes\(|tempfile|mkstemp|open\([^)]*['\"][wax]b?\+?['\"]")
 CHECKED = [*sorted((ROOT / "vision").glob("*.py")), ROOT / "scripts" / "vision_check.py",
-           ROOT / "scripts" / "vision_bench.py"]
+           ROOT / "scripts" / "vision_bench.py", ROOT / "scripts" / "face_check.py"]
 
 
 @pytest.mark.parametrize("path", CHECKED, ids=lambda p: p.name)

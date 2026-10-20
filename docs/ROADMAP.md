@@ -52,7 +52,9 @@ webcam facing forward.
   `person_appeared`, `person_left`, `face_bearing`; no recognition. Done when events are right on a
   live camera and a recorded clip, an unplugged camera never stalls speech or the body, and
   CPU/temperature on the Pi are measured.
-- **P4 recognition, consent-based enrolment, forget me**: SFace on new tracks only; threshold
+- **P4 recognition, consent-based enrolment, forget me** (P4a, the vision side with
+  `scripts/face_check.py`, is written; the brain wiring and the spoken yes/name flow remain): SFace
+  on new tracks only; threshold
   from our own pairs; enrolment only after "yes"; names are confirmed ("Did you say Priya?")
   before they are stored, because a name heard once is often another word; the phone page can
   always type the name.
