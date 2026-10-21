@@ -12,12 +12,17 @@ value, bad JSON) is rejected and never reaches the bridge. The page never sends 
 Step 12c adds one BINARY message: an audio frame (16 kHz mono 16-bit little-endian samples) while
 hold-to-talk is held. ``parse_audio_frame`` checks its size and format; the server decides whether
 a press is held and how much audio is too much (``web/session.py``).
+
+Step 12c-2 adds the ``voice`` action (``on`` true/false: the page does or does not want Arya's
+voice) and the other direction: the server sends BINARY messages (``encode_voice_clip``), one per
+sentence, and a JSON ``audio_clear`` that tells the page to drop whatever it has not played.
 """
 
 from __future__ import annotations
 
 import json
 import math
+import struct
 import unicodedata
 from dataclasses import dataclass
 from typing import Any
@@ -27,9 +32,10 @@ import config
 POSTURE_ACTIONS = ("stand", "sit", "wave")
 PTT_ACTIONS = ("ptt_press", "ptt_release")
 PERSONA_ACTIONS = ("set_mode", "set_speaker", "forget_person", "set_roast_ok")
-CLIENT_ACTIONS = ("walk", "stop", *POSTURE_ACTIONS, *PTT_ACTIONS, "say", *PERSONA_ACTIONS)
+CLIENT_ACTIONS = ("walk", "stop", *POSTURE_ACTIONS, *PTT_ACTIONS, "say", "voice", *PERSONA_ACTIONS)
 _WALK_FIELDS = frozenset({"action", "forward", "strafe", "yaw", "speed"})
 _SAY_FIELDS = frozenset({"action", "text"})
+_VOICE_FIELDS = frozenset({"action", "on"})
 _MODE_FIELDS = frozenset({"action", "mode"})
 _SPEAKER_FIELDS = frozenset({"action", "name"})
 _FORGET_FIELDS = frozenset({"action", "id"})
@@ -55,6 +61,7 @@ class Request:
     name: str = ""  # for ``set_speaker``: a name or "guest" (the server checks that it exists)
     person_id: int = 0  # for ``forget_person`` and ``set_roast_ok``
     roast_ok: bool = False  # for ``set_roast_ok``
+    on: bool = False  # for ``voice``: the page wants (True) or no longer wants Arya's voice
 
     @property
     def moving(self) -> bool:
@@ -127,6 +134,14 @@ def parse_message(raw: str | bytes) -> Request:
         if not set(message) <= _SAY_FIELDS:
             raise ProtocolError("unknown field")
         return Request("say", text=_say_text(message.get("text")))
+    if action == "voice":
+        if set(message) != _VOICE_FIELDS:
+            raise ProtocolError("unknown field" if not set(message) <= _VOICE_FIELDS
+                                else "missing field")
+        flag = message.get("on")
+        if not isinstance(flag, bool):
+            raise ProtocolError("on must be true or false")
+        return Request("voice", on=flag)
     if action == "set_mode":
         if not set(message) <= _MODE_FIELDS:
             raise ProtocolError("unknown field")
@@ -174,6 +189,14 @@ def parse_audio_frame(data: bytes) -> bytes:
     if len(data) % 2:
         raise ProtocolError("audio must be 16-bit samples")
     return data
+
+
+VOICE_HEADER = struct.Struct("<c3xI")  # b"A", 3 pad bytes (so the samples are 2-byte aligned), rate
+
+
+def encode_voice_clip(pcm: bytes, sample_rate: int) -> bytes:
+    """One sentence of Arya's voice for the page: ``VOICE_HEADER`` then mono int16 LE samples."""
+    return VOICE_HEADER.pack(b"A", sample_rate) + pcm
 
 
 def walk_params(request: Request) -> dict[str, Any]:

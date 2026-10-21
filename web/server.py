@@ -15,6 +15,11 @@ listening) reach the page through a bounded drop-oldest ``EventHub`` subscriptio
 Step 12c: with an ``ssl.SSLContext`` the same port serves HTTPS and ``wss`` (the browser only
 opens the microphone on a secure page), and the page may send BINARY audio frames while it holds
 the talk button; they go to ``WebControl.audio_frame`` (controller only, press held, rate limited).
+
+Step 12c-2: with ``voice_out`` the page may ask (``voice`` on) for Arya's voice. ``send_audio`` and
+``clear_audio`` (any thread, never blocking) then put one binary message per sentence, or an
+``audio_clear``, on the same outbox as everything else, so their order is kept. A slow phone loses
+sentences (``WEB_VOICE_MAX_CLIPS`` wait at most); it never delays the body or the robot's speech.
 """
 
 from __future__ import annotations
@@ -43,7 +48,8 @@ from brain.event_hub import EventHub
 from brain.status_hub import StatusHub
 from bridge import Bridge, Status, new_command
 from scripts.control_logic import next_state_label
-from web.protocol import ProtocolError, parse_audio_frame, parse_message
+from voice.tts import AudioClip
+from web.protocol import ProtocolError, encode_voice_clip, parse_audio_frame, parse_message
 from web.session import NO_VOICE, PinGuard, Refused, VoiceControls, WebControl
 
 logger = logging.getLogger(__name__)
@@ -113,17 +119,46 @@ class _Client:
 
     def __init__(self, connection: ServerConnection) -> None:
         self.connection = connection
-        self.outbox: asyncio.Queue[str] = asyncio.Queue(maxsize=_OUTBOX_SIZE)
+        self.outbox: asyncio.Queue[str | bytes] = asyncio.Queue(maxsize=_OUTBOX_SIZE)
         self.invalid = 0
+        self.voice_on = False  # the page asked for Arya's voice
+        self.audio_queued = 0  # voice clips waiting in the outbox (event loop thread only)
 
-    def post(self, message: dict[str, Any]) -> None:
-        text = json.dumps(message, default=str)
+    def _put(self, item: str | bytes) -> None:
         while True:
             try:
-                self.outbox.put_nowait(text)
+                self.outbox.put_nowait(item)
                 return
             except asyncio.QueueFull:
-                self.outbox.get_nowait()  # drop the oldest
+                if isinstance(self.outbox.get_nowait(), bytes):  # drop the oldest
+                    self.audio_queued -= 1
+
+    def post(self, message: dict[str, Any]) -> None:
+        self._put(json.dumps(message, default=str))
+
+    def post_audio(self, payload: bytes) -> bool:
+        """Queue one sentence of voice; False (dropped) if the phone is already that far behind."""
+        if self.audio_queued >= config.WEB_VOICE_MAX_CLIPS:
+            return False
+        self.audio_queued += 1
+        self._put(payload)
+        return True
+
+    def clear_audio(self) -> None:
+        """Drop the voice not yet sent, then tell the page to drop what it holds."""
+        kept: list[str | bytes] = []
+        while True:
+            try:
+                item = self.outbox.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            if isinstance(item, bytes):
+                self.audio_queued -= 1
+            else:
+                kept.append(item)
+        for item in kept:
+            self.outbox.put_nowait(item)
+        self.post({"type": "audio_clear"})
 
 
 class WebServer:
@@ -139,7 +174,9 @@ class WebServer:
         voice: VoiceControls = NO_VOICE,
         events: EventHub | None = None,
         ssl_context: ssl.SSLContext | None = None,
+        voice_out: bool = False,
     ) -> None:
+        self._voice_out = voice_out  # Arya's voice can go to the page (``--phone-voice``)
         self._bridge = bridge
         self._hub = hub
         self._voice = voice
@@ -292,6 +329,7 @@ class WebServer:
                                "reason": self._voice.audio_unavailable,
                                "rate": config.AUDIO_SAMPLE_RATE,
                                "max_frame_bytes": config.WEB_AUDIO_MAX_FRAME_BYTES},
+                     "voice": {"available": self._voice_out},
                      "say": {"available": not self._voice.say_unavailable,
                              "reason": self._voice.say_unavailable,
                              "max_chars": config.WEB_SAY_MAX_CHARS},
@@ -344,18 +382,72 @@ class WebServer:
             client.post({"type": "error", "reason": str(error)})
             return
         try:
-            self._control.handle(client, request)
+            if request.action == "voice":
+                self._set_voice(client, request.on)
+            else:
+                self._control.handle(client, request)
         except Refused as error:
             client.post({"type": "error", "reason": str(error)})
         except Exception:  # noqa: BLE001 - the voice side failed; the page is told, nothing else
             logger.exception("web: %s failed", request.action)
             client.post({"type": "error", "reason": f"{request.action} failed"})
 
+    def _set_voice(self, client: _Client, on: bool) -> None:
+        if self._control.controller is not client:
+            return  # like every other action: only the controller
+        if on and not self._voice_out:
+            raise Refused("Arya's voice on the phone is not enabled (start with --phone-voice)")
+        client.voice_on = on
+        logger.info("web: the phone %s Arya's voice", "wants" if on else "no longer wants")
+        if not on:
+            client.clear_audio()
+
+    # --- Arya's voice to the page (any thread) -------------------------------------------------
+    def send_audio(self, clip: AudioClip) -> None:
+        """One sentence for the page. Never blocks; dropped if nobody wants it or it is too late."""
+        loop = self._loop
+        if loop is None or loop.is_closed():
+            return
+        payload = encode_voice_clip(clip.samples.astype("<i2", copy=False).tobytes(),
+                                    clip.sample_rate)
+        try:
+            loop.call_soon_threadsafe(self._post_audio, payload)
+        except RuntimeError:  # the loop closed between the check and the call
+            pass
+
+    def clear_audio(self) -> None:
+        """Barge-in, STOP, a new reply: the page drops what it has not played."""
+        loop = self._loop
+        if loop is None or loop.is_closed():
+            return
+        try:
+            loop.call_soon_threadsafe(self._clear_audio)
+        except RuntimeError:
+            pass
+
+    def _post_audio(self, payload: bytes) -> None:
+        client = self._client
+        if client is None or not client.voice_on:
+            logger.info("web: voice not sent (%s)", "no phone" if client is None
+                        else "the phone has not asked for it: tap the voice button")
+        elif client.post_audio(payload):
+            logger.info("web: sent %d bytes of voice to the phone", len(payload))
+        else:
+            logger.warning("web: the phone is behind; dropped a sentence of voice")
+
+    def _clear_audio(self) -> None:
+        client = self._client
+        if client is not None and client.voice_on:
+            client.clear_audio()
+
     @staticmethod
     async def _write(client: _Client) -> None:
         try:
             while True:
-                await client.connection.send(await client.outbox.get())
+                item = await client.outbox.get()
+                if isinstance(item, bytes):
+                    client.audio_queued -= 1
+                await client.connection.send(item)
         except Exception:  # noqa: BLE001 - the connection is gone; the reader ends the session
             return
 

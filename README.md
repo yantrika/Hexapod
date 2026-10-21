@@ -37,6 +37,8 @@ python main.py --lan --https --no-mic --backend dryrun
 ```
 
 Open the `https://` address it prints, accept the one-time "not secure" warning, enter the PIN, then hold the talk button and speak. The audio goes to Vosk on the Pi; nothing leaves your Wi-Fi. Without `--no-mic` the button uses the robot's own microphone, as before.
+
+**Arya's voice on the phone (Step 12c-2).** Add `--phone-voice` (`python main.py --lan --https --no-mic --phone-voice --backend dryrun`) and tap "Hear Arya on this phone" once: her answers play on the phone instead of a speaker, and pressing the talk button or STOP cuts her at once. The robot ignores the phone's microphone while she speaks.
 `python main.py --help` lists every option, and startup prints one line per missing piece.
 
 To stop, use the STOP button, Space, or type `stop`. A spoken "stop" works only while the mic is listening.

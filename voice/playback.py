@@ -137,6 +137,47 @@ class SoundDeviceSink:
         self._close_stream()
 
 
+class PhoneSink:
+    """A speaker that is not there: ``--phone-voice``. Each clip is handed to ``on_clip`` (the web
+    server sends it to the phone) and ``wait`` lasts the clip's real duration, so the queue, the
+    ``speaking`` gate and barge-in behave exactly as with a real speaker. ``abort`` ends the wait
+    at once and calls ``on_clear`` (the phone drops what it has not played). Both callbacks may be
+    set after construction and must never block."""
+
+    def __init__(self, on_clip: Callable[[AudioClip], None] | None = None,
+                 on_clear: Callable[[], None] | None = None) -> None:
+        self.on_clip = on_clip
+        self.on_clear = on_clear
+        self._duration = 0.0
+        self._aborted = threading.Event()
+
+    def open(self) -> None:
+        pass
+
+    def start(self, clip: AudioClip) -> None:
+        self._aborted.clear()
+        self._duration = clip.duration_s
+        if self.on_clip is not None:
+            try:
+                self.on_clip(clip)
+            except Exception:  # noqa: BLE001 - a broken phone link must not stop the speech
+                logger.exception("could not hand the clip to the phone")
+
+    def wait(self) -> None:
+        self._aborted.wait(self._duration)
+
+    def abort(self) -> None:
+        self._aborted.set()
+        if self.on_clear is not None:
+            try:
+                self.on_clear()
+            except Exception:  # noqa: BLE001
+                logger.exception("could not clear the phone's audio")
+
+    def close(self) -> None:
+        self._aborted.set()
+
+
 @dataclass(frozen=True)
 class Utterance:
     """One sentence (or pre-rendered phrase) to speak; ``group`` ties it to its say() call."""

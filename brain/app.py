@@ -36,7 +36,7 @@ from brain.voice_loop import VoiceEvent, VoiceLoop
 from bridge import make_bridge, new_command
 from commandline import format_status
 from voice.audio import AudioSource, FileSource, MicSource, QueueSource
-from voice.playback import Playback, SoundDeviceSink
+from voice.playback import PhoneSink, Playback, SoundDeviceSink
 from voice.ptt import PushToTalk, make_ptt
 from voice.stt import SttEngine, VoskStt
 from voice.tts import PiperEngine
@@ -69,6 +69,7 @@ class AppOptions:
     https: bool = False  # serve the page over TLS (implies web); needed for the phone microphone
     tls_cert: Path | None = None  # None: config.WEB_TLS_CERT
     tls_key: Path | None = None  # None: config.WEB_TLS_KEY
+    phone_voice: bool = False  # Arya's voice goes to the phone page, not to a speaker (Step 12c-2)
     persona: bool = True  # Arya: modes, memory, context, output check (Step 13)
     memory: bool = True  # False: no database at all (nothing is remembered)
     memory_path: Path | None = None  # None: config.MEMORY_DB_PATH when the app starts
@@ -162,6 +163,7 @@ class HexaApp:
         self.events = EventHub()  # heard / route / said / listening, for the phone page
         self.speech = LoggedPlayback(None, self._on_said)
         self._engine: PiperEngine | None = None
+        self.phone_sink: PhoneSink | None = None  # --phone-voice: the "speaker" is the phone page
         self._log_stop = threading.Event()
         self._log_thread: threading.Thread | None = None
         self._started = False
@@ -181,6 +183,10 @@ class HexaApp:
 
     def _start(self) -> None:
         options = self.options
+        if options.phone_voice and not (options.web or options.lan):
+            raise StartupError("--phone-voice needs the phone page: add --web, --lan or --https")
+        if options.phone_voice and options.no_speak:
+            raise StartupError("--phone-voice and --no-speak contradict each other")
         if self._stt is None:
             from voice.stt import SttError
 
@@ -198,7 +204,13 @@ class HexaApp:
             except TtsError as error:
                 raise StartupError(f"{error} (or use --no-speak)") from error
             self._engine = engine
-            self._playback_inner = Playback(engine, SoundDeviceSink(), speaking=self.speaking)
+            if options.phone_voice:
+                self.phone_sink = PhoneSink()
+                self._playback_inner = Playback(
+                    engine, self.phone_sink, speaking=self.speaking,
+                    tail_s=config.SPEAK_TAIL_S + config.WEB_VOICE_LAG_S)
+            else:
+                self._playback_inner = Playback(engine, SoundDeviceSink(), speaking=self.speaking)
         if self._playback_inner is not None:
             if not self._own_playback:
                 self.speaking = self._playback_inner.speaking
@@ -330,7 +342,11 @@ class HexaApp:
             self._persona_controls(), self.push_phone_audio if phone_mic else None,
             self._phone_audio_unavailable())
         self.web = WebServer(self.bridge, self.hub, pin, host=host, port=options.web_port,
-                             voice=voice, events=self.events, ssl_context=context)
+                             voice=voice, events=self.events, ssl_context=context,
+                             voice_out=self.phone_sink is not None)
+        if self.phone_sink is not None:
+            self.phone_sink.on_clip = self.web.send_audio
+            self.phone_sink.on_clear = self.web.clear_audio
         self.web.start()
         port = self.web.port
         scheme = "https" if context is not None else "http"

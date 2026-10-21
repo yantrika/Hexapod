@@ -57,11 +57,16 @@ class WebClient:
             context.check_hostname = False
             context.verify_mode = ssl.CERT_NONE
             options["ssl"] = context
+        self.clips: list[bytes] = []
         try:
             self._ws = connect(f"{url.rstrip('/')}/ws?pin={quote(pin)}", origin=cast("Any", origin),
                                open_timeout=timeout, compression=None, **options).__enter__()
         except InvalidStatus as error:
             raise Refused(error.response.status_code) from error
+
+    def voice(self, on: bool = True) -> None:
+        """Ask for (or give up) Arya's voice; the binary sentences collect in ``clips``."""
+        self.send({"action": "voice", "on": on})
 
     def send(self, message: dict[str, Any] | str) -> None:
         self._ws.send(message if isinstance(message, str) else json.dumps(message))
@@ -69,7 +74,11 @@ class WebClient:
     def recv(self, timeout: float = 1.0) -> dict[str, Any] | None:
         """The next server message, or None if nothing arrived (or the socket closed)."""
         try:
-            return cast("dict[str, Any]", json.loads(self._ws.recv(timeout=timeout)))
+            raw = self._ws.recv(timeout=timeout)
+            if isinstance(raw, bytes):  # a sentence of Arya's voice (Step 12c-2): kept, not JSON
+                self.clips.append(raw)
+                return None
+            return cast("dict[str, Any]", json.loads(raw))
         except Exception:  # noqa: BLE001 - a timeout, or the server closed the socket
             return None
 

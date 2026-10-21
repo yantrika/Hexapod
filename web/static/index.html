@@ -82,6 +82,10 @@
   #listen.on { color: var(--ok); font-weight: 700; }
   #listen.on #lamp { background: var(--ok); }
   #pttnote { font-size: 12px; color: var(--muted); }
+  #voicebtn { display: none; background: var(--panel); color: var(--text); border: 2px solid var(--panel-hold);
+              border-radius: 10px; padding: 10px; font-size: 15px; }
+  #voicebtn.avail { display: block; }
+  #voicebtn.on { border-color: var(--ok); }
   #log { flex: 1; min-height: 48px; overflow-y: auto; background: var(--panel); border-radius: 12px;
          padding: 8px 10px; font-size: 14px; -webkit-overflow-scrolling: touch; }
   #log div { padding: 1px 0; overflow-wrap: anywhere; }
@@ -151,6 +155,7 @@
     </div>
     <div id="voice">
       <button id="ptt" type="button" disabled>HOLD TO TALK</button>
+      <button id="voicebtn" type="button">Hear Arya on this phone</button>
       <div id="listen"><div id="lamp"></div><span id="listentext">idle</span></div>
       <div id="pttnote">The microphone is the robot's: speak near the robot. A voice "stop" works
         only while you hold the button; the STOP button always works.</div>
@@ -218,6 +223,7 @@ function stopAll() {                // hard stop: forget every touch, then `stop
   held.clear();
   if (repeat !== null) { clearInterval(repeat); repeat = null; }
   paint();
+  clearVoice();
   releaseTalk();
   send({action: "stop"});
 }
@@ -298,6 +304,62 @@ function stopMic() {
   try { m.source.disconnect(); m.node.disconnect(); m.silent.disconnect(); } catch (e) { /* already apart */ }
   m.stream.getTracks().forEach(function (track) { track.stop(); });   // the browser's mic light goes off
 }
+// Arya's voice (Step 12c-2): the server sends one binary message per sentence (8-byte header:
+// "A", 3 pad bytes, the sample rate as u32 LE; then mono 16-bit samples). They are played back to
+// back; audio_clear, STOP, a new press and a closed socket drop everything not yet played.
+var voiceWanted = false, voiceMuted = false, voiceAvailable = false;
+var voiceSources = [], voiceNext = 0, voiceCount = 0;
+function clearVoice() {
+  var list = voiceSources; voiceSources = []; voiceNext = 0;
+  list.forEach(function (s) { s.onended = null; try { s.stop(); } catch (e) { /* not started */ } });
+}
+function playVoice(buf) {
+  if (!voiceWanted || !audioCtx || buf.byteLength <= 8) { return; }
+  var view = new DataView(buf);
+  if (view.getUint8(0) !== 65) { return; }
+  var rate = view.getUint32(4, true), pcm = new Int16Array(buf, 8, (buf.byteLength - 8) >> 1);
+  voiceCount++; paintVoice();
+  logLine("info", "voice: " + (pcm.length / rate).toFixed(1) + " s received, sound is " + audioCtx.state);
+  if (audioCtx.state === "suspended") { audioCtx.resume(); }
+  var audio = audioCtx.createBuffer(1, pcm.length, rate), data = audio.getChannelData(0);
+  for (var i = 0; i < pcm.length; i++) { data[i] = pcm[i] / 32768; }
+  var source = audioCtx.createBufferSource();
+  source.buffer = audio; source.connect(audioCtx.destination);
+  var at = Math.max(audioCtx.currentTime + 0.03, voiceNext);
+  source.start(at); voiceNext = at + audio.duration;
+  voiceSources.push(source);
+  source.onended = function () {
+    var at = voiceSources.indexOf(source); if (at >= 0) { voiceSources.splice(at, 1); }
+  };
+}
+function beep() {
+  var osc = audioCtx.createOscillator(), gain = audioCtx.createGain(), t = audioCtx.currentTime;
+  osc.frequency.value = 660; gain.gain.value = 0.2;
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.start(t); osc.stop(t + 0.25);
+}
+function paintVoice() {
+  $("voicebtn").classList.toggle("on", voiceWanted);
+  $("voicebtn").textContent = voiceWanted
+    ? "Arya's voice is on, " + voiceCount + " sentences received (tap to mute)" : "Hear Arya on this phone";
+}
+function turnVoiceOn(withBeep) {     // only from a tap or a press: the browser unlocks sound from a gesture
+  prepareAudio();
+  var tick = audioCtx.createBufferSource();
+  tick.buffer = audioCtx.createBuffer(1, 1, audioCtx.sampleRate);
+  tick.connect(audioCtx.destination); tick.start();
+  if (withBeep) { beep(); }          // you should HEAR this: if not, the phone's sound is the problem
+  voiceCount = 0; voiceWanted = true; voiceMuted = false;
+  send({action: "voice", on: true});
+  paintVoice();
+}
+$("voicebtn").addEventListener("click", function () {
+  if (!voiceWanted) { turnVoiceOn(true); return; }
+  voiceWanted = false; voiceMuted = true;   // muted on purpose: a later press does not undo it
+  clearVoice();
+  send({action: "voice", on: false});
+  paintVoice();
+});
 function logLine(kind, text) {
   var log = $("log"), line = document.createElement("div");
   line.className = kind; line.textContent = text; log.appendChild(line);
@@ -314,6 +376,8 @@ ptt.addEventListener("pointerdown", function (e) {
   if (ptt.disabled || talkPointer !== null) { return; }
   try { ptt.setPointerCapture(e.pointerId); } catch (err) { /* not capturable */ }
   talkPointer = e.pointerId; ptt.classList.add("held");
+  clearVoice();                      // talking over Arya cuts her at once (the server clears too)
+  if (voiceAvailable && !voiceWanted && !voiceMuted) { turnVoiceOn(false); }   // the first press is the tap
   if (!audioInfo.available) { send({action: "ptt_press"}); return; }   // the robot's own microphone
   var mine = e.pointerId;
   prepareAudio();
@@ -388,6 +452,12 @@ function applyHello(m) {
   paintPersona(m.persona);
   var p = m.ptt || {}, t = m.say || {};
   audioInfo = m.audio || {available: false};
+  var voiceOk = !!(m.voice && m.voice.available && (window.AudioContext || window.webkitAudioContext));
+  voiceAvailable = voiceOk;
+  $("voicebtn").classList.toggle("avail", voiceOk);
+  if (voiceOk && voiceWanted) { send({action: "voice", on: true}); }   // a reconnect keeps the choice
+  if (!voiceOk) { voiceWanted = false; }
+  paintVoice();
   var phoneMic = !!audioInfo.available, usable = !!p.available;
   var why = "";
   if (phoneMic && !micSupported()) {          // the phone cannot open its microphone here
@@ -461,7 +531,9 @@ function connect(pin) {
   var scheme = location.protocol === "https:" ? "wss:" : "ws:";
   ws = new WebSocket(scheme + "//" + location.host + "/ws?pin=" + encodeURIComponent(pin));
   ws.onopen = function () { opened = true; store("pin", pin); };
+  ws.binaryType = "arraybuffer";
   ws.onmessage = function (event) {
+    if (typeof event.data !== "string") { playVoice(event.data); return; }
     var m; try { m = JSON.parse(event.data); } catch (e) { return; }
     if (m.type === "hello") {
       sendHz = m.send_hz || sendHz;
@@ -485,6 +557,8 @@ function connect(pin) {
       logLine("route", "decided: " + what + (m.early_stop ? " (early stop)" : ""));
     } else if (m.type === "said") {
       logLine("said", "arya: " + m.text);
+    } else if (m.type === "audio_clear") {
+      clearVoice();
     } else if (m.type === "ptt_timeout") {
       releaseTalk(); setListening(false);
       logLine("error", "released: talking is limited to " + m.max_s + " s");
@@ -499,7 +573,7 @@ function connect(pin) {
   };
   ws.onclose = function () {
     held.clear(); paint(); talkPointer = null; ptt.classList.remove("held"); setListening(false);
-    stopMic();
+    stopMic(); clearVoice();
     if (repeat !== null) { clearInterval(repeat); repeat = null; }
     setState("disconnected", false);
     document.getElementById("app").classList.remove("app-on");

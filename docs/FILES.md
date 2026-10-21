@@ -69,7 +69,7 @@ Legend: **STUB** = placeholder, not built yet. **DEV** = developer tool, not par
 
 | File | What it does | Edit it when |
 |---|---|---|
-| `web/protocol.py` | Strict checks of the page's messages (walk, stop, stand, sit, wave, ptt_press, ptt_release, say; numbers clamped to -1..1; unknown fields refused) and the bridge `walk` they become. Pure. | You add a button or a message. |
+| `web/protocol.py` | Strict checks of the page's messages (walk, stop, stand, sit, wave, ptt_press, ptt_release, say, voice; numbers clamped to -1..1; unknown fields refused) and the bridge `walk` they become. Pure. | You add a button or a message. |
 | `web/session.py` | The PIN check with lockout, "one controller at a time", the server-side deadman, stop-on-disconnect, and hold-to-talk safety (10 s limit, release on stop or disconnect). Also accepts the phone's audio frames (controller only, press held, no faster than real time). Pure, clock injected. | You change the safety rules. |
 | `web/server.py` | The server thread: the page and the WebSocket on one port, handshake checks, status line. Talks only to the Bridge. | You change the connection handling. |
 | `web/static/index.html` | The whole phone page (one file, no CDN, no build step). | You change how the page looks or behaves. |
@@ -86,7 +86,7 @@ Legend: **STUB** = placeholder, not built yet. **DEV** = developer tool, not par
 | `brain/startup.py` | The startup checks: one clear line per missing thing. | You add a requirement. |
 | `brain/logsetup.py` | Rotating log file plus console. | You change the log format. |
 | `voice/tts.py` | Piper text-to-speech as one long-lived process. Splits text into sentences. Loads pre-rendered phrases. | You change the voice engine. |
-| `voice/playback.py` | **The only file that touches the speaker.** A queue you can cancel (`clear()`), prefetching the next sentence, the `speaking` flag. | You change playback. |
+| `voice/playback.py` | **The only file that touches the speaker.** A queue you can cancel (`clear()`), prefetching the next sentence, the `speaking` flag. `PhoneSink` is the "speaker" of `--phone-voice`: no device, it paces each clip in real time and hands it to the phone page. | You change playback. |
 | `voice/__init__.py` | Marks the folder as a package. | Never. |
 
 ## `scripts/` : tools you run by hand
@@ -211,6 +211,7 @@ Run one file at a time on the dev laptop (see `COMMANDS.md`).
 | `tests/test_web_protocol.py` | The page's message checks: valid, clamped, unknown action, malformed. |
 | `tests/test_web_session.py` | PIN, lockout, one controller, deadman, stop on disconnect, `stop` on the `stop_event` path (fake clock). |
 | `tests/test_web_server.py` | The server on a real loopback socket: handshake refusals, deadman, statuses, no controller/gait/backend import. |
+| `tests/test_web_voice_out.py` | Arya's voice on the phone (Step 12c-2): the `voice` action and clip format, `PhoneSink` (pacing, abort, a broken link), the server's outbox (order, clear, a slow phone loses sentences, refused without `--phone-voice`) and the app with a fake Piper: speaking gate set while the phone plays, barge-in sends `audio_clear`. |
 | `tests/test_web_audio.py` | The phone microphone (Step 12c): frame format, the server's rules (press held, controller only, rate limit, auto-release), TLS, wrong PIN over TLS, and one real run: Piper's "sit down" as binary frames makes the dry-run body sit. |
 | `tests/test_web_voice.py` | Typed text takes the spoken path (stop, chat while walking), the app's hold-to-talk wiring, and one real run: press, WAV through a FileSource, release, the robot sits. |
 | `tests/test_web_app.py` | The page against a real headless body: walk moves it, a dropped connection stops it, `main.py --web` exits clean. |

@@ -331,6 +331,9 @@ WEB_TLS_DIR = DATA_DIR / "tls"  # self-signed certificate: made on the Pi, never
 WEB_TLS_CERT = WEB_TLS_DIR / "hexa-cert.pem"
 WEB_TLS_KEY = WEB_TLS_DIR / "hexa-key.pem"
 WEB_TLS_DAYS = 825  # validity of the generated certificate
+# --- Phone page: Arya's voice on the phone (Step 12c-2) --------------------
+WEB_VOICE_MAX_CLIPS = 3  # sentences waiting for a slow phone; a newer one is dropped
+WEB_VOICE_LAG_S = 0.5  # extra "speaking" tail with --phone-voice: network and the phone's buffer
 TTS_QUEUE_MAXSIZE = 8  # utterances waiting to be synthesized
 TTS_PREFETCH_SIZE = 1  # synthesized clips waiting for the speaker: sentence N+1 renders during N
 TTS_CLEAR_MAX_S = 0.1  # playback.clear() returns within this

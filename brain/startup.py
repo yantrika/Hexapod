@@ -24,6 +24,7 @@ class CheckOptions:
     ollama_model: str | None = None
     mic_device: int | None = None
     speaker_device: int | None = None
+    phone_voice: bool = False  # the phone is the speaker: no sound device is needed
 
 
 def check_vosk(model: str | None) -> str | None:
@@ -102,7 +103,9 @@ def run_checks(options: CheckOptions) -> list[str]:
     """Every problem found, one line each."""
     results = [check_vosk(options.model)]
     if not options.no_speak:
-        results += [check_piper(), check_phrases(), check_output_device(options.speaker_device)]
+        results += [check_piper(), check_phrases()]
+        if not options.phone_voice:
+            results.append(check_output_device(options.speaker_device))
     if not options.no_mic:
         results.append(check_input_device(options.mic_device))
     if options.chat == "ollama":
