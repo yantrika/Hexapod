@@ -240,7 +240,8 @@ after every enrolment or forget, and sets `pause_event` while the LLM generates.
 - **Voice**: "remember my face", "forget my face" (the person stays), "track me" / "don't track me"
   are persona routes (`Arya.face_action`); "forget me" also sends `Forget` to vision.
 - A dead camera or missing model is logged once; the robot carries on. `--camera` takes an index or a
-  video file.
+  video file; `--vision-preview` opens the vision process's own window (boxes, track ids; nothing is
+  saved). `scripts/face_check.py watch` shows the same without the robot.
 
 Models: `python scripts/fetch_vision_models.py` (YuNet `face_detection_yunet_2023mar.onnx`, SFace
 `face_recognition_sface_2021dec.onnx`, from the OpenCV Zoo, SHA-256 checked, into `assets/vision/`).

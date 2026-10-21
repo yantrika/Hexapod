@@ -81,6 +81,7 @@ class AppOptions:
     vision: bool = False  # the camera process: faces, names, greetings, turning toward people
     camera: int | str = config.VISION_CAMERA_INDEX  # device index, or a video file (a clip)
     tracking: bool = config.BEHAVIOUR_TRACKING_DEFAULT  # turn toward people ("don't track me")
+    vision_preview: bool = False  # a camera window with face boxes (drawn in the vision process)
 
 
 class LoggedPlayback:
@@ -321,7 +322,8 @@ class HexaApp:
         if process is None:
             from vision.process import VisionOptions, VisionProcess
 
-            process = VisionProcess(VisionOptions(source=options.camera))
+            process = VisionProcess(VisionOptions(source=options.camera,
+                                                  debug_preview=options.vision_preview))
 
         def person_name(person_id: int) -> str | None:
             person = memory.person_by_id(person_id) if memory is not None else None

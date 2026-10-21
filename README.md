@@ -39,7 +39,7 @@ small key/button panel (Space = stop).
 | Phone page (open the printed address, type the printed PIN) | `python main.py --web --chat fake` (this computer) or `--lan` (your phone on the same Wi-Fi) |
 | No window (default, lightest) | `python main.py --chat fake` |
 | Talk and listen through a phone browser (HTTPS, needs `python scripts/make_cert.py` once) | `python main.py --lan --https --no-mic --phone-voice --chat fake` |
-| Camera: recognise, greet, ask names, turn toward faces (`pip install -r requirements-vision.txt`, `python scripts/fetch_vision_models.py`) | `python main.py --vision --chat ollama` (`--camera clip.mp4`, `--no-track`) |
+| Camera: recognise, greet, ask names, turn toward faces (`pip install -r requirements-vision.txt`, `python scripts/fetch_vision_models.py`) | `python main.py --vision --chat ollama` (`--vision-preview` shows the camera, `--camera clip.mp4`, `--no-track`) |
 | Always listening instead of push-to-talk | `python main.py --listen always` |
 | Real chat model (needs Ollama, see below) | `python main.py --chat ollama` |
 | Scripted motion demo in the window | `python scripts/sim_demo.py --script "stand,walk:5,turn:90,strafe:3,stop,sit"` |

@@ -87,6 +87,9 @@ def build_parser() -> argparse.ArgumentParser:
                         help="the camera process: recognise people who agreed to it, greet them, "
                              "ask strangers their name, turn 10-20 degrees toward faces (needs "
                              "requirements-vision.txt and scripts/fetch_vision_models.py)")
+    parser.add_argument("--vision-preview", action="store_true",
+                        help="with --vision: a window with the camera picture, face boxes and "
+                             "track ids (q or Esc closes it); nothing is saved")
     parser.add_argument("--camera", default=str(config.VISION_CAMERA_INDEX),
                         help="camera index, or a video file played as a camera (default "
                              "%(default)s)")
@@ -210,7 +213,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         web_port=args.web_port, mode=args.mode,
         memory=not args.no_memory, memory_path=args.memory_db,
         vision=args.vision, camera=int(args.camera) if args.camera.isdigit() else args.camera,
-        tracking=not args.no_track))
+        tracking=not args.no_track, vision_preview=args.vision_preview))
     code = EXIT_OK
     try:
         app.start()
