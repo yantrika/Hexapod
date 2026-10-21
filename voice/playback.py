@@ -10,7 +10,8 @@ Two threads, joined by ``queue.Queue``s:
   aborts the sound in progress; anything still being synthesized is discarded when it finishes.
   It takes microseconds of CPU plus the sink's ``abort`` (bound: ``config.TTS_CLEAR_MAX_S``).
 - ``speaking`` (a ``threading.Event``) is set from the start of a clip until it ends plus
-  ``SPEAK_TAIL_S``. Gapless sentences keep it set throughout. Step 8 uses it to ignore STT.
+  ``SPEAK_TAIL_S``. Gapless sentences keep it set throughout. The STT uses it to ignore the robot's
+  own voice.
 - A synthesis or audio error is logged and skipped; the threads keep running.
 
 Only this module touches the audio output: sounddevice is imported here, lazily, and tests use

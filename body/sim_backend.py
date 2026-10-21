@@ -21,6 +21,7 @@ from pybullet_utils import bullet_client
 import config
 from body import poses
 from body.backend import BasePose, HexapodBackend, JointArray
+from body.urdf import ensure_urdf
 
 
 class SimBackend(HexapodBackend):
@@ -43,9 +44,9 @@ class SimBackend(HexapodBackend):
         self.on_step: Callable[[], None] | None = None  # called after every physics step
         if gui is None:
             gui = not config.SIM_HEADLESS
-        urdf = Path(urdf_path) if urdf_path is not None else config.URDF_PATH
+        urdf = Path(urdf_path) if urdf_path is not None else ensure_urdf()
         if not urdf.exists():
-            raise FileNotFoundError(f"{urdf} not found; run scripts/generate_urdf.py")
+            raise FileNotFoundError(f"{urdf} not found")
 
         self._physics_dt = 1.0 / config.PHYSICS_HZ
         self._time_debt = 0.0

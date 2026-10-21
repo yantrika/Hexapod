@@ -91,7 +91,7 @@ def check_ollama(model: str, url: str = config.OLLAMA_URL, timeout_s: float = 3.
         names = {str(item.get("name", "")) for item in reply.json().get("models", [])}
     except Exception as error:  # noqa: BLE001
         return (f"Ollama is not reachable at {url} ({type(error).__name__}); start it "
-                "(laptop: docker start ollama; Pi: see docs/HOW_TO.md, Ollama on the Pi) "
+                "(laptop: docker start ollama; Pi: see docs/HARDWARE.md, Ollama on the Pi) "
                 "or use --chat fake")
     if model not in names and f"{model}:latest" not in names:
         return (f"Ollama has no model {model}; pull it (laptop: docker exec ollama ollama pull "

@@ -1,191 +1,288 @@
-# How the pieces fit together
+# Architecture
 
-Short version. The full design is in `../plan.md` (message formats, safety rules, every decision).
+How the pieces fit, the rules that keep the robot safe, and the numbers we measured. For wiring
+and servos see `HARDWARE.md`; for what is still to build see `ROADMAP.md`.
 
-## Two programs
+## Two processes
 
 ```
- BRAIN program (one process, several threads)         BODY program (its own process)
+ BRAIN process (threads)                               BODY process
  ┌──────────────────────────────────────────┐        ┌────────────────────────────┐
- │ microphone -> STT thread (Vosk)          │        │ control loop, 50 times/sec │
- │            -> router worker thread       │ command│  - read commands           │
- │               (router, motion keeper)    │ ──────▶│  - drop old ones           │
- │ speaker  <- playback thread (Piper)      │ queue  │  - stop always wins        │
- │ status hub thread <─────────────────────────────── │  - walk / turn / sit ...   │
- │   (shares statuses with all listeners)   │ status │  - gait + leg maths        │
- └──────────────────────────────────────────┘ queue  │  - backend: simulation OR  │
-                                                      │    real servos             │
+ │ microphone -> STT thread (Vosk)          │        │ control loop, 50 Hz        │
+ │            -> router / chat worker       │ command│  - drain the queue         │
+ │ speaker  <- playback thread (Piper)      │ ──────▶│  - drop stale, stop wins   │
+ │ status hub thread <─────────────────────────────── │  - watchdog                │
+ │ phone page server (web/), heartbeat      │ status │  - controller -> gait ->   │
+ └──────────────────────────────────────────┘ queue  │    kinematics -> backend   │
                                                       └────────────────────────────┘
 ```
 
-- The **brain** hears, understands and speaks. It never touches a joint angle.
+- The **brain** hears, understands, speaks and chats. It never touches a joint angle.
 - The **body** moves the legs. It never touches audio or text.
-- The only link is `bridge.py`: a small command queue (brain to body), a status queue (body to brain), and a shared `stop_event` that makes "stop" fast.
-- The body runs the simulation today; real servos replace one class (`servo_backend.py`) at Step 11. Nothing else knows which one is loaded.
+- The only link is `bridge.py`: `command_queue` (brain to body), `status_queue` (body to brain)
+  and a shared `stop_event` that makes "stop" fast. Both queues are small and drop the oldest item
+  when full; `stop` cannot be lost because `stop_event` carries it independently.
+- The body is one of three backends behind `HexapodBackend` (`body/backend.py`):
+  `sim_backend.py` (PyBullet, 240 Hz), `dryrun_backend.py` (no physics, no hardware, logs the
+  joint targets; used on the Pi before servos) and `servo_backend.py` (real servos). Nothing
+  outside the backends knows which one is loaded, and pybullet is imported lazily.
 
-## Arya: three programs (Step 13: the brain part, P1, is BUILT; vision is not)
-
-The robot's name and persona is **Arya** (the project and repo stay `hexa`). Step 13 adds a third program, VISION, and grows the brain. The body and the bridge do not change.
-
-```
- VISION program (new, own process)        BRAIN program (grows)                         BODY program (unchanged)
- ┌──────────────────────────────┐        ┌───────────────────────────────────────┐    ┌──────────────────────┐
- │ USB webcam (facing forward)  │        │ mic -> STT -> router ──┬─ commands ───┼───▶│ command queue        │
- │  -> YuNet face detection     │ events │   router additions:    │              │    │ 50 Hz control loop   │
- │     (2-5 fps)                │ (small,│   name / forget me /   │              │◀───│ status queue         │
- │  -> simple tracker           │ no     │   modes / stop tracking│ chat only    │    └──────────────────────┘
- │  -> SFace recognition, only  │ images)│                        ▼              │
- │     when a NEW track appears │───────▶│ behaviour layer  context builder ──▶ LLM (Ollama, Pi;      │
- │                              │ mp     │ (rules, not LLM)  (who is in view,   optional 3060 server  │
- │ emits:                       │ queue  │  greet, ask name, facts, mood, mode, over the LAN)          │
- │  person_appeared(name|unk,id)│        │  wave, turn toward last turns,      │                      │
- │  person_left(id)             │        │  person)          token budget)      ▼                      │
- │  face_bearing(id, angle_deg) │        │       │                         reply -> Piper -> speaker   │
- └──────────────────────────────┘        │       │ stand / wave /          memory extractor            │
-   a camera failure or a slow frame      │       │ small turns ONLY        (LLM proposes facts as JSON; │
-   never stalls speech or the body       │       ▼                          rules filter what is saved) │
-                                         │  Bridge (never walk)             │                           │
-                                         │                                  ▼                           │
-                                         │  persona (calm/funny/roast)   memory DB (SQLite on the Pi)   │
-                                         │  + mood state                 people, face embeddings, facts,│
-                                         │  web page: persona section,   summaries                      │
-                                         │  tracking toggle, people list,                               │
-                                         │  perception line                                             │
-                                         └───────────────────────────────────────┘
-```
-
-- **Vision** sends only small events over its own queue and never touches the bridge, the body or audio. If it dies the brain carries on without perception.
-- **Behaviour** (greet by name, ask an unknown person their name once, wave, turn toward a person) is rules, not the LLM. It may trigger only `stand`, `wave` and small in-place turns, never walking, only when the body is idle, with cooldowns; STOP always wins; the web page can switch face tracking off.
-- **The LLM** only talks. It may suggest a gesture; code checks it against the allowed list and the idle rule. Robot commands never go through the LLM.
-- **Memory**: a face is "remembered" by storing embeddings plus a similarity threshold (no training). Enrolment only after the person says yes; embeddings stay on the Pi and out of the logs; no images are saved; "forget me" deletes the person's face, facts and summaries.
-- **Persona modes** (calm, funny, roast) change only how Arya talks, never commands or safety. Hard limits apply in every mode (see `AGENTS.md`).
-- Build order P1 to P6 (persona and memory first, vision later) is in `../plan.md`, Step 13.
-- **Built in P1 (brain only):** `brain/persona.py` (modes, mood, prompt), `brain/arya.py` (mode, speaker, forget flow), `brain/memory.py` (SQLite), `brain/context.py` (prompt under a token budget), `brain/extractor.py` (facts from idle conversations), `brain/output_check.py` (the hard limits on every sentence before the TTS). The router runs first and does not know the persona; its new `persona` kind never reaches the body or the LLM. Data: `data/persona/*.toml`; the database `data/memory/arya.db` is personal and never leaves the machine it was made on.
-
-## The data flow (start to finish)
+### The window and the real robot share one path
 
 ```
- mic ──▶ AudioSource ──▶ [push-to-talk gate] ──▶ [self-hearing gate] ──▶ Vosk (free + grammar)
- (voice/audio.py)        (voice/ptt.py:          (voice/stt.py)            │ partial: stop word → STOP now
-                          idle = dropped)                                   ▼ final
+ voice / typed text / phone page / keys
+        -> brain (router, motion keeper) -> Bridge -> body: arbitration -> Controller
+        -> gait -> kinematics -> HexapodBackend.set_joint_targets (hard clamp)
+        -> PyBullet window   |   dry-run log   |   servo backend (slew, pulse window, driver)
+```
+
+Everything above the backend is the same code in all three cases. A feature that works in the
+PyBullet window (commands, stop, watchdog, chat gating, persona, phone page) therefore exercises the
+same router, Bridge, controller and gait that drive the hardware. What the window does **not**
+test: servo calibration and signs, the slew limit on real pulses, power and brown-outs, the kill
+switch and signal shutdown on real servos (see `HARDWARE.md`).
+
+## Data flow
+
+```
+ mic ──▶ AudioSource ──▶ [push-to-talk gate] ──▶ [self-hearing gate] ──▶ Vosk (free text + grammar)
+ (voice/audio.py)        (voice/ptt.py)          (voice/stt.py)            │ partial with a stop word: STOP now
+                                                                            ▼ final
                                                               brain/stt_decision.py ──▶ brain/router.py
-                                                                                          │
-                      ┌──────────────── stop / command ───────────────────────────────────┤
-                      ▼                                                                   │ chat
-              brain/brain_loop.py ──▶ bridge.py ──▶ BODY process                          ▼
-              (+ motion_keeper heartbeats)           control loop 50 Hz        only if the body is idle:
-                      ▲                              controller / gait          brain/chat.py ──▶ Ollama
-                      │ statuses                     backend (sim | servos)          │ sentences
-              brain/status_hub.py ◀── status queue ◀──┘                              ▼
-                      │                                                       voice/playback.py ──▶ speaker
-                      ├──▶ brain/dialogue.py ── pre-rendered phrases ───────────────▲  (Piper, one process)
-                      └──▶ status log (logs/hexa.log, one line per status)
+                      ┌──────────── stop / command ────────────────────────────────────────┤
+                      ▼                                                                    │ chat / persona
+              brain/brain_loop.py ──▶ bridge.py ──▶ BODY process                           ▼
+              (+ motion_keeper heartbeats)                                      only if the body is idle:
+                      ▲ statuses                                                brain/chat.py ──▶ Ollama
+              brain/status_hub.py ◀── status queue ◀── BODY                         │ sentences (output check)
+                      ├──▶ brain/dialogue.py ─ pre-rendered phrases ─────────▶ voice/playback.py ──▶ speaker
+                      └──▶ web page, control window, logs/hexa.log
 ```
 
-`main.py` builds all of this (`brain/app.py`, class `HexaApp`) and owns the start and stop order. Press = barge-in: it cancels chat and silences the speaker.
+`main.py` builds this (`brain/app.py`, class `HexaApp`) and owns start and stop order. SIGINT,
+SIGTERM and SIGHUP stop the robot, silence it, cancel chat, join the threads and end the body.
 
-## What happens when you say "walk forward"
+"Walk forward": audio blocks reach Vosk (the self-hearing gate drops them while Arya speaks);
+Vosk runs a free-text and a grammar recognizer; a stop word in a partial result stops the robot at
+once; at the end of the sentence `stt_decision.decide()` picks the text to trust; `router` returns
+stop, command, chat or persona; `brain_loop` sends the command and `motion_keeper` sends
+heartbeats so the walk continues; the body answers with statuses; `dialogue` speaks a
+pre-rendered phrase from the status (never from assumption).
 
-1. `voice/audio.py` (`MicSource`) hands 16 kHz audio blocks to the STT thread.
-2. `voice/stt.py`: the self-hearing gate drops audio while hexa is speaking. Vosk runs twice on the rest: free text, and a grammar of the known commands.
-3. A partial result with a stop word stops the robot at once. Otherwise, when the sentence ends, `brain/stt_decision.py` picks the text to trust.
-4. `brain/router.py` turns it into stop / command / chat.
-5. `brain/brain_loop.py` sends the command through the Bridge; `brain/motion_keeper.py` then sends heartbeats so the walk continues.
-6. The body replies with statuses (`accepted`, `done`, `rejected`...). `brain/status_hub.py` shows them to every listener.
-7. `brain/dialogue.py` hears the body's `accepted` and `voice/playback.py` says "okay" (pre-rendered, no waiting). While it speaks, step 2 ignores the microphone.
+Phone audio (`main.py --lan --https --no-mic`, Step 12c): the robot's microphone is not opened. The
+phone page, served over HTTPS with a self-signed certificate (`scripts/make_cert.py`), sends binary
+WebSocket frames (16 kHz mono int16) while hold-to-talk is held. `WebControl.audio_frame`
+(`web/session.py`) accepts them only from the controller, only while that press is held and within a
+data-rate limit (`WEB_AUDIO_RATE_FACTOR`, `WEB_AUDIO_BURST_S`), and `HexaApp.push_phone_audio` puts
+them into the network `QueueSource`, exactly where the microphone's blocks would go. So the audio
+takes the same push-to-talk gate, self-hearing gate, Vosk, `stt_decision`, router, motion keeper,
+chat and persona path as the robot's microphone. Nothing new decides motion.
 
-## What happens when you just talk (chat)
+Arya's voice on the phone (`--phone-voice`, Step 12c-2): `PhoneSink` (`voice/playback.py`) replaces
+the speaker. It paces each Piper sentence in real time and hands it to `WebServer.send_audio` as one
+binary message; the page plays it. The playback queue, the `speaking` gate and barge-in work as with
+a speaker; a slow phone loses the newest sentences, never delays the body.
 
-Something that is not a command is chat (`brain/chat.py`, a local LLM through Ollama):
+Chat: only when the body is idle, otherwise "tell me after I stop" and the LLM is not called. The
+reply streams in; every finished sentence passes `output_check` and goes to the speaker queue. A
+command, a stop or any motion cancels the reply and clears the speech. If the LLM is down Arya
+says "I can't think right now".
 
-1. Only if the body is **idle** (no walk, turn or posture change). Otherwise hexa says "tell me after I stop" and the LLM is not called.
-2. The reply streams in; each finished sentence (`brain/sentences.py`) goes straight to the speaker queue, so hexa starts talking before the LLM has finished.
-3. A command, a stop, or any motion cancels the reply and clears the speech, so the microphone is free for "stop".
-4. If the LLM is down or too slow, hexa says "I can't think right now". The LLM is never used to decide a command.
+## Messages (`bridge.py`)
 
-## Safety rules that matter
+Frozen dataclasses (picklable for `multiprocessing`); `timestamp` is `time.monotonic()`.
+
+| `Command.action` | params | notes |
+|---|---|---|
+| `walk` | `direction` fwd/back, `speed` 0-1; optional `strafe`, `yaw` in [-1, 1] (+1 = left / counter-clockwise) | continuous until stop, a new motion command or the watchdog; clamped in the controller only |
+| `turn` | `direction` left/right, `angle_deg` 1-180 | finishes, then `done` |
+| `stand`, `sit`, `wave` | none | `busy` while a transition runs |
+| `stop` | none | preempts everything; never rejected |
+| `heartbeat` | none | refreshes the watchdog only |
+
+`Status.status` is `accepted | rejected | done | busy | fallen | error`, with `ref_seq` (the command
+it answers) and `detail`. Rejection reasons are a closed set: `stale`, `superseded`,
+`already_in_state`, `invalid_params`, `invalid_state`, `unknown_action`, `fallen`.
+
+## Safety rules (these hold in every mode and on every backend)
 
 | Rule | Where |
 |---|---|
-| **Stop always wins**, even over old messages | `body/arbitration.py`, `bridge.py` |
+| **`stop` always wins**, even over old messages; it holds the current pose | `body/arbitration.py`, `bridge.py` |
 | Messages older than `MAX_MESSAGE_AGE_S` are dropped (a stale stop still runs) | `body/process.py` |
-| **Watchdog**: walking with no command or heartbeat for `WATCHDOG_TIMEOUT_S` stops the robot | `body/controller.py` |
-| Every angle is clamped once, in one place | `body/backend.py` |
-| Every command is checked on arrival | `bridge.py` |
-| Fallen robot refuses motion except stop | `body/process.py`, `body/controller.py` |
-| Robot ignores the microphone while it speaks | `voice/stt.py` (gate), `voice/playback.py` (`speaking`) |
-| A grammar match is not trusted unless it is an exact known phrase | `brain/stt_decision.py` |
-| Chat runs only while the body is idle; motion cancels chat speech | `brain/voice_loop.py`, `brain/brain_loop.py` |
-| The LLM is never in the command path (the router decides) | `brain/router.py`, `brain/voice_loop.py` |
-| Only `voice/audio.py` touches the mic; only `voice/playback.py` touches the speaker | `AGENTS.md` |
-| Piper is always one long-lived process | `voice/tts.py` |
-| (Step 13, planned) Perception and the LLM can trigger only stand, wave and small turns, never walking, only when idle | `brain/behaviour.py` (not built) |
-| (Step 13) "forget me" needs a spoken yes, then deletes facts, summaries, face embeddings and the row in one transaction; facts are validated by code; the hard limits are checked on every sentence | `brain/memory.py`, `brain/arya.py`, `brain/extractor.py`, `brain/output_check.py` (built); face enrolment after a yes (P4, not built) |
+| **Watchdog**: walking or turning with no command or heartbeat for `WATCHDOG_TIMEOUT_S` stops the robot | `body/controller.py` |
+| The body validates every command on arrival and does not trust the brain | `bridge.py`, `body/controller.py` |
+| Two joint-limit tiers: hard (`JOINT_HARD_LIMITS_DEG`, one clamp in `HexapodBackend.set_joint_targets`) and soft gait limits | `body/backend.py`, `body/gait.py` |
+| A fallen robot refuses all motion except `stop` | `body/controller.py` |
+| Voice and brain never touch joint angles | `brain/`, `voice/` |
+| **The LLM is never in the command path**: the router decides, only a `chat` result reaches the LLM, and only while the body is idle | `brain/router.py`, `brain/voice_loop.py` |
+| Perception and the LLM can trigger only `stand`, `wave` and small in-place turns, never walking, only when idle | `brain/behaviour.py` (not built yet) |
+| A grammar match is not trusted unless it is an exact known phrase; confidence alone is never the guard | `brain/stt_decision.py` |
+| The robot ignores the microphone while it speaks | `voice/stt.py`, `voice/playback.py` |
+| Only `voice/audio.py` touches audio input; only `voice/playback.py` touches audio output | `voice/` |
+| Phone page: PIN, one controller, a deadman that sends `stop`, `stop` on every disconnect, no joint data | `web/session.py`, `web/protocol.py` |
+| Phone audio follows the same router and stop rules; it is accepted only from the controller, only during a press, rate-limited, released on `stop`, disconnect and after 10 s, and never written to disk or the log | `web/session.py`, `voice/audio.py`, `brain/voice_loop.py` |
+| Real servos: refused unless `--backend servo` and a typed `yes`; every joint must be calibrated; one pulse path with an absolute window and a slew limit; staggered attach; powers up sitting; idle release; signals end in sit-then-release | `main.py`, `body/servo_*.py` |
+| Persona hard limits in every mode, checked in the prompt and in code on every sentence | `brain/output_check.py`, `data/persona/limits.toml` |
+| Privacy: facts only after validation; "forget me" deletes everything in one transaction; the memory database never leaves the machine; no face data in logs | `brain/memory.py`, `brain/arya.py` |
 
-## Threads and who talks to whom
+Body tick: stop fast path (`stop_event`) first, then drain the queue; a `stop` in the batch wins and
+the rest are `rejected(superseded)`; other motion commands are latest-wins; a running
+sit/stand/wave answers `busy`. Push-to-talk: a voice "stop" works only while listening; the
+control window STOP button and Space are the always-available stop.
+
+## Threads (brain process)
 
 | Thread | Reads | Writes |
 |---|---|---|
 | `voice-stt` | microphone blocks | recognised results |
-| `voice-worker` | recognised results, statuses | commands to the body, spoken "okay" |
-| `tts-synth` | sentences to say | audio clips |
-| `tts-playback` | audio clips | speaker, `speaking` flag |
-| `status-hub` | the body's status queue | every listener's own queue |
-| `dialogue` | its status subscription | phrases to the speaker |
+| `voice-worker` | recognised results, typed text | commands to the body, spoken phrases |
+| `tts-synth`, `tts-playback` | sentences, audio clips | speaker, the `speaking` flag |
+| `status-hub` | the body's status queue | every subscriber's own bounded queue |
+| `dialogue`, `motion-keeper` | their status subscription | phrases, heartbeats |
 | `chat-reply` | the LLM's streamed reply | sentences to the speaker queue |
+| web server (own event loop) | phone messages, binary audio frames | Bridge commands, voice controls, the network audio source |
 
-Threads talk only through `queue.Queue` and one shared `speaking` flag. Each queue is bounded and drops the oldest item when full, so nothing can block the robot.
+Threads talk only through `queue.Queue` and one shared `speaking` event. Every queue is bounded and
+drops the oldest item when full, so nothing can block the robot or the microphone.
 
-## The rules (plan.md section 4, in short)
+## Arya (persona, memory, vision)
 
-1. Clamps live in one place (`config.clamp`, the backend template method). The body validates every command on arrival and does not trust the brain.
-2. Messages older than `MAX_MESSAGE_AGE_S` are dropped. A stale `stop` still runs.
-3. Every tick: check `stop_event` first, drain the queue, a `stop` in the batch wins and holds the pose, motion commands are latest-wins, a running sit/stand/wave answers `busy`.
-4. Watchdog: walking or turning with no command or heartbeat for `WATCHDOG_TIMEOUT_S` stops the robot.
-5. A fallen robot refuses all motion except `stop`.
-6. Queues are small and bounded; when full the oldest item is dropped and `stop` cannot be lost.
-7. The LLM is never in the command path; chat only while the body is idle.
-8. Push-to-talk: a voice "stop" works only while listening. The control window STOP button and Space are the always-available stop.
+The persona `calm` (default), `funny` or `roast` changes only how Arya talks; commands, the router
+and safety are identical in every mode. Built: `brain/persona.py` (prompt from
+`data/persona/arya.toml`), `brain/arya.py` (mode, speaker, mood, forget flow), `brain/memory.py`
+(the only code that opens `data/memory/arya.db`, SQLite, mode 600, thread-safe),
+`brain/context.py` (prompt under a token budget), `brain/extractor.py` (facts from idle
+conversations, validated by code), `brain/output_check.py` (hard limits on every sentence before
+the TTS). The router runs first and does not know the persona: persona requests ("my name is X",
+"forget me", "roast mode") are `RouteResult.kind == "persona"`, are looked at only after the stop
+check and never reach the body or the LLM. One exception: the whole utterance "stop roasting"
+switches to calm and, if the body is moving, sends a real `stop` first.
 
-## Measured numbers so far (dev laptop: Core i3 M380, 2 cores, no AVX, headless body)
+### Vision
 
-| What | Number | Where from |
+`vision/` is a third process (spawn), built standalone: nothing in `body/`, `brain/`, `voice/` or
+`web/` starts it yet. `vision/process.py` reads the webcam at a fixed low rate
+(`VISION_FPS`, 4), resizes each frame to `VISION_DETECT_WIDTH` (320 px), finds faces with YuNet
+(`detector.py`), and an IoU tracker (`tracker.py`) gives stable track ids with appear/lost
+debounce. It sends only small events on its own bounded queue (oldest dropped when full):
+`person_appeared(track_id)`, `person_left(track_id)` and `face_bearing(track_id, angle_deg)`,
+at most `VISION_BEARING_MAX_HZ` per track per second. The bearing is the horizontal angle of the
+face centre from the camera axis (pinhole model, `VISION_HFOV_DEG`); positive means to the robot's
+left, like the body frame. While `pause_event` is set (the LLM is generating) the frame rate and
+the bearing rate drop to `VISION_PAUSED_FPS` and `VISION_PAUSED_BEARING_HZ`.
+
+- **Images never leave the process.** No frame or face crop is sent, written to disk or logged
+  (`tests/vision/test_privacy.py`); the optional `--debug-preview` window is drawn inside the
+  vision process.
+- **A bad camera never reaches the robot.** A camera error is logged and retried with backoff
+  (1 s doubling to 30 s); the tracker reports everyone as left; speech and the body never wait
+  for vision.
+- **Vision never moves the robot by itself.** It only reports. The behaviour layer (P5,
+  `brain/behaviour.py`, rules, not the LLM) will be the only code that turns these events into
+  commands, only when idle, only `stand`, `wave` and small turns, with STOP winning.
+
+#### Recognition and enrolment (P4a, vision side; the brain wiring is next)
+
+SFace runs only when a track is new or unnamed (every frame) and, once a track has a name, again
+every `VISION_RECHECK_S`. A face is embedded only if it passes the quality gate
+(`vision/quality.py`: box at least `VISION_MIN_FACE_PX`, roughly frontal by landmark symmetry
+`VISION_FRONTAL_MAX`, not blurry by Laplacian variance `VISION_BLUR_MIN`); bad crops are skipped,
+never matched. A name is given only when `VISION_VOTE_NEEDED` of the last `VISION_VOTE_WINDOW`
+matches agree (`IdentityVoter`); the match is cosine >= `VISION_MATCH_THRESHOLD` (0.363, the SFace
+value in OpenCV's own sample and the OpenCV Zoo). After `VISION_UNKNOWN_AFTER` good looks without a
+name the track gets `person_unknown(track_id)` once. New events: `person_identified(track_id,
+person_id, score)` and `person_unknown(track_id)`; vision knows person ids only, never names.
+
+**The brain owns the database; the vision process never opens it.** The two talk over queues of
+small dataclasses (`vision/events.py`):
+
+| Direction | Message | Meaning |
+| --- | --- | --- |
+| brain -> vision | `SetKnownFaces(((person_id, (embedding, ...)), ...))` | replace everything vision knows |
+| brain -> vision | `Enroll(track_id, person_id)` | collect samples of that person (after a yes) |
+| brain -> vision | `CancelEnroll()` | stop collecting |
+| brain -> vision | `Forget(person_id)` | drop that person from vision at once |
+| vision -> brain | `EnrollResult(person_id, embeddings or reason)` | success, or why not |
+
+Enrolment (`vision/enrollment.py`) collects `VISION_ENROLL_SAMPLES` good crops, at least
+`VISION_ENROLL_GAP_S` apart, within `VISION_ENROLL_TIMEOUT_S` while the person stays in view, embeds
+them and returns only the vectors. It fails cleanly (`person_left`, `multiple_faces`,
+`low_quality`, `timeout`, `inconsistent`, `cancelled`, `busy`, `unknown_track`) and keeps nothing;
+no image is ever kept, crops are dropped as soon as they are embedded.
+
+`brain/memory.py` (schema version 2) adds `people.face_consent` and its time; `add_embedding` and
+`replace_embeddings` refuse a person without consent, `set_face_consent(id, False)` /
+`forget_face` delete the embeddings, `all_embeddings()` feeds `SetKnownFaces` (consenting people
+only) and `forget_person` still deletes everything in one transaction. `scripts/face_check.py`
+(enroll / watch / list / forget) runs the whole thing on a webcam against its own database,
+`data/memory/face_check.db`, never the real one.
+
+Models: `python scripts/fetch_vision_models.py` (YuNet `face_detection_yunet_2023mar.onnx`, SFace
+`face_recognition_sface_2021dec.onnx`, from the OpenCV Zoo, SHA-256 checked, into `assets/vision/`).
+Packages: `requirements-vision.txt` (opencv-python, numpy, psutil; wheels exist for Windows, Linux
+x86_64 and aarch64). Measured numbers: `scripts/vision_check.py` and `scripts/vision_bench.py`
+(not measured yet on the Pi).
+
+## Design decisions
+
+- **Two processes, one narrow bridge**, so a hung brain cannot stop the control loop and the
+  watchdog can stop a robot whose brain died.
+- **Router decides, the LLM only chats**: a small local model is too slow and too unreliable to be
+  in a safety path.
+- **Clean joint frame**: kinematics, gait and the sim use 0 = neutral with no offsets or per-side
+  signs. Centre, direction, offset and pulse window of each real servo live only in
+  `data/calibration/servo_cal.json` (`body/servo_calibration.py`); board-level numbers are in
+  `config.py`.
+- **`config.py` is the single source of truth.** Leg order is `RF, RM, RR, LR, LM, LF` (clockwise
+  from front-right); mount angles are clockwise from above, 0 = +X, and become math yaw only
+  through `config.mount_yaw_rad`. Body frame: +X forward, +Y left, +Z up; metres and radians unless
+  a name ends in `_DEG`. IK always returns the knee-up solution.
+- **Wall-clock loops**: physics (240 Hz) and control (50 Hz) follow the clock, not iteration
+  counts; a late loop runs several nominal 20 ms ticks, never one long one.
+- **Piper is one long-lived process** (a process per sentence costs about 1.5 s of model load);
+  fixed phrases are pre-rendered, never synthesized while speaking.
+- **Two Vosk recognizers on the same audio** (free text for chat, a grammar built from the router
+  for commands). The grammar forces matches on ordinary speech, so a result is trusted only when it
+  is exactly one known phrase that the short free text agrees with.
+- **The URDF is generated** from `config.py` (`body/urdf.py`) the first time the simulator needs
+  it; it is never committed.
+
+## Measured numbers
+
+Dev laptop: Core i3 M380, 2 cores, no AVX, headless body. Pi: Raspberry Pi 5, 8 GB, Ubuntu
+24.04, Python 3.12, dry-run body, no audio devices (Piper timed to memory, Vosk on generated
+speech).
+
+| What | Dev laptop | Raspberry Pi 5 |
 |---|---|---|
-| Body control tick (mean work time), idle | 7.3-7.9 ms (20 ms budget) | Step 8, 10 |
-| Same with Vosk (2 recognizers) listening and Piper idle | 7.4-8.7 ms | Step 8, 9 |
-| Same with Piper kept 100 % busy | 10.6-34 ms (walking worst) | Step 7, 8 |
-| Same while the LLM generates | 15.5-16.7 ms (worst 130-205 ms) | Step 9 |
-| Piper (`en_US-amy-low`), one long-lived process | start 2.6 s once, real-time factor 0.6-1.0, first audio 0.6 s (a word) to 4.2 s (a 4 s sentence) | Step 7 |
-| Piper one process per sentence (ruled out) | real-time factor 1.4 | Step 7 |
-| Vosk CPU, always listening | 13-25 % of a core (23 % in the last run), decode real-time factor 0.07-0.11 | Step 8, 10 |
-| Vosk CPU with push-to-talk idle | 1 % (no audio decoded) | Step 10 |
-| "walk forward": end of speech to command sent / to first foot move | 0.86 s / +0.26 s | Step 8 |
-| Command accuracy (small US model, owner's voice, 117 attempts) | commands 72 %, stops 78 %, chat routed correctly 30/30, dangerous false positives 0, wrong motion 0 | Step 8b |
-| Chat, `qwen2.5:0.5b` in Docker on this laptop | 1.5 tokens/s (bar: 3), first token 0.4-1.6 s, 500 MB, peak 90 C | Step 9 |
-| Temperature | idles 56-65 C, peaks 81-90 C under load, shuts down at 87 C (acpitz) | all |
+| Body tick work, standing / walking (20 ms budget) | 7-8 ms (with the simulator) | 0.09 / 0.42 ms (no physics) |
+| Body tick while Piper is busy | 10-34 ms | 0.7 / 1.5 ms |
+| Body tick while the LLM generates | 15-17 ms (worst 130-205 ms) | not measured |
+| Piper (`en_US-amy-low`) real-time factor, first audio | 0.6-1.0, 0.6 s (a word) to 4.2 s | 0.12, median 0.29 s |
+| Vosk CPU, one recognizer / two (free + grammar) | 15-22 % / 21-23 % of a core | 8-14 % / 13-17 % |
+| Vosk CPU with push-to-talk idle | 1 % | 0 % |
+| End of speech to command sent ("walk forward") | 0.86 s | 0.84 s |
+| Command sent to first foot-target change | 0.26 s | 0.19 s |
+| "sit down" WAV end to first joint change | not measured | median 0.90 s |
+| Phone page: press to first joint change (localhost / Wi-Fi) | not recorded | 39 ms / 51 ms median |
+| Release to command (500 ms of it is `PTT_TAIL_S`) | see Pi | median 701 ms |
+| Chat `qwen2.5:0.5b` | 1.5 tokens/s (bar: 3), first token 0.4-1.6 s | not measured yet |
+| Command accuracy, small US Vosk, one owner's voice (117 tries) | commands 72 %, stops 78 %, no dangerous false positive, no wrong motion | not measured |
+| Temperature | idle 56-65 C, peaks 81-90 C under load | idle 43-44 C, peak 67 C |
+
+The end-to-end delay after you stop speaking (about 0.9 s) is dominated by Vosk waiting for
+silence, not by compute. On the laptop, numpy's BLAS threads made ticks 7x slower, so
+`config.py`, `body/__init__.py` and `tests/__init__.py` pin them to one thread.
 
 ## Known limits
 
-- **Laptop heat.** The dev laptop powers off at 87 C (acpitz) and reaches 90 C under Vosk + Piper + LLM. Run one heavy thing at a time; `scripts/cool_run.py` is the default way to run things.
-- **Voice stop works only while listening in push-to-talk mode.** Use the control window STOP button or Space, or type `stop` in the terminal. In `always` mode it works except while hexa speaks.
-- **Single words are unreliable on the small Vosk model** ("halt" and "freeze" were missed; "stop" is the reliable stop word; two-word commands are reliable).
-- **The real LLM is untested on target hardware.** Here it is too slow (1.5 tokens/s), so chat is developed against `FakeChat`. Real timing is a Step 11 task on the Pi 5.
-- The vision process is a plan only (Step 13, P3 onwards); persona, memory and the extractor are built (P1). USB mic and speaker are not yet available and Ollama is not yet installed on the Pi.
-- No wake word yet (Step 11), no servo code (`servo_backend.py` is a stub), the phone page has no audio of its own (it only presses the robot's own push-to-talk; phone microphone = Step 12c).
-- Vosk has no echo cancellation: use a headset or keep the microphone away from the speaker for barge-in.
-
-## Where the pieces are (by job)
-
-| Job | Files |
-|---|---|
-| Messages between programs | `bridge.py`, `commandline.py` |
-| Moving legs | `body/controller.py`, `gait.py`, `kinematics.py`, `poses.py` |
-| Simulation vs real robot | `body/backend.py` (contract), `sim_backend.py`, `servo_backend.py` (stub) |
-| Understanding speech | `voice/stt.py`, `brain/stt_decision.py`, `brain/router.py` |
-| Speaking | `voice/tts.py`, `voice/playback.py` |
-| Talking back about statuses | `brain/dialogue.py` |
-| Chat | `brain/chat.py`, `brain/sentences.py` |
-| Push-to-talk, barge-in | `voice/ptt.py`, `brain/voice_loop.py` |
-| The whole robot, startup checks, logging | `main.py`, `brain/app.py`, `brain/startup.py`, `brain/logsetup.py` |
-| Connecting speech to the body | `brain/voice_loop.py`, `brain/brain_loop.py`, `brain/motion_keeper.py`, `brain/status_hub.py` |
-| All numbers | `config.py` |
+- A voice stop works only while listening in push-to-talk mode; use the STOP button, Space, or
+  type `stop`. Single words are unreliable on the small Vosk model ("stop" is the reliable stop
+  word; two-word commands are reliable). Vosk has no echo cancellation: use a headset for barge-in.
+- The small US model writes "Arya" as "aria"; the router drops a leading "aria". Names heard once
+  are often wrong ("Priya" as "prayer"); name confirmation is planned (`ROADMAP.md`).
+- The real LLM has not been timed on the Pi. No microphone or speaker has been tried on the Pi.
+- The phone page is plain HTTP / `ws://` (trusted networks only) unless started with `--https`, which
+  the phone's microphone needs. Phone audio and voice are not timed on the Pi yet (`ROADMAP.md`).
+- No wake word. No vision process yet.

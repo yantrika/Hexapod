@@ -26,7 +26,7 @@ import json
 import ssl
 import sys
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any, cast
 from urllib.parse import quote
@@ -106,6 +106,19 @@ class WebClient:
         heard: list[dict[str, Any]] = []
         end = time.monotonic() + seconds
         while time.monotonic() < end:
+            self.walk(**axes)
+            heard += self.messages(period)
+        return heard
+
+    def hold_until(self, wanted: Callable[[dict[str, Any]], bool], timeout: float = 30.0,
+                   **axes: float) -> list[dict[str, Any]]:
+        """Hold a move until the server sends a message *wanted* accepts (or *timeout* passes).
+
+        The wait follows the machine instead of a fixed window: a slow robot just takes longer."""
+        period = 1.0 / config.WEB_CLIENT_SEND_HZ
+        heard: list[dict[str, Any]] = []
+        end = time.monotonic() + timeout
+        while time.monotonic() < end and not any(wanted(m) for m in heard):
             self.walk(**axes)
             heard += self.messages(period)
         return heard

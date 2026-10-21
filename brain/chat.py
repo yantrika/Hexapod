@@ -12,7 +12,7 @@ think right now" is spoken and the loop carries on: chat never blocks the microp
 If no sentence is ready within ``FILLER_DELAY_S`` of the question, ONE pre-rendered filler ("hmm")
 is played so the user is not left in silence; a cancel (barge-in) drops it with the rest.
 
-Step 13 hooks (all optional, the plain responder is unchanged without them): ``context_builder``
+Persona hooks (all optional, the plain responder is unchanged without them): ``context_builder``
 builds the messages (persona, memory, trimmed history) instead of the fixed system prompt;
 ``sentence_check(sentence, user_text)`` returns a category when a sentence breaks a hard limit,
 and that sentence is dropped and ONE pre-rendered neutral line (``blocked_phrase``) is spoken in

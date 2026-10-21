@@ -1,85 +1,130 @@
-# hexa
+# hexa: Arya, a talking hexapod
 
-A six-legged robot you can talk to. It hears you, walks, and answers back, and it works **fully offline**: no cloud services, no paid tools.
+Arya is a six-legged robot that walks, listens, talks and chats, fully offline: Vosk hears you,
+Piper speaks, an optional local Ollama model chats. Everything is built and tested in a PyBullet
+simulation first; the same code drives the real robot on a Raspberry Pi 5 by swapping one backend
+class. The repo and the Python package are called `hexa`; the robot's name and persona is Arya.
 
-Say "walk forward", "sit down" or "stop", or just chat. Its persona is **Arya**: calm, funny or roast mode.
+## Quick start (about 10 minutes, Linux)
 
-```
- you ── mic ──▶ Vosk (STT) ──▶ router ──┬─ command ──▶ body: gait + leg maths ──▶ simulation / servos
-                                        └─ chat ─────▶ local LLM (Ollama) ──▶ Piper (TTS) ──▶ speaker
-```
-
-- **Safe by design.** Words are matched to commands by a plain router; the LLM only chats and never moves a leg. A stop always wins, and a watchdog halts the robot if the brain goes quiet.
-- **Simulation first.** Everything is built and tested in PyBullet, then moves to a Raspberry Pi 5 by swapping one backend class.
-- **Control it your way.** Voice, keyboard, a desktop window, or a phone browser page on your own Wi-Fi.
-
-**Status:** works in simulation and in a hardware-free dry run on the Pi 5. Real servo control is not built yet.
-
-## Quick start
-
-Needs Python 3.11 and a microphone and speaker (or use `--no-mic --no-speak`).
+Python 3.11. Developed and tested on Linux; other systems are not tested.
 
 ```bash
-git clone https://github.com/yantrika/Hexapod.git hexa && cd hexa
-python3 -m venv .venv && source .venv/bin/activate
+git clone git@github.com:yantrika/Hexapod.git hexa && cd hexa
+python3.11 -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt -r requirements-sim.txt
-scripts/fetch_models.sh          # speech models and the fixed phrases (downloads once)
-python main.py --chat fake       # press Enter, say "walk forward", press Enter
+scripts/fetch_models.sh            # Piper voice, Vosk model, spoken phrases (asks nothing, skips what exists)
+python main.py --gui --chat fake   # the robot in a 3D window, with typed or spoken commands
 ```
 
-Add `--gui` for the PyBullet window, or `--lan` for the phone page (it prints a URL and a PIN).
+On an old Intel GPU the 3D window needs an OpenGL override (symptom: a garbled or empty window,
+or "GLSL" errors):
 
-**Phone as the microphone (Step 12c).** A phone browser opens its microphone only on a secure page, so the Pi serves the page over HTTPS with a self-signed certificate:
+```bash
+MESA_GL_VERSION_OVERRIDE=3.3 MESA_GLSL_VERSION_OVERRIDE=330 python main.py --gui --chat fake
+```
+
+You now see the hexapod in a PyBullet window. Press Enter in the terminal to start listening,
+say "walk forward", press Enter again, say "stop". No microphone? Add `--web`, open the printed
+address, enter the PIN and type the commands in the page's box (or use `--no-mic --no-speak`
+and the page's buttons). `python scripts/control_window.py` opens its own robot window with a
+small key/button panel (Space = stop).
+
+## Ways to run it
+
+| What | Command |
+|---|---|
+| Robot in the 3D window, scripted chat | `python main.py --gui --chat fake` |
+| Same, no sound and no microphone | `python main.py --gui --chat fake --no-speak --no-mic` |
+| Phone page (open the printed address, type the printed PIN) | `python main.py --web --chat fake` (this computer) or `--lan` (your phone on the same Wi-Fi) |
+| No window (default, lightest) | `python main.py --chat fake` |
+| Talk and listen through a phone browser (HTTPS, needs `python scripts/make_cert.py` once) | `python main.py --lan --https --no-mic --phone-voice --chat fake` |
+| Always listening instead of push-to-talk | `python main.py --listen always` |
+| Real chat model (needs Ollama, see below) | `python main.py --chat ollama` |
+| Scripted motion demo in the window | `python scripts/sim_demo.py --script "stand,walk:5,turn:90,strafe:3,stop,sit"` |
+| Type commands (no voice) | `python scripts/cli.py` (router) or `python scripts/cli.py --raw` (bridge commands) |
+| Drive from the keyboard | `python scripts/teleop.py` (3D window) |
+| Pi without servos (moves nothing, logs the joint targets) | `python main.py --backend dryrun` |
+| Real servos on the Pi | `python main.py --backend servo` (asks you to type `yes`; read `docs/HARDWARE.md` first) |
+
+Things to say: *walk forward*, *turn left*, *stop*, *sit down*, *stand up*, *wave*, *roast mode*,
+*my name is X*, *forget me*. Anything else is chat. *Stop* works while it walks or talks. In
+push-to-talk mode a voice "stop" works only while you hold the button; the control window's STOP
+button and Space always work.
+
+Useful `main.py` switches: `--gui|--headless`, `--chat fake|ollama|off`, `--no-speak`, `--no-mic`,
+`--listen ptt|always`, `--web|--lan [--web-port N]`, `--https`, `--phone-voice`, `--mode calm|funny|roast`,
+`--no-memory`, `--model us|in` (Vosk model), `--device N` (microphone, list with
+`scripts/mic_check.py`), `--log-level DEBUG`. Stop with Ctrl-C.
+
+**Phone as the microphone (Step 12c).** A phone browser opens its microphone only on a secure page,
+so the Pi serves the page over HTTPS with a self-signed certificate:
 
 ```bash
 python scripts/make_cert.py                        # once, on the Pi (re-run with --force if its address changes)
 python main.py --lan --https --no-mic --backend dryrun
 ```
 
-Open the `https://` address it prints, accept the one-time "not secure" warning, enter the PIN, then hold the talk button and speak. The audio goes to Vosk on the Pi; nothing leaves your Wi-Fi. Without `--no-mic` the button uses the robot's own microphone, as before.
+Open the `https://` address it prints, accept the one-time "not secure" warning, enter the PIN,
+then hold the talk button and speak. The audio goes to Vosk on the Pi; nothing leaves your Wi-Fi.
+The router, stop word and 10 s listening limit are the same as for the robot's own microphone.
+Without a phone, stream a recording: `python scripts/web_check.py --pin <PIN> --wav sit_down.wav`
+(see `--help`).
 
-**Arya's voice on the phone (Step 12c-2).** Add `--phone-voice` (`python main.py --lan --https --no-mic --phone-voice --backend dryrun`) and tap "Hear Arya on this phone" once: her answers play on the phone instead of a speaker, and pressing the talk button or STOP cuts her at once. The robot ignores the phone's microphone while she speaks.
+**Arya's voice on the phone (Step 12c-2).** Add `--phone-voice` and tap "Hear Arya on this phone"
+once: her answers play on the phone instead of a speaker on the robot.
+
 `python main.py --help` lists every option, and startup prints one line per missing piece.
 
-To stop, use the STOP button, Space, or type `stop`. A spoken "stop" works only while the mic is listening.
+Vision (standalone for now, no robot needed): `pip install -r requirements-vision.txt`,
+`python scripts/fetch_vision_models.py`, then `python scripts/vision_check.py --debug-preview`
+(webcam, boxes, track ids, events and a timing summary every 5 s; `--no-preview` for no window).
+Faces: `python scripts/face_check.py enroll NAME` (asks yes/no first), then `watch` (own database).
+On the Pi: `python scripts/vision_bench.py --load 4` (headless numbers with the cores busy).
 
-## Project layout
+Optional chat model: Ollama runs in Docker on a laptop (`docker start ollama`,
+`docker exec -it ollama ollama pull qwen2.5:0.5b`, stop it when done) and from a folder on the Pi
+(`docs/HARDWARE.md`). The laptop is too slow for it (about 1.5 tokens/s), so use `--chat fake` there.
 
-| Path | What it does |
+## Where things are
+
+| Folder | What |
 |---|---|
-| `main.py` | the one entry point |
-| `brain/` | command router, chat, Arya persona and memory |
-| `voice/` | microphone in (Vosk), speaker out (Piper) |
-| `body/` | gait, kinematics, controller and the backends (sim, dry run) |
-| `bridge.py` | the only link between brain and body |
-| `config.py` | every number you might want to change |
-| `web/` | phone control page |
-| `scripts/` | demos, checks and tools |
+| `main.py`, `config.py`, `bridge.py` | The entry point; every constant; the two-process message schema |
+| `body/` | The body process: gait, kinematics, controller, backends (sim, dry-run, servo) |
+| `brain/` | Router, voice loop, chat, dialogue, persona, memory, status hub |
+| `voice/` | Audio in, Vosk, Piper, playback, push-to-talk |
+| `web/` | The phone control page |
+| `vision/` | The vision process: webcam, face detection, tracker, events only (not wired into `main.py` yet) |
+| `scripts/` | Tools you run: models, sim demos, servo calibration, Pi sync, checks |
+| `tests/` | The test suite (`docs/DEVELOPMENT.md`) |
+| `data/` | Persona files, the servo calibration file, the private memory database |
+| `deploy/` | The systemd unit (written, not installed) |
+| `.github/` | The CI workflow: ruff, mypy and the tests that need no PyBullet, models or hardware |
+| `assets/`, `logs/` | Downloaded models and phrases, the generated robot file, logs: created on demand, not committed |
+| `docs/` | `ARCHITECTURE.md`, `HARDWARE.md`, `DEVELOPMENT.md`, `ROADMAP.md` |
+
+## Troubleshooting
+
+| Problem | Try |
+|---|---|
+| "Vosk model not found" / "Piper binary not found" | `scripts/fetch_models.sh` |
+| The window is garbled, empty or will not open | The OpenGL override in the quick start; needs a display |
+| No sound, no microphone, or the wrong one | `python scripts/mic_check.py`, then `--device N` |
+| The robot hears itself or obeys its own voice | Use a headset or move the microphone away from the speaker |
+| The phone cannot open the page | `--lan`, same Wi-Fi, check the PIN and the port; plain HTTP, trusted networks only |
+| The body is slow or jerky while it speaks | `--headless`, `--no-speak`, `--chat fake` |
+| Chat says "I can't think right now" | Ollama is not running or the model is not pulled |
+| A leftover `piper` or body process | `pkill -f "main.py"`; `pgrep -af piper` |
+| `ruff`/`mypy` complain | Fix them; CI runs both |
+| A machine overheats during the full test suite | Run the tests in smaller batches (a folder at a time) |
+
+More: `docs/HARDWARE.md` has the Pi-specific problems. `logs/hexa.log` has the last run.
 
 ## Docs
 
-Start with [`docs/RUNNING.md`](docs/RUNNING.md). Then:
-
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): how the parts fit, measured numbers, known limits
-- [`docs/HOW_TO.md`](docs/HOW_TO.md): change a model, phrase, threshold or the robot size
-- [`docs/HARDWARE.md`](docs/HARDWARE.md): wiring, servos, power
-- [`docs/COMMANDS.md`](docs/COMMANDS.md) and [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md)
-- [`docs/FILES.md`](docs/FILES.md): what every file does
-- [`plan.md`](plan.md) and [`AGENTS.md`](AGENTS.md): the full plan and contributor rules
-
-## Development
-
-```bash
-pytest               # default run skips the timing, audio and llm tests
-ruff check . && mypy .
-```
-
-Read `AGENTS.md` before changing code. Heavy runs on a slow machine should go through `python scripts/cool_run.py -- <command>`.
-
-
-
-
-
-   W / S  forward / back     A / D  strafe left / right     Q / E  turn left / right
-    Space  stop               1 stand    2 sit    3 wave     + / -  speed up / down
-    X      stop, sit and quit
+- `docs/ARCHITECTURE.md` how the processes fit together, the safety rules, measured numbers
+- `docs/HARDWARE.md` wiring, Pi setup, servo calibration, the kill switch
+- `docs/DEVELOPMENT.md` tests, how to test a feature in the window, lint, adding features, syncing to the Pi
+- `docs/ROADMAP.md` what is next
+- `AGENTS.md` short rules for AI coding agents

@@ -398,7 +398,7 @@ $("sayrow").addEventListener("submit", function (e) {
   var text = $("say").value.trim();
   if (text && send({action: "say", text: text})) { $("say").value = ""; }
 });
-// Persona (Step 13): the mode, who is speaking, and the people Arya remembers. Names come from
+// Persona: the mode, who is speaking, and the people Arya remembers. Names come from
 // people, so they are only ever put into the page with textContent.
 var personaOn = false;
 function paintPersona(p) {

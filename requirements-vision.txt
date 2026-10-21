@@ -1,0 +1,9 @@
+# The vision process (vision/, scripts/vision_check.py, scripts/vision_bench.py). Self-contained:
+# works on Windows, Linux and the Raspberry Pi 5 (aarch64). Install: pip install -r requirements-vision.txt
+# opencv-python (not -headless): the --debug-preview window needs imshow. 4.13.0.92 ships
+# cp37-abi3 wheels for win_amd64, manylinux x86_64 and manylinux aarch64, and wants numpy>=2.
+# (4.12 would need numpy<2.3, which clashes with the numpy pin in requirements.txt.)
+# On a Pi with no desktop the preview cannot open: run it without --debug-preview.
+opencv-python==4.13.0.92
+numpy==2.4.6
+psutil==7.2.2  # CPU % and RAM of the vision process in the check and bench scripts

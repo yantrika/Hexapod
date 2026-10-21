@@ -2,6 +2,7 @@
 """Drive the REAL hexapod from the Pi's terminal keyboard (no voice, no brain process).
 
     python scripts/servo_teleop.py            (robot held off the ground for the first run)
+    python scripts/servo_teleop.py --joints RF_coxa RF_femur RF_tibia    only these servos
 
     W / S  forward / back     A / D  strafe left / right     Q / E  turn left / right
     Space  stop               1 stand    2 sit    3 wave     + / -  speed up / down
@@ -9,8 +10,10 @@
 
 A terminal sends no key-release, so a movement key counts as held for
 ``config.TERMINAL_KEY_HOLD_S`` after the last press (key repeat keeps it alive); then that motion
-ramps to zero. Motion goes only through the ``Controller`` API; the robot starts SITTING, press 1
-to stand.
+ramps to zero. Motion goes only through the ``Controller`` API and ``ServoBackend``; the robot
+starts SITTING, press 1 to stand. Every joint it drives must be calibrated. You are asked to type
+yes before anything moves. SIGINT/SIGTERM/SIGHUP and X sit the robot down (if standing) and
+release the servos.
 """
 
 from __future__ import annotations
@@ -25,9 +28,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import config  # noqa: E402
+from body import servo_calibration  # noqa: E402
 from body.clock import FixedRateLoop, FixedStepper  # noqa: E402
 from body.controller import Controller, State  # noqa: E402
 from body.servo_backend import ServoBackend  # noqa: E402
+from body.servo_calibration import CalibrationError  # noqa: E402
+from body.servo_safety import confirm_hardware, guarded, sit_and_release  # noqa: E402
 
 AXES = {  # key -> (component, sign)
     "w": ("vx", +1.0), "s": ("vx", -1.0),
@@ -57,30 +63,39 @@ def main() -> int:
         return 1
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument("--pca-only", action="store_true",
-                        help="drive only the 16 PCA9685 servos (skip the two on GPIO PWM)")
-    parser.add_argument("--yes", action="store_true",
-                        help="skip the 'robot is off the ground' question")
+    parser.add_argument("--joints", nargs="+", choices=config.JOINT_NAMES, default=None,
+                        help="drive only these joints (default all 18); the rest stay released")
+    parser.add_argument("--cal-file", type=Path, default=config.SERVO_CAL_FILE,
+                        help="calibration file (default %(default)s)")
     args = parser.parse_args()
-    if not args.yes:
-        answer = input("Robot held OFF the ground, kill switch in reach? Type yes: ")
-        if answer.strip().lower() != "yes":
-            return 1
+    try:
+        calibration = servo_calibration.load(args.cal_file)
+        calibration.require_calibrated(args.joints)
+    except CalibrationError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    count = len(args.joints) if args.joints else config.DOF
+    if not confirm_hardware(f"  - {count} servo(s) attach, then the robot sits; keys move it\n"):
+        print("aborted: nothing was moved", file=sys.stderr)
+        return 1
 
     import termios
     import tty
 
-    backend = ServoBackend(pca_only=args.pca_only)
-    controller = Controller(backend, initial_state=State.SITTING)
+    backend = ServoBackend(calibration, joints=args.joints)  # nothing attached yet
+    controllers: list[Controller] = []  # filled inside the signal guard (it attaches the servos)
     loop = FixedRateLoop(config.CONTROL_HZ)
     stepper = FixedStepper(config.CONTROL_HZ)
-    last_press: dict[str, float] = {}
-    scale = config.TELEOP_SPEED_SCALE_DEFAULT
-    moving = False
-    last_state = controller.state
-    old = termios.tcgetattr(sys.stdin)
-    print(__doc__)
-    try:
+    saved_tty = termios.tcgetattr(sys.stdin)
+
+    def run() -> None:
+        controller = Controller(backend, initial_state=State.SITTING)  # attaches, then sits
+        controllers.append(controller)
+        last_press: dict[str, float] = {}
+        scale = config.TELEOP_SPEED_SCALE_DEFAULT
+        moving = False
+        last_state = controller.state
+        print(__doc__)
         tty.setcbreak(sys.stdin.fileno())
         while True:
             dt = loop.wait()
@@ -88,14 +103,7 @@ def main() -> int:
             while select.select([sys.stdin], [], [], 0)[0]:
                 key = sys.stdin.read(1).lower()
                 if key == "x":
-                    controller.stop()
-                    controller.sit()
-                    deadline = (now + config.SIT_STAND_TRANSITION_S
-                                + config.SETTLE_S + 2.0)
-                    while controller.state is not State.SITTING and time.monotonic() < deadline:
-                        for _ in range(stepper.steps(loop.wait())):
-                            controller.tick(stepper.period)
-                    return 0
+                    return  # the cleanup sits the robot down and releases the servos
                 if key in AXES:
                     last_press[key] = now
                 elif key in ACTIONS:
@@ -120,13 +128,23 @@ def main() -> int:
                 last_state = controller.state
                 print(f"\rstate: {last_state.value}")
             controller.drain_events()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old)
-        backend.close()
+
+    def cleanup() -> None:
+        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, saved_tty)
+
+        if controllers:
+            controller = controllers[0]
+
+            def tick() -> None:
+                for _ in range(stepper.steps(loop.wait())):
+                    controller.tick(stepper.period)
+
+            sit_and_release(controller, backend, tick)
+        else:
+            backend.close()
         print("\nservos released")
-    return 0
+
+    return guarded(run, cleanup)
 
 
 if __name__ == "__main__":

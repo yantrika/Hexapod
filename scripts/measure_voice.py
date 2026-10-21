@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Measure what the voice costs: Piper speed, body tick time with and without Piper, clear().
 
-    nice -n 19 python scripts/measure_voice.py --body            headless body sim
-    nice -n 19 python scripts/measure_voice.py --body --gui      with the PyBullet window
-    nice -n 19 python scripts/measure_voice.py --clear           clear() latency (speaker, quiet)
+    python scripts/measure_voice.py --body            headless body sim
+    python scripts/measure_voice.py --body --gui      with the PyBullet window
+    python scripts/measure_voice.py --clear           clear() latency (speaker, quiet)
 
 ``--body`` runs four windows (stand, stand + Piper, walk, walk + Piper) and prints the body's mean
 and worst control-tick work time, the tick rate, and while Piper runs: its real-time factor, time
 to first audio, CPU share, peak RAM and thread count. Piper is kept 100 % busy (sentences back
-to back), the worst case; real speech is mostly idle. One process at a time; no sound is played.
+to back), the worst case; real speech is mostly idle. No sound is played.
 """
 
 from __future__ import annotations

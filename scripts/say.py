@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Type a line, hexa speaks it sentence by sentence (Step 7, no STT, no body).
+"""Type a line, hexa speaks it sentence by sentence (no STT, no body).
 
     python scripts/say.py                    interactive: /clear cancels speech, /quit exits
     python scripts/say.py "Hello, I am hexa" speak one line and exit

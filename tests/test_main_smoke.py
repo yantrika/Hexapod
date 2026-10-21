@@ -1,9 +1,8 @@
-"""Step 10b: the end-to-end smoke test of ``main.py`` as a real process.
+"""The end-to-end smoke test of ``main.py`` as a real process.
 
 Piper-rendered "sit down" and a chat sentence go in as an audio file (real Vosk, headless body,
 FakeChat): the robot sits, the chat sentence gets a fake reply, the process exits 0 and leaves no
 orphan. A second test sends SIGTERM / SIGINT to a running ``main.py``. Both skip without models.
-Run alone if the laptop is hot: ``pytest tests/test_main_smoke.py``.
 """
 
 from __future__ import annotations
@@ -26,6 +25,9 @@ from voice.tts import AudioClip, read_wav, write_wav
 
 MAIN = config.PROJECT_ROOT / "main.py"
 BASE = [sys.executable, str(MAIN), "--headless", "--chat", "fake", "--no-speak", "--no-mic"]
+
+
+SIGHUP = getattr(signal, "SIGHUP", signal.SIGTERM)  # Windows has none; those tests are skipped
 
 
 def pid_alive(pid: int) -> bool:
@@ -110,7 +112,8 @@ def test_main_sits_answers_a_chat_sentence_and_exits_cleanly(
     assert (tmp_path / "hexa.log").read_text().count("status <-") >= 2  # one line per status
 
 
-@pytest.mark.parametrize("sig", [signal.SIGTERM, signal.SIGINT])
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX signals: Linux and the Pi only")
+@pytest.mark.parametrize("sig", [signal.SIGTERM, signal.SIGINT, SIGHUP])
 def test_a_signal_shuts_the_robot_down_cleanly(models: None, tmp_path: Path, sig: int) -> None:
     run = Running([], tmp_path)
     try:
