@@ -83,6 +83,11 @@ class Arya:
         self._forget_until: float | None = None
         # the extractor drops that person's unprocessed talk
         self.on_forgotten: Callable[[str], None] | None = None
+        # vision (brain/face_flow.py, brain/behaviour.py), set only when the camera is on:
+        self.on_person_removed: Callable[[int], None] | None = None  # a person id was deleted
+        self.face_consume: Callable[[str], bool] | None = None  # answers to Arya's face questions
+        self.face_cancel: Callable[[], None] | None = None
+        self.face_action: Callable[[str, dict[str, Any]], None] | None = None
         saved = memory.get_meta("mode") if memory is not None else None
         if saved in config.PERSONA_MODES:
             self._mode = str(saved)
@@ -200,6 +205,8 @@ class Arya:
             self._speaker = config.GUEST_NAME
         if self.on_forgotten is not None:
             self.on_forgotten(person.name)
+        if self.on_person_removed is not None:
+            self.on_person_removed(person_id)
         self._changed()
         return removed
 
@@ -227,30 +234,32 @@ class Arya:
 
     # -- the voice loop's hooks ------------------------------------------------------------------
     def consume(self, text: str) -> bool:
-        """A pending "say yes to confirm" is answered here. True if *text* was the answer (the
-        loop does nothing more with it). Anything else cancels the question and goes on."""
+        """A pending "say yes to confirm" (or one of the face questions) is answered here. True if
+        *text* was the answer (the loop does nothing more with it). Anything else cancels the
+        forget question and goes on."""
         with self._lock:
             until, self._forget_until = self._forget_until, None
-        if until is None:
-            return False
-        if self._clock() > until:
-            return False
-        if is_yes(text):
-            person = self._speaker_person()
-            if person is not None and self.forget_person(person.id):
-                self._phrase("forget_done")
-            else:
-                self._phrase("remember_nothing")
-            return True
-        if is_no(text):
-            self._phrase("forget_cancelled")
-            return True
+        if until is not None and self._clock() <= until:
+            if is_yes(text):
+                person = self._speaker_person()
+                if person is not None and self.forget_person(person.id):
+                    self._phrase("forget_done")
+                else:
+                    self._phrase("remember_nothing")
+                return True
+            if is_no(text):
+                self._phrase("forget_cancelled")
+                return True
+        if self.face_consume is not None:
+            return self.face_consume(text)
         return False
 
     def cancel_pending(self) -> None:
-        """Any pending "say yes to confirm" is dropped (a stop, or anything else was said)."""
+        """Any pending question is dropped (a stop, or anything else was said)."""
         with self._lock:
             self._forget_until = None
+        if self.face_cancel is not None:
+            self.face_cancel()
 
     def note(self, result: RouteResult) -> None:
         """Mood events from an utterance."""
@@ -270,6 +279,11 @@ class Arya:
             self.request_forget()
         elif result.action == "recall_me":
             self.recall()
+        elif result.action in ("remember_face", "forget_face", "tracking"):
+            if self.face_action is None:
+                self._say("My camera is not on.")
+            else:
+                self.face_action(result.action, dict(result.params))
         else:
             logger.warning("persona: unknown action %r", result.action)
 

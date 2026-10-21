@@ -45,6 +45,20 @@ class TtsError(RuntimeError):
     """A sentence could not be synthesized (the message says why and what to do)."""
 
 
+def _remove_clip(path: Path, tries: int = 20, wait_s: float = 0.05) -> None:
+    """Delete Piper's temporary WAV. On Windows Piper may still hold it open for a moment after
+    it printed the path (WinError 32): retry briefly, then leave it to the temp directory's
+    cleanup. A leftover file must never fail a sentence."""
+    for _ in range(tries):
+        try:
+            path.unlink(missing_ok=True)
+            return
+        except PermissionError:
+            time.sleep(wait_s)
+        except OSError:
+            return
+
+
 class _ProcessFailure(TtsError):
     """Piper died, hung or stopped answering: the process is restarted."""
 
@@ -336,7 +350,7 @@ class PiperEngine:
         except (OSError, EOFError, wave.Error) as error:
             raise TtsError(f"Piper wrote no usable audio for {line!r}: {error}") from error
         finally:
-            path.unlink(missing_ok=True)
+            _remove_clip(path)
         if len(clip.samples) == 0:
             raise TtsError(f"Piper produced no audio for {line!r}")
         return clip

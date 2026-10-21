@@ -11,7 +11,8 @@
     python main.py --lan                    the same, reachable from a phone on the Wi-Fi
     python main.py --lan --https --no-mic   the same over HTTPS, the phone is the microphone
     python main.py --lan --https --no-mic --phone-voice   Arya's voice plays on the phone too
-    python main.py --audio-file x.wav       recognise a recording in real time, then exit 0
+    python main.py --vision                 the camera: names, greets, turns toward people
+    python main.py --audio-file x.wav      recognise a recording in real time, then exit 0
 
 SIGINT, SIGTERM and SIGHUP stop the robot, silence it, cancel chat, join the threads and end the
 body process (real servos: sit down first, then let go), then exit 0. A startup problem exits 1
@@ -82,6 +83,15 @@ def build_parser() -> argparse.ArgumentParser:
                         help="remember nothing: no database is opened (the persona still works)")
     parser.add_argument("--memory-db", type=Path, default=None,
                         help="memory database (default config.MEMORY_DB_PATH, data/memory/arya.db)")
+    parser.add_argument("--vision", action="store_true",
+                        help="the camera process: recognise people who agreed to it, greet them, "
+                             "ask strangers their name, turn 10-20 degrees toward faces (needs "
+                             "requirements-vision.txt and scripts/fetch_vision_models.py)")
+    parser.add_argument("--camera", default=str(config.VISION_CAMERA_INDEX),
+                        help="camera index, or a video file played as a camera (default "
+                             "%(default)s)")
+    parser.add_argument("--no-track", action="store_true",
+                        help="with --vision: do not turn toward people (\"track me\" turns it on)")
     parser.add_argument("--audio-file", type=Path, default=None,
                         help="recognise this WAV, then exit")
     parser.add_argument("--model", default=None, help="Vosk model: us, in, a name or a path")
@@ -152,7 +162,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     problems = run_checks(CheckOptions(
         model=args.model, no_speak=args.no_speak, no_mic=args.no_mic or args.audio_file is not None,
         chat=args.chat, ollama_model=args.ollama_model, mic_device=args.device,
-        phone_voice=args.phone_voice))
+        phone_voice=args.phone_voice, vision=args.vision))
     if args.backend == "dryrun" and args.gui:
         problems.append("--gui needs the simulator: drop --gui or use --backend sim")
     if args.backend == "sim":
@@ -198,7 +208,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         https=args.https, tls_cert=args.tls_cert, tls_key=args.tls_key,
         phone_voice=args.phone_voice,
         web_port=args.web_port, mode=args.mode,
-        memory=not args.no_memory, memory_path=args.memory_db))
+        memory=not args.no_memory, memory_path=args.memory_db,
+        vision=args.vision, camera=int(args.camera) if args.camera.isdigit() else args.camera,
+        tracking=not args.no_track))
     code = EXIT_OK
     try:
         app.start()

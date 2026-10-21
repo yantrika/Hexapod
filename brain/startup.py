@@ -25,6 +25,7 @@ class CheckOptions:
     mic_device: int | None = None
     speaker_device: int | None = None
     phone_voice: bool = False  # the phone is the speaker: no sound device is needed
+    vision: bool = False  # --vision: OpenCV and the face detector model must be there
 
 
 def check_vosk(model: str | None) -> str | None:
@@ -99,9 +100,24 @@ def check_ollama(model: str, url: str = config.OLLAMA_URL, timeout_s: float = 3.
     return None
 
 
+def check_vision() -> str | None:
+    """OpenCV and the YuNet model. A missing SFace model only turns recognition off (the vision
+    process logs it), so it is not a startup problem."""
+    from importlib.util import find_spec
+
+    if find_spec("cv2") is None:
+        return "--vision needs OpenCV: pip install -r requirements-vision.txt"
+    if not config.VISION_YUNET_FILE.is_file():
+        return (f"face detector model not found: {config.VISION_YUNET_FILE} "
+                "(run python scripts/fetch_vision_models.py)")
+    return None
+
+
 def run_checks(options: CheckOptions) -> list[str]:
     """Every problem found, one line each."""
     results = [check_vosk(options.model)]
+    if options.vision:
+        results.append(check_vision())
     if not options.no_speak:
         results += [check_piper(), check_phrases()]
         if not options.phone_voice:

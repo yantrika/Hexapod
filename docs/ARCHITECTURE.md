@@ -116,7 +116,7 @@ it answers) and `detail`. Rejection reasons are a closed set: `stale`, `supersed
 | A fallen robot refuses all motion except `stop` | `body/controller.py` |
 | Voice and brain never touch joint angles | `brain/`, `voice/` |
 | **The LLM is never in the command path**: the router decides, only a `chat` result reaches the LLM, and only while the body is idle | `brain/router.py`, `brain/voice_loop.py` |
-| Perception and the LLM can trigger only `stand`, `wave` and small in-place turns, never walking, only when idle | `brain/behaviour.py` (not built yet) |
+| Perception and the LLM can trigger only `stand`, `wave` and small in-place turns, never walking, only when idle | `brain/behaviour.py` (whitelist in `_do`, `tests/brain/test_behaviour.py`) |
 | A grammar match is not trusted unless it is an exact known phrase; confidence alone is never the guard | `brain/stt_decision.py` |
 | The robot ignores the microphone while it speaks | `voice/stt.py`, `voice/playback.py` |
 | Only `voice/audio.py` touches audio input; only `voice/playback.py` touches audio output | `voice/` |
@@ -161,8 +161,8 @@ switches to calm and, if the body is moving, sends a real `stop` first.
 
 ### Vision
 
-`vision/` is a third process (spawn), built standalone: nothing in `body/`, `brain/`, `voice/` or
-`web/` starts it yet. `vision/process.py` reads the webcam at a fixed low rate
+`vision/` is a third process (spawn). `python main.py --vision` starts it (`brain/vision_link.py`);
+without the flag nothing starts it. `vision/process.py` reads the webcam at a fixed low rate
 (`VISION_FPS`, 4), resizes each frame to `VISION_DETECT_WIDTH` (320 px), finds faces with YuNet
 (`detector.py`), and an IoU tracker (`tracker.py`) gives stable track ids with appear/lost
 debounce. It sends only small events on its own bounded queue (oldest dropped when full):
@@ -179,10 +179,10 @@ the bearing rate drop to `VISION_PAUSED_FPS` and `VISION_PAUSED_BEARING_HZ`.
   (1 s doubling to 30 s); the tracker reports everyone as left; speech and the body never wait
   for vision.
 - **Vision never moves the robot by itself.** It only reports. The behaviour layer (P5,
-  `brain/behaviour.py`, rules, not the LLM) will be the only code that turns these events into
+  `brain/behaviour.py`, rules, not the LLM) is the only code that turns these events into
   commands, only when idle, only `stand`, `wave` and small turns, with STOP winning.
 
-#### Recognition and enrolment (P4a, vision side; the brain wiring is next)
+#### Recognition and enrolment (P4a, vision side; the brain side is the next section)
 
 SFace runs only when a track is new or unnamed (every frame) and, once a track has a name, again
 every `VISION_RECHECK_S`. A face is embedded only if it passes the quality gate
@@ -217,6 +217,30 @@ no image is ever kept, crops are dropped as soon as they are embedded.
 only) and `forget_person` still deletes everything in one transaction. `scripts/face_check.py`
 (enroll / watch / list / forget) runs the whole thing on a webcam against its own database,
 `data/memory/face_check.db`, never the real one.
+
+#### The brain side (P4 wiring and P5, `python main.py --vision`)
+
+`brain/vision_link.py` starts the process, reads its events on one thread, sends `SetKnownFaces`
+after every enrolment or forget, and sets `pause_event` while the LLM generates. Events go to
+`brain/behaviour.py` and `brain/face_flow.py`; `EnrollResult` goes to the flow.
+
+- **Behaviour** (rules, injected clock): `person_identified` makes that person the speaker and greets
+  them by name (a wave if standing), at most every `BEHAVIOUR_GREET_COOLDOWN_S`; `person_unknown`
+  starts the name question, once per stranger and `BEHAVIOUR_ASK_NAME_COOLDOWN_S`; `face_bearing`
+  turns 10-20 degrees toward the face when tracking is on, every `BEHAVIOUR_TURN_COOLDOWN_S`. All of
+  it only while the body is idle and standing and no enrolment is open. Any stop (voice, phone
+  page, window: it also reads the body's `done stop` status) clears what waits and silences the
+  layer for `BEHAVIOUR_STOP_QUIET_S`. Posture comes from the body's statuses (the simulator starts
+  standing, real servos sitting). Its commands go through `BrainLoop.send_action`: tracked, not
+  announced, and `_do` refuses anything but `wave` and small turns.
+- **Face flow** (`brain/face_flow.py`): name -> "Did you say X?" -> "May I remember your face?" ->
+  `Enroll` -> `EnrollResult`. The person row, the consent and the samples exist only after the
+  second yes; a failed or cancelled enrolment removes a consent that stored nothing; a command, a
+  long sentence or "no" ends a question and goes on to the router; a stop cancels it.
+- **Voice**: "remember my face", "forget my face" (the person stays), "track me" / "don't track me"
+  are persona routes (`Arya.face_action`); "forget me" also sends `Forget` to vision.
+- A dead camera or missing model is logged once; the robot carries on. `--camera` takes an index or a
+  video file.
 
 Models: `python scripts/fetch_vision_models.py` (YuNet `face_detection_yunet_2023mar.onnx`, SFace
 `face_recognition_sface_2021dec.onnx`, from the OpenCV Zoo, SHA-256 checked, into `assets/vision/`).
@@ -287,5 +311,5 @@ silence, not by compute. On the laptop, numpy's BLAS threads made ticks 7x slowe
 - The real LLM has not been timed on the Pi. No microphone or speaker has been tried on the Pi.
 - The phone page is plain HTTP / `ws://` (trusted networks only) unless started with `--https`, which
   the phone's microphone needs. Phone audio and voice are not timed on the Pi yet (`ROADMAP.md`).
-- No wake word. The vision process runs on its own (laptop and Pi) but is not wired into
-  `main.py` or the brain yet. Known: tracks restart when the camera moves; bearing sign unconfirmed.
+- No wake word. `--vision` is wired (laptop: camera, Ollama and phone voice checked together on
+  2026-10-21; the Pi is not timed). Known: tracks restart when the camera moves; bearing sign unconfirmed.

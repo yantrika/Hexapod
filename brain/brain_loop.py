@@ -7,6 +7,7 @@ from __future__ import annotations
 import threading
 import time
 from collections.abc import Callable
+from typing import Any
 
 import config
 from brain.motion_keeper import MotionKeeper
@@ -62,16 +63,26 @@ class BrainLoop:
         """Send what an already routed utterance asks for (chat and persona send nothing)."""
         if result.kind in ("chat", "persona"):
             return result
-        command = new_command(result.action or "", result.params)
+        self._send(new_command(result.action or "", result.params), announce=True)
+        return result
+
+    def send_action(self, action: str, params: dict[str, Any] | None = None) -> Command:
+        """A command from the behaviour layer: sent and tracked like a spoken one, but not
+        announced (no "Okay" from the dialogue, no listener) because nobody asked for it."""
+        command = new_command(action, params)
+        self._send(command, announce=False)
+        return command
+
+    def _send(self, command: Command, announce: bool) -> None:
         self.bridge.send(command)  # immediately; the keeper only observes afterwards
         with self._lock:
             self.keeper.on_sent(command)
             if command.action in _TRANSITIONS:
                 self._busy_until = self._clock() + _TRANSITIONS[command.action]
                 self._busy_ref = command.seq
-        for listener in self._sent_listeners:
-            listener(command)
-        return result
+        if announce:
+            for listener in self._sent_listeners:
+                listener(command)
 
     def pump(self) -> list[Status]:
         """Read this loop's statuses, feed the keeper and send the heartbeats that are due."""

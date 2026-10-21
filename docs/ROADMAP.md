@@ -40,11 +40,14 @@ voice playback on a real phone is not confirmed yet. Still open: time release to
 the numbers into `ARCHITECTURE.md`. A native app would need its own audio path (the plain-`ws://`
 `--audio-source phone` design was dropped in favour of this one when the branches were merged).
 
-### Step 13: Arya, P2-P6 (P1 persona, memory, extractor, router additions, web section is built)
+### Step 13: Arya, P2-P6 (P1, P4 wiring and P5 are built; checked on the laptop; P2 and P6 on the Pi remain)
 Decisions (owner): English only; female Piper voice; pretrained models only, no training; Pi first
 (an Ollama "brain server" on an RTX 3060 over the LAN only if Pi numbers say it is needed); USB
 webcam facing forward.
-- **P2 chat model on the Pi**: install Ollama, test 2-3 small models for speed, RAM,
+- **P2 chat model on the Pi** (laptop part done 2026-10-21, `persona_eval.py` on the four installed
+  models, hard-limit blocks over 60 cases: qwen2.5:1.5b 9, llama3.2:1b 8, gemma3:1b 6, llama3.2:3b 1.
+  Blocked sentences are not spoken. Speed and RAM are the Pi's job, so
+  `config.OLLAMA_MODEL` is unchanged): install Ollama, test 2-3 small models for speed, RAM,
   temperature and persona quality with `persona_eval.py` (candidates `qwen2.5:1.5b`,
   `llama3.2:1b`, `gemma3:1b`; references `qwen2.5:0.5b`, `llama3.2:3b`), pick one, and try the
   extractor prompt on the real model (today a rule-based stand-in plays it with `--chat fake`).
@@ -53,12 +56,13 @@ webcam facing forward.
   live camera and a recorded clip, an unplugged camera never stalls speech or the body, and
   CPU/temperature on the Pi are measured.
 - **P4 recognition, consent-based enrolment, forget me** (P4a, the vision side with
-  `scripts/face_check.py`, is written; the brain wiring and the spoken yes/name flow remain): SFace
+  `scripts/face_check.py`, is written; the brain wiring and the spoken yes/name flow are built: `brain/vision_link.py`,
+  `brain/face_flow.py`; checked on the laptop with a webcam): SFace
   on new tracks only; threshold
   from our own pairs; enrolment only after "yes"; names are confirmed ("Did you say Priya?")
   before they are stored, because a name heard once is often another word; the phone page can
   always type the name.
-- **P5 behaviour layer** (`brain/behaviour.py`, rules, not the LLM): greet by name, ask an unknown
+- **P5 behaviour layer, built** (`brain/behaviour.py`, rules, not the LLM; auto-roast is NOT built): greet by name, ask an unknown
   person their name once, wave, turn toward a person, only `stand`/`wave`/10-20 degree turns, only
   when idle, with cooldowns, STOP winning, a tracking toggle; auto-roast only for people whose
   `roast_ok` is true. Tested with a fake clock.
@@ -77,6 +81,7 @@ webcam facing forward.
 - Step 12a-12b: phone page, PIN and deadman; hold-to-talk with the robot's microphone (tags `v0.2-web-a`, `v0.2-web-b`).
 - Step 12c (server): phone microphone over the WebSocket into a network audio source (measurements open).
 - Step 13 P1: persona modes, memory, extractor, output check, router additions, web persona section.
+- Step 13 P4 wiring and P5: `--vision`, spoken enrolment, behaviour layer (laptop only; not timed on the Pi).
 - Repo cleanup (tag `v0.3-pre-cleanup` is the state before it).
 
 ## Parked

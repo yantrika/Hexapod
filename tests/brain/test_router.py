@@ -353,3 +353,20 @@ def test_arya_is_a_filler_and_in_the_grammar() -> None:
 ])
 def test_yes_and_no(text: str, yes: bool, no: bool) -> None:
     assert is_yes(text) is yes and is_no(text) is no
+
+
+def test_face_and_tracking_requests_are_persona_routes() -> None:
+    for text, action, params in (
+            ("remember my face", "remember_face", {}), ("Arya, learn my face", "remember_face", {}),
+            ("forget my face", "forget_face", {}), ("track me", "tracking", {"on": True}),
+            ("look at me", "tracking", {"on": True}),
+            ("don't track me", "tracking", {"on": False})):
+        result = route(text)
+        assert (result.kind, result.action, result.params) == ("persona", action, params), text
+
+
+def test_face_phrases_never_hide_a_stop_or_a_command() -> None:
+    assert route("stop tracking me").kind == "stop"
+    assert route("stop remembering my face").kind == "stop"
+    assert route("walk forward").kind == "command"
+    assert route("remember my face and walk forward").kind == "chat"

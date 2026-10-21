@@ -17,12 +17,14 @@ import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
 import config
 from body.process import BodyProbe, BodyProcess
 from brain.arya import Arya, PersonaState
+from brain.behaviour import SITTING, STANDING, Behaviour
 from brain.brain_loop import BrainLoop
 from brain.chat import ChatBackend, ChatResponder, FakeChat, OllamaChat
 from brain.commandline import format_status
@@ -30,9 +32,11 @@ from brain.context import ContextBuilder
 from brain.dialogue import Dialogue
 from brain.event_hub import EventHub
 from brain.extractor import MemoryExtractor, RuleExtractorChat
+from brain.face_flow import FaceFlow
 from brain.memory import Memory
 from brain.persona import Persona
 from brain.status_hub import StatusHub
+from brain.vision_link import VisionHandle, VisionLink
 from brain.voice_loop import VoiceEvent, VoiceLoop
 from bridge import make_bridge, new_command
 from voice.audio import AudioSource, FileSource, MicSource, QueueSource
@@ -74,6 +78,9 @@ class AppOptions:
     memory: bool = True  # False: no database at all (nothing is remembered)
     memory_path: Path | None = None  # None: config.MEMORY_DB_PATH when the app starts
     mode: str | None = None  # start in this persona mode (None: the saved one, else calm)
+    vision: bool = False  # the camera process: faces, names, greetings, turning toward people
+    camera: int | str = config.VISION_CAMERA_INDEX  # device index, or a video file (a clip)
+    tracking: bool = config.BEHAVIOUR_TRACKING_DEFAULT  # turn toward people ("don't track me")
 
 
 class LoggedPlayback:
@@ -137,8 +144,10 @@ class HexaApp:
         source: AudioSource | None = None,
         chat_backend: ChatBackend | None = None,
         playback: Playback | None = None,
+        vision_process: VisionHandle | None = None,
     ) -> None:
         self.options = options
+        self._vision_process = vision_process  # tests hand in a fake; None: the real process
         self._stt = stt
         self._source = source
         self._chat_backend = chat_backend
@@ -160,6 +169,9 @@ class HexaApp:
         self.arya: Arya | None = None
         self.memory: Memory | None = None
         self.extractor: MemoryExtractor | None = None
+        self.vision: VisionLink | None = None
+        self.behaviour: Behaviour | None = None
+        self.face_flow: FaceFlow | None = None
         self.events = EventHub()  # heard / route / said / listening, for the phone page
         self.speech = LoggedPlayback(None, self._on_said)
         self._engine: PiperEngine | None = None
@@ -263,6 +275,7 @@ class HexaApp:
                 lambda state: self.events.publish(
                     {"type": "listening", "on": state == "listening"}))
         self.voice.start()
+        self._start_vision()
         if options.web or options.lan:
             self._start_web()
         logger.info("hexa is ready (listen=%s, chat=%s, speech=%s)", listen, options.chat,
@@ -293,6 +306,87 @@ class HexaApp:
                 if self.arya is not None else None)
             self.extractor.start()
             self.arya.on_forgotten = self.extractor.forget_pending
+
+    def _start_vision(self) -> None:
+        """The camera: a third process, the spoken enrolment flow and the behaviour layer. Without
+        the camera or its models the robot still talks and moves (vision is never required)."""
+        options = self.options
+        brain, arya, hub = self.brain, self.arya, self.hub
+        if not options.vision or brain is None or hub is None:
+            return
+        if arya is None:
+            raise StartupError("--vision needs the persona: it names and greets the people it sees")
+        memory = self.memory
+        process = self._vision_process
+        if process is None:
+            from vision.process import VisionOptions, VisionProcess
+
+            process = VisionProcess(VisionOptions(source=options.camera))
+
+        def person_name(person_id: int) -> str | None:
+            person = memory.person_by_id(person_id) if memory is not None else None
+            return person.name if person is not None else None
+
+        def link_send(command: object) -> bool:
+            return self.vision is not None and self.vision.send(command)
+
+        def sync() -> None:
+            if self.vision is not None:
+                self.vision.sync_known_faces()
+
+        def on_known(name: str) -> None:
+            arya.set_speaker(name, announce=False, create=True)  # the name was read back and kept
+            person = memory.get_person(name) if memory is not None else None
+            if person is not None and self.behaviour is not None:
+                self.behaviour.note_greeted(person.id)
+
+        flow = FaceFlow(memory, self.speech, link_send,
+                        visible_track=lambda: self.behaviour.visible_track()
+                        if self.behaviour is not None else None,
+                        name_ok=lambda name: arya.check.fact_problem(name) is None,
+                        on_known=on_known, on_faces_changed=sync)
+        behaviour = Behaviour(
+            brain.send_action, brain.body_idle, self._speech_quiet, self.speech, person_name,
+            on_known=lambda name: arya.set_speaker(name, announce=False, create=False),
+            on_guest=lambda: arya.set_speaker(config.GUEST_NAME, announce=False),
+            ask_name=flow.ask_name, flow_active=lambda: flow.active,
+            on_greeted=arya.mood.greeted, tracking=options.tracking,
+            posture=SITTING if options.backend == "servo" else STANDING)
+        brain.add_sent_listener(
+            lambda command: behaviour.on_stop() if command.action == "stop" else None)
+        statuses = hub.subscribe("behaviour")
+        self.face_flow, self.behaviour = flow, behaviour
+        self.vision = VisionLink(
+            process, behaviour, flow,
+            known_faces=memory.all_embeddings if memory is not None else dict,
+            llm_busy=lambda: self.chat is not None and self.chat.active,
+            statuses=statuses.get_all, on_status=behaviour.on_status)
+        arya.face_consume, arya.face_cancel = flow.consume, flow.cancel
+        arya.face_action = self._face_action
+        arya.on_person_removed = lambda person_id: (
+            self.vision.forget(person_id) if self.vision is not None else None)
+        self.vision.start()
+        logger.info("vision is on (camera %s, tracking %s)", options.camera,
+                    "on" if options.tracking else "off")
+
+    def _speech_quiet(self) -> bool:
+        """Nothing is being said or composed: the behaviour layer may speak."""
+        return self.speech.pending == 0 and not (self.chat is not None and self.chat.active)
+
+    def _face_action(self, action: str, params: dict[str, Any]) -> None:
+        """Persona routes about the camera ("remember my face", "forget my face", "track me")."""
+        arya, flow, behaviour = self.arya, self.face_flow, self.behaviour
+        if arya is None or flow is None or behaviour is None:
+            return
+        if action == "remember_face":
+            flow.remember_my_face(arya.speaker)
+        elif action == "forget_face":
+            flow.forget_my_face(arya.speaker)
+        elif action == "tracking":
+            on = bool(params.get("on"))
+            behaviour.set_tracking(on)
+            self.speech.say("Okay, I will look at you." if on
+                            else "Okay, I will not turn toward you.")
 
     def _extractor_idle(self) -> bool:
         """Facts are extracted only while the robot is idle and no reply is being spoken."""
@@ -487,6 +581,7 @@ class HexaApp:
         steps = [
             ("stop the robot", self.send_stop if self.body is not None else None),
             ("web server", self.web.stop if self.web else None),
+            ("vision", self.vision.stop if self.vision else None),
             ("voice loop", self.voice.shutdown if self.voice else None),
             ("memory extractor", self.extractor.shutdown if self.extractor else None),
             ("chat", self.chat.shutdown if self.chat else None),
@@ -511,6 +606,7 @@ class HexaApp:
                 logger.exception("shutdown: %s failed", name)
         self.voice = self.chat = self.dialogue = self.brain = self.hub = self.body = None
         self.arya = self.memory = self.extractor = None
+        self.vision = self.behaviour = self.face_flow = None
         self.web = None
         self._playback_inner = None
         self._engine = None

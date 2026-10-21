@@ -509,6 +509,31 @@ VISION_ENROLL_GAP_S = 0.4  # at least this long between two samples, so they dif
 VISION_ENROLL_LOST_FRAMES = 3  # enrolment fails when the face is missing this many frames in a row
 VISION_ENROLL_MULTI_FRAMES = 2  # ... or when more than one face is seen this many frames in a row
 
+# === Brain side of vision: the link, the spoken enrolment flow and the behaviour layer ============
+
+VISION_LINK_POLL_S = 0.1  # the link thread reads vision events, ticks behaviour and the flow
+# Spoken enrolment (brain/face_flow.py): name -> "Did you say X?" -> consent -> samples.
+FACE_FLOW_ANSWER_S = 20.0  # a question not answered within this long is dropped
+FACE_FLOW_NAME_TRIES = 2  # the name is asked / confirmed at most this many times
+FACE_FLOW_ENROLL_MARGIN_S = 5.0  # the brain waits this long past VISION_ENROLL_TIMEOUT_S
+# Behaviour (brain/behaviour.py): rules, not the LLM. Only stand/wave/small turns, only when idle.
+BEHAVIOUR_TRACKING_DEFAULT = True  # turn toward a person (off: "don't track me", --no-track)
+BEHAVIOUR_GREET_COOLDOWN_S = 600.0  # the same person is greeted at most this often
+BEHAVIOUR_ASK_NAME_COOLDOWN_S = 300.0  # a stranger is asked their name at most this often
+BEHAVIOUR_PENDING_MAX_S = 10.0  # a greeting or question that could not happen yet is dropped
+BEHAVIOUR_WAVE_FOR_GREETING = True  # wave with the greeting (only when standing and idle)
+BEHAVIOUR_TURN_MIN_DEG = 10.0  # a face closer to straight ahead than this is not turned toward
+BEHAVIOUR_TURN_MAX_DEG = 20.0  # one turn is never larger than this (AGENTS.md: small turns only)
+BEHAVIOUR_TURN_COOLDOWN_S = 6.0  # between two turns toward people
+BEHAVIOUR_BEARING_MAX_AGE_S = 1.5  # a bearing older than this is not acted on
+BEHAVIOUR_STOP_QUIET_S = 30.0  # after any stop, the behaviour layer does nothing for this long
+BEHAVIOUR_LEAVE_GRACE_S = 20.0  # a speaker Arya saw is a guest again this long after they left
+PERSONA_REMEMBER_FACE_PHRASES = ("remember my face", "learn my face", "recognize me",
+                                 "recognise me", "remember me")
+PERSONA_FORGET_FACE_PHRASES = ("forget my face",)
+PERSONA_TRACK_ON_PHRASES = ("track me", "look at me", "watch me", "face me")
+PERSONA_TRACK_OFF_PHRASES = ("dont track me", "dont look at me", "dont watch me", "dont face me")
+
 # === Hardware (the Pi servo backend; board-level numbers only) ====================================
 
 # Per-joint numbers (channel, centre, sign, offset, pulse window, calibrated) are NOT here: they

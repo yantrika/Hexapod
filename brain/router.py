@@ -12,7 +12,8 @@
   ("waves") are explicit aliases in the table.
 - ``chat``: everything else; the original text goes to the chat model.
 - ``persona``: "my name is X", "forget me", "what do you remember about me", "roast
-  mode", "stop roasting". Code in the brain acts on them, never the LLM, and they are looked at
+  mode", "stop roasting", "remember my face", "forget my face", "track me" / "don't track me".
+  Code in the brain acts on them, never the LLM, and they are looked at
   only AFTER the stop check, so every phrase above routes exactly as before. The one exception:
   the whole utterance "stop roasting" (``config.PERSONA_STOP_ROAST_PHRASES``) switches to calm
   mode instead of stopping the robot. (The voice loop adds a real stop when the body is moving:
@@ -118,6 +119,14 @@ def _persona_route(text: str, candidate: str, normalized: str) -> RouteResult | 
         return result("forget_me", {})
     if candidate in config.PERSONA_RECALL_PHRASES:
         return result("recall_me", {})
+    if candidate in config.PERSONA_REMEMBER_FACE_PHRASES:
+        return result("remember_face", {})
+    if candidate in config.PERSONA_FORGET_FACE_PHRASES:
+        return result("forget_face", {})
+    if candidate in config.PERSONA_TRACK_ON_PHRASES:
+        return result("tracking", {"on": True})
+    if candidate in config.PERSONA_TRACK_OFF_PHRASES:
+        return result("tracking", {"on": False})
     if candidate == "roast me":
         return result("set_mode", {"mode": "roast"})
     found = _MODE.match(candidate)
