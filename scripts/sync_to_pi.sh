@@ -12,7 +12,7 @@
 # Never uses --delete, so nothing on the Pi (.venv, models, logs) is removed.
 set -euo pipefail
 
-host="hexa-pi"; dry=(); assets=0
+host="hexa@192.168.22.120"; dry=(); assets=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dry-run) dry=(--dry-run) ;;
@@ -30,7 +30,7 @@ rsync_opts=(-az --human-readable --itemize-changes "${dry[@]}")
 # 1. the code: no .git, no virtualenv, no assets (models are handled below), no logs, no caches
 rsync "${rsync_opts[@]}" \
   --exclude='.git/' --exclude='.venv/' --exclude='/assets/' --exclude='/logs/' \
-  --exclude='/wheelhouse/' --exclude='/.tmp/' --exclude='/data/memory/' \
+  --exclude='/wheelhouse/' --exclude='/.tmp/' --exclude='/data/memory/' --exclude='/data/tls/' \
   --exclude='__pycache__/' --exclude='*.pyc' --exclude='.pytest_cache/' --exclude='.mypy_cache/' \
   --exclude='.ruff_cache/' --exclude='*.wav' --exclude='*.log' --exclude='*.jsonl' \
   "${root}/" "${host}:hexa/"

@@ -8,6 +8,7 @@
     python main.py --no-speak --no-mic      no audio devices at all (tests, systemd without sound)
     python main.py --web                    phone control page on 127.0.0.1 (PIN printed at start)
     python main.py --lan                    the same, reachable from a phone on the Wi-Fi
+    python main.py --lan --https --no-mic   the same over HTTPS, the phone is the microphone
     python main.py --audio-file x.wav       recognise a recording in real time, then exit 0
 
 SIGINT and SIGTERM stop the robot, silence it, cancel chat, join the threads and end the body
@@ -58,6 +59,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--lan", action="store_true",
                         help="serve the page on every interface and print the phone URL(s) "
                              "(implies --web; plain HTTP: trusted networks only)")
+    parser.add_argument("--https", action="store_true",
+                        help="serve the page over TLS with the self-signed certificate from "
+                             "scripts/make_cert.py (implies --web; the phone microphone needs it)")
+    parser.add_argument("--tls-cert", type=Path, default=None,
+                        help="certificate (default config.WEB_TLS_CERT)")
+    parser.add_argument("--tls-key", type=Path, default=None,
+                        help="private key (default config.WEB_TLS_KEY)")
     parser.add_argument("--web-port", type=int, default=config.WEB_PORT,
                         help="port of the page (default %(default)s)")
     parser.add_argument("--mode", choices=config.PERSONA_MODES, default=None,
@@ -136,7 +144,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         gui=args.gui, backend=args.backend, listen=args.listen, chat=args.chat,
         no_speak=args.no_speak, no_mic=args.no_mic, audio_file=args.audio_file, model=args.model,
         ollama_model=args.ollama_model, mic_device=args.device,
-        web=args.web or args.lan, lan=args.lan, web_port=args.web_port, mode=args.mode,
+        web=args.web or args.lan or args.https, lan=args.lan,
+        https=args.https, tls_cert=args.tls_cert, tls_key=args.tls_key,
+        web_port=args.web_port, mode=args.mode,
         memory=not args.no_memory, memory_path=args.memory_db))
     code = EXIT_OK
     try:

@@ -323,6 +323,14 @@ WEB_PTT_MAX_S = 10.0  # the SERVER releases push-to-talk after this long, whatev
 WEB_SAY_MAX_CHARS = 120  # longest typed `say` text
 WEB_SAY_MIN_INTERVAL_S = 0.3  # at most one typed `say` per this (a flood is refused)
 WEB_EVENT_QUEUE_SIZE = 64  # events waiting for the phone: the oldest is dropped when full
+# --- Phone page: phone microphone over HTTPS (Step 12c) --------------------
+WEB_AUDIO_MAX_FRAME_BYTES = 8192  # one binary audio frame: 16-bit mono samples, at most 256 ms
+WEB_AUDIO_RATE_FACTOR = 1.25  # audio accepted per press stays below this x real time ...
+WEB_AUDIO_BURST_S = 1.0  # ... plus this many seconds of slack (network jitter)
+WEB_TLS_DIR = DATA_DIR / "tls"  # self-signed certificate: made on the Pi, never committed or synced
+WEB_TLS_CERT = WEB_TLS_DIR / "hexa-cert.pem"
+WEB_TLS_KEY = WEB_TLS_DIR / "hexa-key.pem"
+WEB_TLS_DAYS = 825  # validity of the generated certificate
 TTS_QUEUE_MAXSIZE = 8  # utterances waiting to be synthesized
 TTS_PREFETCH_SIZE = 1  # synthesized clips waiting for the speaker: sentence N+1 renders during N
 TTS_CLEAR_MAX_S = 0.1  # playback.clear() returns within this

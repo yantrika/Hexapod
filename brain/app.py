@@ -18,6 +18,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
+
 import config
 from body.process import BodyProbe, BodyProcess
 from brain.arya import Arya, PersonaState
@@ -38,7 +40,7 @@ from voice.playback import Playback, SoundDeviceSink
 from voice.ptt import PushToTalk, make_ptt
 from voice.stt import SttEngine, VoskStt
 from voice.tts import PiperEngine
-from web.server import WebServer, lan_addresses, resolve_pin
+from web.server import WebServer, lan_addresses, make_ssl_context, resolve_pin
 from web.session import PersonaControls, VoiceControls
 
 logger = logging.getLogger(__name__)
@@ -64,6 +66,9 @@ class AppOptions:
     lan: bool = False  # bind all interfaces instead of 127.0.0.1 (implies web)
     web_port: int = config.WEB_PORT
     web_pin: str | None = None  # None: HEXA_WEB_PIN, config.WEB_PIN, else a random 6-digit PIN
+    https: bool = False  # serve the page over TLS (implies web); needed for the phone microphone
+    tls_cert: Path | None = None  # None: config.WEB_TLS_CERT
+    tls_key: Path | None = None  # None: config.WEB_TLS_KEY
     persona: bool = True  # Arya: modes, memory, context, output check (Step 13)
     memory: bool = True  # False: no database at all (nothing is remembered)
     memory_path: Path | None = None  # None: config.MEMORY_DB_PATH when the app starts
@@ -312,15 +317,26 @@ class HexaApp:
             pin, generated = resolve_pin(config.WEB_PIN, dict(os.environ))
         self.web_pin = pin
         host = "0.0.0.0" if options.lan else "127.0.0.1"
+        context = None
+        if options.https:
+            try:
+                context = make_ssl_context(options.tls_cert or config.WEB_TLS_CERT,
+                                           options.tls_key or config.WEB_TLS_KEY)
+            except OSError as error:
+                raise StartupError(str(error)) from error
+        phone_mic = self._phone_audio_unavailable() is None
         voice = VoiceControls(
             self.set_listening, self.submit_text, self._ptt_unavailable(), self._say_unavailable(),
-            self._persona_controls())
+            self._persona_controls(), self.push_phone_audio if phone_mic else None,
+            self._phone_audio_unavailable())
         self.web = WebServer(self.bridge, self.hub, pin, host=host, port=options.web_port,
-                             voice=voice, events=self.events)
+                             voice=voice, events=self.events, ssl_context=context)
         self.web.start()
         port = self.web.port
-        urls = [f"http://{address}:{port}/" for address in lan_addresses()] if options.lan else []
-        print(f"web page: http://127.0.0.1:{port}/", file=sys.stderr)
+        scheme = "https" if context is not None else "http"
+        urls = ([f"{scheme}://{address}:{port}/" for address in lan_addresses()]
+                if options.lan else [])
+        print(f"web page: {scheme}://127.0.0.1:{port}/", file=sys.stderr)
         for url in urls:
             print(f"web page (phone, same Wi-Fi): {url}", file=sys.stderr)
         if options.lan and not urls:
@@ -328,16 +344,40 @@ class HexaApp:
                   file=sys.stderr)
         shown = pin if generated else "(the one set in HEXA_WEB_PIN or config.WEB_PIN)"
         print(f"web PIN: {shown}", file=sys.stderr)
-        if options.lan:
+        if context is not None and options.lan:
+            print("the certificate is self-signed: the phone shows a one-time warning, accept it "
+                  "once", file=sys.stderr)
+        elif options.lan:
             print("web page is plain HTTP: use it only on a network you trust", file=sys.stderr)
+            if phone_mic:
+                print("the phone's microphone needs HTTPS: start with --https (see "
+                      "scripts/make_cert.py)", file=sys.stderr)
 
     def _ptt_unavailable(self) -> str | None:
         """Why the phone's hold-to-talk button cannot work here (None: it can)."""
-        if self.options.no_mic:
-            return "the robot runs with --no-mic: it has no microphone to hold"
         if self.ptt is None:
             return "the robot listens all the time (--listen always): there is nothing to hold"
+        if self.options.no_mic and self._phone_audio_unavailable() is not None:
+            return "the robot runs with --no-mic: it has no microphone to hold"
         return None
+
+    def _phone_audio_unavailable(self) -> str | None:
+        """Why the phone's microphone cannot feed the recognizer (None: it can). The phone's audio
+        goes into the network ``QueueSource``, which exists when the robot has no microphone."""
+        if self.ptt is None:
+            return "the robot listens all the time (--listen always)"
+        if (not self.options.no_mic or self.options.audio_file is not None
+                or not isinstance(self.source, QueueSource)):
+            return "the robot uses its own microphone"
+        return None
+
+    def push_phone_audio(self, data: bytes) -> None:
+        """One frame of the phone's microphone (16 kHz mono int16, little endian) to the recognizer
+        exactly where the robot's own microphone blocks would go."""
+        source = self.source
+        if not isinstance(source, QueueSource):
+            raise RuntimeError("the phone microphone is not enabled")
+        source.push(np.frombuffer(data, dtype="<i2").astype(np.int16))
 
     def _say_unavailable(self) -> str | None:
         return None if self.voice is not None else "voice is not running"

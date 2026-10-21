@@ -10,7 +10,7 @@
 set -euo pipefail
 
 all_models=0
-case "${1:-}" in
+((((case "${1:-}" in
   "") ;;
   --all-models) all_models=1 ;;
   -h|--help) sed -n '2,9p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;

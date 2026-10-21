@@ -114,7 +114,6 @@ def make_app(**options: object) -> HexaApp:
 
 @pytest.mark.parametrize(("options", "expected"), [
     ({}, None),
-    ({"no_mic": True}, "--no-mic"),
     ({"listen": "always"}, "--listen always"),
 ])
 def test_the_app_tells_the_page_when_hold_to_talk_cannot_work(

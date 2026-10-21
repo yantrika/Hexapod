@@ -28,6 +28,15 @@ python main.py --chat fake       # press Enter, say "walk forward", press Enter
 ```
 
 Add `--gui` for the PyBullet window, or `--lan` for the phone page (it prints a URL and a PIN).
+
+**Phone as the microphone (Step 12c).** A phone browser opens its microphone only on a secure page, so the Pi serves the page over HTTPS with a self-signed certificate:
+
+```bash
+python scripts/make_cert.py                        # once, on the Pi (re-run with --force if its address changes)
+python main.py --lan --https --no-mic --backend dryrun
+```
+
+Open the `https://` address it prints, accept the one-time "not secure" warning, enter the PIN, then hold the talk button and speak. The audio goes to Vosk on the Pi; nothing leaves your Wi-Fi. Without `--no-mic` the button uses the robot's own microphone, as before.
 `python main.py --help` lists every option, and startup prints one line per missing piece.
 
 To stop, use the STOP button, Space, or type `stop`. A spoken "stop" works only while the mic is listening.

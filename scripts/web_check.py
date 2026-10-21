@@ -7,6 +7,9 @@
     python scripts/web_check.py --pin 123456 --say "walk forward"      (typed text, as spoken)
     python scripts/web_check.py --pin 123456 --talk 3                  (hold to talk 3 s: speak
                                                                         near the robot)
+    python scripts/web_check.py --pin 123456 --wav sit.wav             (the phone's microphone:
+                                                                        streams a 16 kHz WAV)
+    python scripts/web_check.py --url wss://hexa.local:8765 --pin 123456 --wav sit.wav   (HTTPS)
     python scripts/web_check.py --pin 123456 --forward 1 --seconds 2 --leave drop
 
 It sends the same JSON messages as the page (a ``walk`` repeated at 10 Hz while held, then a
@@ -20,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import ssl
 import sys
 import time
 from collections.abc import Sequence
@@ -47,9 +51,15 @@ class WebClient:
         from websockets.exceptions import InvalidStatus
         from websockets.sync.client import connect
 
+        options: dict[str, Any] = {}
+        if url.startswith("wss://"):  # the self-signed certificate: this is a test tool
+            context = ssl.create_default_context()
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+            options["ssl"] = context
         try:
             self._ws = connect(f"{url.rstrip('/')}/ws?pin={quote(pin)}", origin=cast("Any", origin),
-                               open_timeout=timeout, compression=None).__enter__()
+                               open_timeout=timeout, compression=None, **options).__enter__()
         except InvalidStatus as error:
             raise Refused(error.response.status_code) from error
 
@@ -98,6 +108,20 @@ class WebClient:
     def release(self) -> None:
         self.send({"action": "ptt_release"})
 
+    def send_audio(self, frame: bytes) -> None:
+        """One binary audio frame (16 kHz mono 16-bit little endian), as the phone sends."""
+        self._ws.send(frame)
+
+    def stream_audio(self, samples: Any, seconds_per_frame: float = 0.1,
+                     realtime: bool = True) -> None:
+        """Send int16 *samples* in frames of *seconds_per_frame* (at real speed if *realtime*)."""
+        step = int(config.AUDIO_SAMPLE_RATE * seconds_per_frame)
+        started = time.monotonic()
+        for index, at in enumerate(range(0, len(samples), step)):
+            self.send_audio(samples[at:at + step].astype("<i2").tobytes())
+            if realtime:
+                time.sleep(max(0.0, started + (index + 1) * seconds_per_frame - time.monotonic()))
+
     def say(self, text: str) -> None:
         """Typed text: routed exactly like spoken text."""
         self.send({"action": "say", "text": text})
@@ -131,6 +155,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                         help="send this typed text (routed like spoken text)")
     parser.add_argument("--talk", type=float, default=None, metavar="SECONDS",
                         help="hold to talk for this long (the robot's microphone hears you)")
+    parser.add_argument("--wav", type=Path, default=None, metavar="FILE",
+                        help="hold to talk and stream this 16 kHz mono WAV as the phone's "
+                             "microphone (the robot must run with --no-mic)")
     parser.add_argument("--leave", choices=("stop", "drop"), default="stop",
                         help="end with a stop message, or just close the socket")
     args = parser.parse_args(argv)
@@ -154,6 +181,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.say is not None:
         client.say(args.say)
         show(client.messages(3.0))
+    elif args.wav is not None:
+        from voice.audio import resample
+        from voice.tts import read_wav
+
+        clip = read_wav(args.wav)
+        client.press()
+        show(client.messages(0.3))
+        client.stream_audio(resample(clip.samples, clip.sample_rate, config.AUDIO_SAMPLE_RATE))
+        client.release()
+        show(client.messages(4.0))
     elif args.talk is not None:
         client.press()
         show(client.messages(args.talk))

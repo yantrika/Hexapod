@@ -8,6 +8,10 @@ text). Those three never become bridge messages. Step 13 adds ``set_mode`` (calm
 true/false): brain-side persona and memory actions, also never bridge messages. Numbers are
 clamped to [-1, 1]; anything else (an unknown action or field, a bool, a string, NaN, a nested
 value, bad JSON) is rejected and never reaches the bridge. The page never sends joint data.
+
+Step 12c adds one BINARY message: an audio frame (16 kHz mono 16-bit little-endian samples) while
+hold-to-talk is held. ``parse_audio_frame`` checks its size and format; the server decides whether
+a press is held and how much audio is too much (``web/session.py``).
 """
 
 from __future__ import annotations
@@ -159,6 +163,17 @@ def parse_message(raw: str | bytes) -> Request:
         yaw=_number(message, "yaw", -1.0, 1.0, 0.0),
         speed=_number(message, "speed", 0.0, config.SPEED_MAX, config.WEB_WALK_SPEED),
     )
+
+
+def parse_audio_frame(data: bytes) -> bytes:
+    """Validate one binary audio frame (whole 16-bit samples, not empty, not oversize)."""
+    if not data:
+        raise ProtocolError("empty audio frame")
+    if len(data) > config.WEB_AUDIO_MAX_FRAME_BYTES:
+        raise ProtocolError("audio frame too large")
+    if len(data) % 2:
+        raise ProtocolError("audio must be 16-bit samples")
+    return data
 
 
 def walk_params(request: Request) -> dict[str, Any]:

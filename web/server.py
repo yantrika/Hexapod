@@ -11,6 +11,10 @@ The WebSocket handshake carries the PIN (``/ws?pin=...``) and is refused with 40
 use it only on a network you trust. Step 12b adds hold-to-talk with the ROBOT's microphone (no
 audio ever comes from the page, so no HTTPS) and typed text; brain events (heard, route, said,
 listening) reach the page through a bounded drop-oldest ``EventHub`` subscription.
+
+Step 12c: with an ``ssl.SSLContext`` the same port serves HTTPS and ``wss`` (the browser only
+opens the microphone on a secure page), and the page may send BINARY audio frames while it holds
+the talk button; they go to ``WebControl.audio_frame`` (controller only, press held, rate limited).
 """
 
 from __future__ import annotations
@@ -21,6 +25,7 @@ import json
 import logging
 import secrets
 import socket
+import ssl
 import threading
 import time
 from collections.abc import Callable
@@ -38,7 +43,7 @@ from brain.event_hub import EventHub
 from brain.status_hub import StatusHub
 from bridge import Bridge, Status, new_command
 from scripts.control_logic import next_state_label
-from web.protocol import ProtocolError, parse_message
+from web.protocol import ProtocolError, parse_audio_frame, parse_message
 from web.session import NO_VOICE, PinGuard, Refused, VoiceControls, WebControl
 
 logger = logging.getLogger(__name__)
@@ -76,6 +81,21 @@ def lan_addresses() -> list[str]:
         if not address.startswith("127.") and address not in unique:
             unique.append(address)
     return unique
+
+
+def make_ssl_context(cert: Path, key: Path) -> ssl.SSLContext:
+    """A server TLS context from a certificate and its key (``scripts/make_cert.py`` makes them).
+    Raises ``OSError`` with a plain message if either file is missing or unreadable."""
+    for path in (cert, key):
+        if not path.is_file():
+            raise OSError(f"{path} not found: run `python scripts/make_cert.py` first")
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    try:
+        context.load_cert_chain(cert, key)
+    except (ssl.SSLError, OSError) as error:
+        raise OSError(f"could not load the certificate {cert}: {error}") from error
+    return context
 
 
 def _response(status: HTTPStatus, body: bytes, content_type: str = "text/plain; charset=utf-8",
@@ -118,6 +138,7 @@ class WebServer:
         clock: Callable[[], float] = time.monotonic,
         voice: VoiceControls = NO_VOICE,
         events: EventHub | None = None,
+        ssl_context: ssl.SSLContext | None = None,
     ) -> None:
         self._bridge = bridge
         self._hub = hub
@@ -125,6 +146,7 @@ class WebServer:
         self._events = events if events is not None else EventHub()
         self._event_subscription = self._events.subscribe("web")
         self.host = host
+        self._ssl = ssl_context
         self._port = port
         self._clock = clock
         self._page = PAGE_PATH.read_bytes()
@@ -196,13 +218,15 @@ class WebServer:
         self._stopping = asyncio.Event()
         server: Server = await serve(
             self._handler, self.host, self._port, process_request=self._process_request,
-            max_size=config.WEB_MAX_MESSAGE_BYTES, compression=None,
+            ssl=self._ssl, compression=None,
+            max_size=max(config.WEB_MAX_MESSAGE_BYTES, config.WEB_AUDIO_MAX_FRAME_BYTES),
             ping_interval=config.WEB_PING_S, ping_timeout=config.WEB_PING_S,
             close_timeout=config.WEB_CLOSE_S)
         self._port = server.sockets[0].getsockname()[1]
         pump = asyncio.create_task(self._pump())
         self._ready.set()
-        logger.info("web page on http://%s:%d (plain HTTP)", self.host, self._port)
+        logger.info("web page on %s://%s:%d", "https" if self._ssl else "http", self.host,
+                    self._port)
         try:
             await self._stopping.wait()
         finally:
@@ -264,6 +288,10 @@ class WebServer:
                      "ptt": {"available": not self._voice.ptt_unavailable,
                              "reason": self._voice.ptt_unavailable,
                              "max_s": config.WEB_PTT_MAX_S},
+                     "audio": {"available": not self._voice.audio_unavailable,
+                               "reason": self._voice.audio_unavailable,
+                               "rate": config.AUDIO_SAMPLE_RATE,
+                               "max_frame_bytes": config.WEB_AUDIO_MAX_FRAME_BYTES},
                      "say": {"available": not self._voice.say_unavailable,
                              "reason": self._voice.say_unavailable,
                              "max_chars": config.WEB_SAY_MAX_CHARS},
@@ -294,7 +322,21 @@ class WebServer:
             logger.exception("web: could not read the persona state")
             return None
 
+    def _on_audio(self, client: _Client, frame: bytes) -> None:
+        try:
+            self._control.audio_frame(client, parse_audio_frame(frame))
+        except (ProtocolError, Refused) as error:
+            client.invalid += 1  # a flood of bad or too-fast audio ends the connection
+            if client.invalid == 1 or isinstance(error, ProtocolError):
+                client.post({"type": "error", "reason": str(error)})
+        except Exception:  # noqa: BLE001 - the audio side failed; the page is told, nothing else
+            logger.exception("web: audio frame failed")
+            client.post({"type": "error", "reason": "audio failed"})
+
     def _on_message(self, client: _Client, raw: str | bytes) -> None:
+        if isinstance(raw, bytes):
+            self._on_audio(client, raw)
+            return
         try:
             request = parse_message(raw)
         except ProtocolError as error:

@@ -14,6 +14,11 @@ spoken text). The server owns the safety: a press is forced to release after ``p
 disconnect and every ``stop`` message (the page sends one on blur and when hidden) release too;
 only the controller may press, and only a press made here is ever released here.
 
+Step 12c adds the phone microphone: binary audio frames are accepted only from the controller,
+only while a web press is held, and only up to ``WEB_AUDIO_RATE_FACTOR`` x real time (plus a
+small burst); anything else is dropped. They go to ``VoiceControls.push_audio`` (the network
+``AudioSource``), so the recognizer, router and body see them exactly like the robot's own mic.
+
 Step 13 adds four persona actions (``set_mode``, ``set_speaker``, ``forget_person``,
 ``set_roast_ok``). They go to
 ``PersonaControls`` (``HexaApp`` provides it; ``Arya`` does the work) and are never bridge
@@ -64,6 +69,8 @@ class VoiceControls:
     ptt_unavailable: str | None = None
     say_unavailable: str | None = None
     persona: PersonaControls | None = None
+    push_audio: Callable[[bytes], None] | None = None  # the phone's microphone (Step 12c)
+    audio_unavailable: str | None = "the phone microphone is not enabled"
 
 
 NO_VOICE = VoiceControls(
@@ -142,6 +149,7 @@ class WebControl:
         self._ptt_lock = threading.RLock()  # apart from _lock: a slow press never delays a stop
         self._listening_since: float | None = None
         self._last_say_at = float("-inf")
+        self._audio_bytes = 0
         self._clock = clock
         self._deadman_s = deadman_s
         self._min_forward_s = min_forward_s
@@ -218,6 +226,29 @@ class WebControl:
             self._halt()
             return True
 
+    def audio_frame(self, client: object, data: bytes) -> bool:
+        """Pass one validated audio frame on. False if it was dropped: not the controller, no web
+        press held (a frame in flight after the release is normal), or no phone microphone.
+        Raises ``Refused`` if the audio is arriving faster than real time allows."""
+        with self._lock:
+            if self._controller is not client:
+                return False
+        push = self._voice.push_audio
+        if push is None or self._voice.audio_unavailable:
+            return False
+        with self._ptt_lock:
+            since = self._listening_since
+            if since is None:
+                return False
+            self._audio_bytes += len(data)
+            allowed = ((self._clock() - since) * config.WEB_AUDIO_RATE_FACTOR
+                       + config.WEB_AUDIO_BURST_S) * config.AUDIO_SAMPLE_RATE * 2
+            if self._audio_bytes > allowed:
+                self._audio_bytes -= len(data)  # a refused frame is not counted
+                raise Refused("audio is arriving too fast")
+            push(data)
+        return True
+
     def expire_listening(self) -> bool:
         """The listening limit. True if it just forced a release."""
         with self._ptt_lock:
@@ -238,6 +269,7 @@ class WebControl:
             with self._ptt_lock:
                 if self._listening_since is None:  # a repeat press must not extend the limit
                     self._listening_since = self._clock()
+                    self._audio_bytes = 0
                     try:
                         self._voice.set_listening(True)
                     except Exception:

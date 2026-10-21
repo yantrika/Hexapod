@@ -70,7 +70,7 @@ Legend: **STUB** = placeholder, not built yet. **DEV** = developer tool, not par
 | File | What it does | Edit it when |
 |---|---|---|
 | `web/protocol.py` | Strict checks of the page's messages (walk, stop, stand, sit, wave, ptt_press, ptt_release, say; numbers clamped to -1..1; unknown fields refused) and the bridge `walk` they become. Pure. | You add a button or a message. |
-| `web/session.py` | The PIN check with lockout, "one controller at a time", the server-side deadman, stop-on-disconnect, and hold-to-talk safety (10 s limit, release on stop or disconnect). Pure, clock injected. | You change the safety rules. |
+| `web/session.py` | The PIN check with lockout, "one controller at a time", the server-side deadman, stop-on-disconnect, and hold-to-talk safety (10 s limit, release on stop or disconnect). Also accepts the phone's audio frames (controller only, press held, no faster than real time). Pure, clock injected. | You change the safety rules. |
 | `web/server.py` | The server thread: the page and the WebSocket on one port, handshake checks, status line. Talks only to the Bridge. | You change the connection handling. |
 | `web/static/index.html` | The whole phone page (one file, no CDN, no build step). | You change how the page looks or behaves. |
 | `web/__init__.py` | Marks the folder as a package. | Never. |
@@ -96,6 +96,7 @@ Legend: **STUB** = placeholder, not built yet. **DEV** = developer tool, not par
 | `scripts/voice_cli.py` | Runs the whole loop: talk to the robot (microphone to body). | You change the demo. |
 | `scripts/measure_chat.py` | Times the real Ollama model: first token, tokens per second, memory, temperature, body tick time (`--with-voice` adds Vosk and Piper). **DEV** (heats the laptop) | You add a measurement. |
 | `scripts/torque_report.py` | Servo sizing from the sim: peak and RMS torque and speed per joint type for stand, sit, wave, walk, strafe, turn; sensitivity to mass and height; writes `docs/TORQUE_REPORT.md`. | You change masses, geometry or gait, or want to size servos. |
+| `scripts/make_cert.py` | Makes the self-signed certificate for `main.py --https` (run on the Pi; the key stays in `data/tls/`, never committed or synced). | You start the phone page over HTTPS, or the Pi's address changes. |
 | `scripts/web_check.py` | A headless client of the phone page (no browser): sends the same messages as the page. | You test the web server by hand. |
 | `scripts/measure_web.py` | Press-to-motion time, idle CPU of the web server and peak temperature. | You want the numbers again (e.g. on the Pi). |
 | `scripts/measure_ptt.py` | Vosk CPU and body tick time with push-to-talk idle, listening and always-on. | You want the numbers again (e.g. on the Pi). |
@@ -210,6 +211,7 @@ Run one file at a time on the dev laptop (see `COMMANDS.md`).
 | `tests/test_web_protocol.py` | The page's message checks: valid, clamped, unknown action, malformed. |
 | `tests/test_web_session.py` | PIN, lockout, one controller, deadman, stop on disconnect, `stop` on the `stop_event` path (fake clock). |
 | `tests/test_web_server.py` | The server on a real loopback socket: handshake refusals, deadman, statuses, no controller/gait/backend import. |
+| `tests/test_web_audio.py` | The phone microphone (Step 12c): frame format, the server's rules (press held, controller only, rate limit, auto-release), TLS, wrong PIN over TLS, and one real run: Piper's "sit down" as binary frames makes the dry-run body sit. |
 | `tests/test_web_voice.py` | Typed text takes the spoken path (stop, chat while walking), the app's hold-to-talk wiring, and one real run: press, WAV through a FileSource, release, the robot sits. |
 | `tests/test_web_app.py` | The page against a real headless body: walk moves it, a dropped connection stops it, `main.py --web` exits clean. |
 | `tests/test_main_smoke.py` | `main.py` as a real process: sit + fake chat reply from an audio file, exit 0; SIGTERM/SIGINT. |

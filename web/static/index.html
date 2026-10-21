@@ -225,7 +225,78 @@ function stopAll() {                // hard stop: forget every touch, then `stop
 // Hold to talk: the server owns the limit and releases on stop and on disconnect too.
 var talkPointer = null;
 function releaseTalk() {
-  if (talkPointer !== null) { talkPointer = null; $("ptt").classList.remove("held"); send({action: "ptt_release"}); }
+  if (talkPointer !== null) {
+    talkPointer = null; $("ptt").classList.remove("held");
+    stopMic();                       // the last frame goes out before the release (same socket, in order)
+    send({action: "ptt_release"});
+  }
+}
+
+// Phone microphone (Step 12c): only while the button is held. The server accepts these frames only
+// from the controller, only while a press is held, and no faster than real time; this page just
+// converts the browser's audio (44.1 or 48 kHz float) to 16 kHz mono 16-bit and sends it.
+var audioInfo = {available: false}, mic = null, audioCtx = null;
+function micSupported() {
+  return !!(window.isSecureContext && navigator.mediaDevices && navigator.mediaDevices.getUserMedia &&
+            (window.AudioContext || window.webkitAudioContext));
+}
+function makeResampler(inRate, outRate) {   // box-average decimation, state kept between buffers
+  var ratio = inRate / outRate, carry = new Float32Array(0), next = 0;
+  return function (input) {
+    var data = new Float32Array(carry.length + input.length), out = [], pos = next;
+    data.set(carry); data.set(input, carry.length);
+    while (pos + ratio <= data.length) {
+      var start = Math.floor(pos), end = Math.min(data.length, Math.ceil(pos + ratio)), sum = 0;
+      for (var i = start; i < end; i++) { sum += data[i]; }
+      out.push(sum / (end - start));
+      pos += ratio;
+    }
+    var keep = Math.floor(pos);
+    carry = data.slice(keep); next = pos - keep;
+    return out;
+  };
+}
+function toPcm16(samples) {
+  var pcm = new Int16Array(samples.length);
+  for (var i = 0; i < samples.length; i++) {
+    var v = Math.max(-1, Math.min(1, samples[i]));
+    pcm[i] = v < 0 ? v * 32768 : v * 32767;
+  }
+  return pcm;
+}
+function prepareAudio() {          // inside the tap: iOS only starts audio from a user gesture
+  var Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!audioCtx) { audioCtx = new Ctx(); }
+  if (audioCtx.state === "suspended") { audioCtx.resume(); }
+}
+function startMic() {              // resolves true when frames can flow
+  return navigator.mediaDevices.getUserMedia(
+    {audio: {channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true}}
+  ).then(function (stream) {
+    var source = audioCtx.createMediaStreamSource(stream);
+    var node = audioCtx.createScriptProcessor(2048, 1, 1), silent = audioCtx.createGain();
+    var resample = makeResampler(audioCtx.sampleRate, audioInfo.rate || 16000);
+    var maxSamples = Math.floor((audioInfo.max_frame_bytes || 8192) / 2);
+    silent.gain.value = 0;
+    node.onaudioprocess = function (event) {
+      if (!mic || !ws || ws.readyState !== 1 || ws.bufferedAmount > 65536) { return; }  // never queue up
+      var pcm = toPcm16(resample(event.inputBuffer.getChannelData(0)));
+      for (var at = 0; at < pcm.length; at += maxSamples) {
+        var part = pcm.subarray(at, at + maxSamples);
+        if (part.length) { ws.send(part.buffer.slice(part.byteOffset, part.byteOffset + part.byteLength)); }
+      }
+    };
+    source.connect(node); node.connect(silent); silent.connect(audioCtx.destination);
+    mic = {stream: stream, source: source, node: node, silent: silent};
+    return true;
+  });
+}
+function stopMic() {
+  var m = mic; mic = null;
+  if (!m) { return; }
+  m.node.onaudioprocess = null;
+  try { m.source.disconnect(); m.node.disconnect(); m.silent.disconnect(); } catch (e) { /* already apart */ }
+  m.stream.getTracks().forEach(function (track) { track.stop(); });   // the browser's mic light goes off
 }
 function logLine(kind, text) {
   var log = $("log"), line = document.createElement("div");
@@ -243,7 +314,17 @@ ptt.addEventListener("pointerdown", function (e) {
   if (ptt.disabled || talkPointer !== null) { return; }
   try { ptt.setPointerCapture(e.pointerId); } catch (err) { /* not capturable */ }
   talkPointer = e.pointerId; ptt.classList.add("held");
-  send({action: "ptt_press"});
+  if (!audioInfo.available) { send({action: "ptt_press"}); return; }   // the robot's own microphone
+  var mine = e.pointerId;
+  prepareAudio();
+  startMic().then(function () {
+    if (talkPointer !== mine) { stopMic(); return; }          // let go while the browser asked
+    send({action: "ptt_press"});
+  }).catch(function (err) {
+    if (talkPointer === mine) { releaseTalk(); }
+    logLine("error", "microphone: " + (err && err.name === "NotAllowedError"
+      ? "permission denied (allow the microphone for this page)" : "not available"));
+  });
 });
 ["pointerup", "pointercancel", "lostpointercapture"].forEach(function (name) {
   ptt.addEventListener(name, function (e) { e.preventDefault(); if (e.pointerId === talkPointer) { releaseTalk(); } });
@@ -306,11 +387,22 @@ $("speaker").addEventListener("change", function () {
 function applyHello(m) {
   paintPersona(m.persona);
   var p = m.ptt || {}, t = m.say || {};
-  ptt.disabled = !p.available;
-  ptt.textContent = p.available ? "HOLD TO TALK" : "TALK UNAVAILABLE";
-  $("pttnote").textContent = p.available
-    ? "The microphone is the robot's: speak near the robot. A voice \"stop\" works only while you hold the button; the STOP button always works."
-    : "Talking is off: " + (p.reason || "not available") + ". Typing still works.";
+  audioInfo = m.audio || {available: false};
+  var phoneMic = !!audioInfo.available, usable = !!p.available;
+  var why = "";
+  if (phoneMic && !micSupported()) {          // the phone cannot open its microphone here
+    usable = false;
+    why = window.isSecureContext
+      ? "this browser cannot open the microphone"
+      : "the phone microphone needs a secure page: open the https:// address (see the README)";
+  }
+  ptt.disabled = !usable;
+  ptt.textContent = usable ? "HOLD TO TALK" : "TALK UNAVAILABLE";
+  $("pttnote").textContent = usable
+    ? (phoneMic
+        ? "Your phone is the microphone: hold the button and speak. A voice \"stop\" works only while you hold the button; the STOP button always works."
+        : "The microphone is the robot's: speak near the robot. A voice \"stop\" works only while you hold the button; the STOP button always works.")
+    : "Talking is off: " + (why || p.reason || "not available") + ". Typing still works.";
   $("say").disabled = $("saysend").disabled = !t.available;
   if (t.max_chars) { $("say").maxLength = t.max_chars; }
   if (!t.available) { $("say").placeholder = t.reason || "typing is off"; }
@@ -407,6 +499,7 @@ function connect(pin) {
   };
   ws.onclose = function () {
     held.clear(); paint(); talkPointer = null; ptt.classList.remove("held"); setListening(false);
+    stopMic();
     if (repeat !== null) { clearInterval(repeat); repeat = null; }
     setState("disconnected", false);
     document.getElementById("app").classList.remove("app-on");
