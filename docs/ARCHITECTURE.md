@@ -221,8 +221,10 @@ only) and `forget_person` still deletes everything in one transaction. `scripts/
 Models: `python scripts/fetch_vision_models.py` (YuNet `face_detection_yunet_2023mar.onnx`, SFace
 `face_recognition_sface_2021dec.onnx`, from the OpenCV Zoo, SHA-256 checked, into `assets/vision/`).
 Packages: `requirements-vision.txt` (opencv-python, numpy, psutil; wheels exist for Windows, Linux
-x86_64 and aarch64). Measured numbers: `scripts/vision_check.py` and `scripts/vision_bench.py`
-(not measured yet on the Pi).
+x86_64 and aarch64). Measured numbers: `scripts/vision_check.py` and `scripts/vision_bench.py`.
+On the Pi 5 (USB webcam, preview off): 4 fps with detection 12.8 ms median (14.4 ms with 3 cores busy),
+about 12% of one core, 116 MB; with recognition 6 fps, SFace 36 ms on new tracks only, 22% of one
+core, 172 MB. Enrol and re-identify worked on the Pi. Over SSH use `--no-preview` (no display).
 
 ## Design decisions
 
@@ -285,4 +287,5 @@ silence, not by compute. On the laptop, numpy's BLAS threads made ticks 7x slowe
 - The real LLM has not been timed on the Pi. No microphone or speaker has been tried on the Pi.
 - The phone page is plain HTTP / `ws://` (trusted networks only) unless started with `--https`, which
   the phone's microphone needs. Phone audio and voice are not timed on the Pi yet (`ROADMAP.md`).
-- No wake word. No vision process yet.
+- No wake word. The vision process runs on its own (laptop and Pi) but is not wired into
+  `main.py` or the brain yet. Known: tracks restart when the camera moves; bearing sign unconfirmed.
