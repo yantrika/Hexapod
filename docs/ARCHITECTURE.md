@@ -116,7 +116,9 @@ it answers) and `detail`. Rejection reasons are a closed set: `stale`, `supersed
 | A fallen robot refuses all motion except `stop` | `body/controller.py` |
 | Voice and brain never touch joint angles | `brain/`, `voice/` |
 | **The LLM is never in the command path**: the router decides, only a `chat` result reaches the LLM, and only while the body is idle | `brain/router.py`, `brain/voice_loop.py` |
-| Perception and the LLM can trigger only `stand`, `wave` and small in-place turns, never walking, only when idle | `brain/behaviour.py` (whitelist in `_do`, `tests/brain/test_behaviour.py`) |
+| Perception and the LLM can trigger only `stand`, `wave`, small in-place turns and (planned, phase E) library moves, only when idle. One exception: follow-me (planned, phase G), only on an explicit command and under the end conditions listed in `ROADMAP.md`. The LLM never moves the robot | `brain/behaviour.py` (whitelist in `_do`, `tests/brain/test_behaviour.py`) |
+| Scene-description frames (planned, phase D): one frame per request, sent only to the brain server on the LAN, never stored or logged, not sent anywhere else | planned |
+| The PC brain server is optional and nothing safety-related runs there; commands never wait for it | planned |
 | A grammar match is not trusted unless it is an exact known phrase; confidence alone is never the guard | `brain/stt_decision.py` |
 | The robot ignores the microphone while it speaks | `voice/stt.py`, `voice/playback.py` |
 | Only `voice/audio.py` touches audio input; only `voice/playback.py` touches audio output | `voice/` |
@@ -251,12 +253,42 @@ On the Pi 5 (USB webcam, preview off): 4 fps with detection 12.8 ms median (14.4
 about 12% of one core, 116 MB; with recognition 6 fps, SFace 36 ms on new tracks only, 22% of one
 core, 172 MB. Enrol and re-identify worked on the Pi. Over SSH use `--no-preview` (no display).
 
+## Compute split and the brain server (planned, phase A)
+
+The Pi runs everything safety- and latency-critical: body, router, commands, watchdog, the
+camera, faces and the fallback models. A PC "brain server" (i5 12th gen desktop, CPU first, GPU
+optional later) runs the heavy models when it is reachable on the LAN: chat, long-utterance
+re-transcription, TTS and scene description. Commands never depend on the PC. When it is
+unreachable the Pi falls back to its own models automatically, says so once, and logs which model
+answered. The service uses the robot's PIN/auth model and runs on Windows and Linux.
+
+### Models (all "candidate, to benchmark" until measured; none is installed or timed yet except where stated)
+
+| Job | Where | Model | Status |
+|---|---|---|---|
+| Chat | PC CPU | `llama3.2:3b` (locked) | candidate, to benchmark |
+| Chat fallback | Pi | `llama3.2:3b` | candidate, to benchmark |
+| Chat, GPU upgrade | PC GPU | `qwen2.5:7b` / `llama3.1:8b` | candidate, to benchmark |
+| STT streaming (commands, first pass) | Pi | Moonshine small streaming (today: Vosk) | candidate, to benchmark |
+| STT long-utterance re-transcription | PC | Moonshine medium; compare Parakeet TDT 0.6B v3 | candidate, to benchmark |
+| TTS | PC | Kokoro-82M | candidate, to benchmark |
+| TTS fallback | Pi | Piper medium English voice (today: `en_US-amy-low`) | candidate, to benchmark |
+| Scene description | PC via Ollama | Moondream | candidate, to benchmark |
+| Scene description, GPU upgrade | PC GPU | qwen2.5-vl / gemma3:4b | candidate, to benchmark |
+| Faces | Pi | YuNet + SFace | done, measured |
+| Person (body) detector | Pi | OpenCV Zoo MediaPipe person detector or NanoDet-Plus (Apache 2.0) | candidate, to benchmark |
+| Distance (follow-me) | Pi | VL53L1X time-of-flight | planned, not fitted |
+
+Licences: no AGPL models or libraries (for example Ultralytics YOLO). Detectors sit behind a
+swappable interface so a Hailo AI HAT can replace the CPU detector later.
+
 ## Design decisions
 
 - **Two processes, one narrow bridge**, so a hung brain cannot stop the control loop and the
   watchdog can stop a robot whose brain died.
 - **Router decides, the LLM only chats**: a small local model is too slow and too unreliable to be
-  in a safety path.
+  in a safety path. LLM tools (planned, phase D) are read-only: status, time, describe scene,
+  memory lookup.
 - **Clean joint frame**: kinematics, gait and the sim use 0 = neutral with no offsets or per-side
   signs. Centre, direction, offset and pulse window of each real servo live only in
   `data/calibration/servo_cal.json` (`body/servo_calibration.py`); board-level numbers are in
@@ -309,7 +341,7 @@ silence, not by compute. On the laptop, numpy's BLAS threads made ticks 7x slowe
   word; two-word commands are reliable). Vosk has no echo cancellation: use a headset for barge-in.
 - The small US model writes "Arya" as "aria"; the router drops a leading "aria". Names heard once
   are often wrong ("Priya" as "prayer"); name confirmation is planned (`ROADMAP.md`).
-- The real LLM has not been timed on the Pi. No microphone or speaker has been tried on the Pi.
+- The real LLM has not been timed on the Pi (`llama3.2:3b` is the locked model). No microphone or speaker has been tried on the Pi.
 - The phone page is plain HTTP / `ws://` (trusted networks only) unless started with `--https`, which
   the phone's microphone needs. Phone audio and voice are not timed on the Pi yet (`ROADMAP.md`).
 - No wake word. `--vision` is wired (laptop: camera, Ollama and phone voice checked together on

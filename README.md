@@ -1,7 +1,10 @@
 # hexa: Arya, a talking hexapod
 
-Arya is a six-legged robot that walks, listens, talks and chats, fully offline: Vosk hears you,
-Piper speaks, an optional local Ollama model chats. Everything is built and tested in a PyBullet
+Arya is a six-legged robot that walks, listens, talks and chats, offline on the Pi: Vosk hears you,
+Piper speaks, an optional local Ollama model (`llama3.2:3b`) chats. A PC "brain server" on the LAN
+for heavier models, better speech recognition and voice, scene description, new moves and
+follow-me are planned (`docs/ROADMAP.md`); the Pi always works without the PC. This is the `arya`
+branch, the main line; the old `main` is frozen. Everything is built and tested in a PyBullet
 simulation first; the same code drives the real robot on a Raspberry Pi 5 by swapping one backend
 class. The repo and the Python package are called `hexa`; the robot's name and persona is Arya.
 
@@ -97,7 +100,7 @@ Optional chat model: Ollama runs in Docker on a laptop (`docker start ollama`,
 | `brain/` | Router, voice loop, chat, dialogue, persona, memory, status hub |
 | `voice/` | Audio in, Vosk, Piper, playback, push-to-talk |
 | `web/` | The phone control page |
-| `vision/` | The vision process: webcam, face detection, tracker, events only (not wired into `main.py` yet) |
+| `vision/` | The vision process: webcam, face detection, recognition, tracker; wired into `main.py` with `--vision` |
 | `scripts/` | Tools you run: models, sim demos, servo calibration, Pi sync, checks |
 | `tests/` | The test suite (`docs/DEVELOPMENT.md`) |
 | `data/` | Persona files, the servo calibration file, the private memory database |
@@ -128,5 +131,5 @@ More: `docs/HARDWARE.md` has the Pi-specific problems. `logs/hexa.log` has the l
 - `docs/ARCHITECTURE.md` how the processes fit together, the safety rules, measured numbers
 - `docs/HARDWARE.md` wiring, Pi setup, servo calibration, the kill switch
 - `docs/DEVELOPMENT.md` tests, how to test a feature in the window, lint, adding features, syncing to the Pi
-- `docs/ROADMAP.md` what is next
+- `docs/ROADMAP.md` decisions and the plan (phases A-G)
 - `AGENTS.md` short rules for AI coding agents

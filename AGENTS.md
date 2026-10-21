@@ -1,11 +1,12 @@
 # Rules for AI agents
 
-`hexa` is Arya, a fully offline talking hexapod (Vosk, Piper, optional local Ollama), built and
-checked in PyBullet and run on a Raspberry Pi 5 by swapping one backend class. This file is the
+`hexa` is Arya, a talking hexapod (Vosk, Piper, local Ollama; a PC "brain server" on the LAN is
+planned and optional), built and checked in PyBullet and run on a Raspberry Pi 5 by swapping one
+backend class. Branch `arya` is the main line; the old `main` is frozen. This file is the
 short list of rules. Details: `README.md` (run it), `docs/ARCHITECTURE.md` (how it fits),
 `docs/HARDWARE.md` (Pi, servos, wiring), `docs/DEVELOPMENT.md` (tests, layout, how to change
-things), `docs/ROADMAP.md` (what is next). Work one approved ROADMAP item at a time and do not
-code ahead of it.
+things), `docs/ROADMAP.md` (decisions and phases A-G). Work one approved ROADMAP item at a time and
+do not code ahead of it. No AGPL models or libraries (for example Ultralytics YOLO).
 
 ## Commands
 
@@ -51,9 +52,16 @@ changes, `ruff check . && mypy .` before every commit. Python 3.11 venv in `.ven
 
 ## Persona and privacy
 
-- Perception and the LLM may trigger only `stand`, `wave` and small in-place turns (about 10-20
-  degrees), never walking, only when idle, STOP winning. Only the rule-based behaviour layer turns
-  perception into commands.
+- The LLM never moves the robot. Perception and the behaviour layer may trigger only `stand`,
+  `wave`, small in-place turns (about 10-20 degrees) and, once built (phase E), library moves,
+  only when idle, STOP winning. Only the rule-based behaviour layer turns perception into commands.
+- One exception to "perception never walks": **follow-me** (phase G), only on an explicit voice or
+  app command, never on its own, and it ends on "stop", STOP, person lost for about 1 s, too close
+  (body size and the VL53L1X), a time limit or the watchdog, under a slow speed cap.
+- The PC brain server is optional and nothing safety-related runs there; commands never depend on
+  it, and the Pi falls back to its own models and says so once when the PC is unreachable.
+- Scene-description frames: one frame per request, sent only to the brain server on the LAN, never
+  stored or logged, not sent anywhere else.
 - Persona modes change only how Arya talks. The router runs first and does not know the persona;
   persona requests never reach the body or the LLM.
 - The hard limits (no remarks about looks, body, skin colour, race, religion, caste, gender,

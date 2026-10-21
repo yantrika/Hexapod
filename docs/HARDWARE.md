@@ -60,6 +60,27 @@ Put a bulk capacitor (about 1000 uF per 4-6 servos, rated above the supply volta
 GND at the board. The two GPIO-driven servos need their own V+ and GND from the same supply and the
 Pi GND as reference.
 
+### Front distance sensor VL53L1X (planned, for follow-me; not fitted yet)
+
+A VL53L1X time-of-flight sensor on a breakout board, on the same I2C bus as the PCA9685.
+
+| Pi pin | Name | Goes to |
+|---|---|---|
+| 1 | 3V3 | sensor VIN / VCC (3.3 V) |
+| 3 | GPIO2 / SDA1 | sensor SDA (shared with the PCA9685) |
+| 5 | GPIO3 / SCL1 | sensor SCL (shared with the PCA9685) |
+| 6 | GND | sensor GND |
+
+- I2C address `0x29` (default), no clash with the PCA9685 at `0x40`. Check with `i2cdetect -y 1`
+  (owner-run, may need `sudo`). XSHUT and the interrupt pin are not needed for one sensor.
+- Mount it at the front of the body, facing forward, level, with a clear view and nothing from the
+  legs or the cable in its field of view. Fix the height and tilt, then record them here.
+- The Pi's GPIO is 3.3 V only. Many breakouts carry their own regulator and level shifting; if a
+  board or any other sensor has a 5 V output or 5 V pull-ups on SDA/SCL/interrupt, put a level
+  shifter between it and the Pi. Never connect a 5 V signal to a Pi pin.
+- The sensor is read-only input for the follow-me stop conditions; it never drives a servo.
+  Software, driver and tests come with phase G (`ROADMAP.md`).
+
 ### Optional OE wire (protects the PCA9685 channels after `kill -9`)
 
 Wire a Pi GPIO to the PCA9685 **OE** pin (active low) with an external 10 k pull-up from OE to
