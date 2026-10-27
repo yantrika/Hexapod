@@ -77,6 +77,11 @@ def build_parser() -> argparse.ArgumentParser:
                              "needs --web/--lan/--https)")
     parser.add_argument("--web-port", type=int, default=config.WEB_PORT,
                         help="port of the page (default %(default)s)")
+    default_pin = os.environ.get("HEXA_WEB_PIN")
+    if default_pin is None and "PYTEST_CURRENT_TEST" not in os.environ:
+        default_pin = "2560"
+    parser.add_argument("--web-pin", "--pin", default=default_pin,
+                        help="fixed web password/PIN (default: 2560 or HEXA_WEB_PIN env var)")
     parser.add_argument("--mode", choices=config.PERSONA_MODES, default=None,
                         help="start in this persona mode (default: the saved one, else calm)")
     parser.add_argument("--no-memory", action="store_true",
@@ -146,6 +151,8 @@ def servo_problems() -> list[str]:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.web_pin and args.web_pin.lower() in ("random", "none"):
+        args.web_pin = None
     backend = resolve_backend(args)
     if backend is None:
         return EXIT_STARTUP
@@ -210,7 +217,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         web=args.web or args.lan or args.https, lan=args.lan,
         https=args.https, tls_cert=args.tls_cert, tls_key=args.tls_key,
         phone_voice=args.phone_voice,
-        web_port=args.web_port, mode=args.mode,
+        web_port=args.web_port, web_pin=args.web_pin, mode=args.mode,
         memory=not args.no_memory, memory_path=args.memory_db,
         vision=args.vision, camera=int(args.camera) if args.camera.isdigit() else args.camera,
         tracking=not args.no_track, vision_preview=args.vision_preview))

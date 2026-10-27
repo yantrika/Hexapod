@@ -2,601 +2,1023 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#101418">
-<title>arya control</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Arya Control</title>
 <style>
-  :root {
-    --bg: #101418; --panel: #1b222a; --panel-hold: #2f6fed; --text: #e8edf2; --muted: #8b98a5;
-    --ok: #2fbf71; --warn: #e0a030; --bad: #e5484d; --stop: #d11a2a;
-  }
-  * { box-sizing: border-box; }
-  html, body {
-    margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
-    font: 16px/1.3 system-ui, sans-serif; overscroll-behavior: none;
-  }
-  /* Controls: no scroll, no text selection, no long-press menu, no double-tap zoom. */
-  .pad, .pad * , #stop, #ptt {
-    touch-action: none; user-select: none; -webkit-user-select: none;
-    -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
-  }
-  #app { display: flex; flex-direction: column; height: 100%; padding: 12px 16px;
-         padding-bottom: max(12px, env(safe-area-inset-bottom)); gap: 10px; }
-  #status { display: flex; align-items: center; gap: 10px; min-height: 44px; }
-  #dot { width: 14px; height: 14px; border-radius: 50%; background: var(--bad); flex: none; }
-  #dot.on { background: var(--ok); }
-  #state { font-size: 20px; font-weight: 700; }
-  #last { color: var(--muted); font-size: 14px; margin-left: auto; text-align: right; }
-  #login { display: flex; flex-direction: column; gap: 12px; margin: auto 0; }
-  #login input, #login button, #reconnect {
-    font: inherit; font-size: 22px; padding: 14px; border-radius: 12px; border: 0;
-  }
-  #login input { background: var(--panel); color: var(--text); text-align: center; letter-spacing: .3em; }
-  #login button, #reconnect { background: var(--panel-hold); color: #fff; font-weight: 700; }
-  #msg { color: var(--warn); min-height: 1.3em; text-align: center; }
-  #control { display: none; flex: 1; flex-direction: column; gap: 10px; min-height: 0; }
-  .app-on #login { display: none; }
-  .app-on #control { display: flex; }
-  .pad { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr);
-         gap: 10px; flex: 1; min-height: 0; }
-  .pad button {
-    background: var(--panel); color: var(--text); border: 0; border-radius: 16px;
-    font-size: 17px; font-weight: 600; padding: 0;
-  }
-  .pad button.held { background: var(--panel-hold); color: #fff; }
-  .row { display: flex; gap: 10px; }
-  .row button { flex: 1; font: inherit; font-weight: 600; padding: 14px 0; border-radius: 12px;
-                border: 0; background: var(--panel); color: var(--text); }
-  .row button:active { background: var(--panel-hold); }
-  #speedrow { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 14px; }
-  #speed { flex: 1; }
-  #stop { background: var(--stop); color: #fff; border: 0; border-radius: 16px;
-          font-size: 34px; font-weight: 800; letter-spacing: .08em; height: 96px; flex: none; }
-  #stop:active { background: #8f1220; }
-  #persona { display: none; flex-direction: column; gap: 6px; flex: none; }
-  .has-persona #persona { display: flex; }
-  #modes button.on { background: var(--panel-hold); color: #fff; }
-  #modes button { touch-action: manipulation; }
-  #who { background: var(--panel); border-radius: 12px; padding: 8px 12px; font-size: 14px; }
-  #who summary { cursor: pointer; color: var(--muted); }
-  #who summary b { color: var(--text); }
-  #whoinner { display: flex; flex-direction: column; gap: 8px; margin-top: 8px;
-              max-height: 24vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-  #speaker { font: inherit; font-size: 15px; padding: 6px 8px; border-radius: 8px; border: 0;
-             background: var(--bg); color: var(--text); margin-left: 8px; }
-  .person { display: flex; align-items: center; gap: 8px; }
-  .person span { flex: 1; overflow-wrap: anywhere; }
-  .person label { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--muted); }
-  .person input { width: 18px; height: 18px; }
-  .person button { font: inherit; font-size: 13px; padding: 6px 10px; border-radius: 8px; border: 0;
-                   background: var(--bad); color: #fff; touch-action: manipulation; }
-  #peoplenote { font-size: 12px; color: var(--muted); }
-  #voice { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 120px; }
-  #ptt { background: var(--panel); color: var(--text); border: 2px solid var(--panel-hold);
-         border-radius: 16px; font: inherit; font-size: 20px; font-weight: 800; height: 64px;
-         flex: none; letter-spacing: .04em; }
-  #ptt.held { background: var(--ok); border-color: var(--ok); color: #04210f; }
-  #ptt:disabled { border-color: var(--muted); color: var(--muted); }
-  #listen { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
-  #lamp { width: 12px; height: 12px; border-radius: 50%; background: var(--panel); flex: none; }
-  #listen.on { color: var(--ok); font-weight: 700; }
-  #listen.on #lamp { background: var(--ok); }
-  #pttnote { font-size: 12px; color: var(--muted); }
-  #voicebtn { display: none; background: var(--panel); color: var(--text); border: 2px solid var(--panel-hold);
-              border-radius: 10px; padding: 10px; font-size: 15px; }
-  #voicebtn.avail { display: block; }
-  #voicebtn.on { border-color: var(--ok); }
-  #log { flex: 1; min-height: 48px; overflow-y: auto; background: var(--panel); border-radius: 12px;
-         padding: 8px 10px; font-size: 14px; -webkit-overflow-scrolling: touch; }
-  #log div { padding: 1px 0; overflow-wrap: anywhere; }
-  #log .heard { color: var(--text); } #log .route { color: var(--panel-hold); filter: brightness(1.6); }
-  #log .said { color: var(--ok); } #log .status, #log .info { color: var(--muted); }
-  #log .error { color: var(--warn); }
-  #sayrow { display: flex; gap: 8px; }
-  #say { flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 10px 12px;
-         border-radius: 12px; border: 0; background: var(--panel); color: var(--text); }
-  #sayrow button { font: inherit; font-weight: 700; padding: 0 18px; border-radius: 12px; border: 0;
-                   background: var(--panel-hold); color: #fff; }
-  #say:disabled, #sayrow button:disabled { opacity: .45; }
-  #reconnect { display: none; }
-  .lost #reconnect { display: block; }
+:root{--bg:#151412;--panel:#1E1C19;--panel2:#292621;--line:#3A3630;--line2:#8A8374;--text:#EEEAE0;--dim:#B1AB9D;--sig:#E9E4D6;--sig-ink:#1A1814;--ok:#A9C690;--amber:#E0A83A;--bad:#FF8A7A;--stop:#D91E2A;--violet:#D9B38C;--cond:'Familjen Grotesk',system-ui,-apple-system,sans-serif;--body:'Familjen Grotesk',system-ui,-apple-system,sans-serif;--mono:'Spline Sans Mono',ui-monospace,monospace}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--body);font-size:15px;line-height:1.45;overscroll-behavior: none;touch-action: none;user-select: none;-webkit-touch-callout: none}
+*{box-sizing:border-box}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;touch-action:manipulation}
+:focus-visible{outline:3px solid var(--sig);outline-offset:2px}
+.app{min-height:100vh;display:flex;flex-direction:column;background:var(--bg)}
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;padding:10px 20px;background:var(--panel);border-bottom:1px solid var(--line);min-height:68px}
+.brand{display:flex;align-items:center;gap:10px;font-family:var(--cond);font-weight:700;font-size:26px;letter-spacing:.14em}
+.brand small{font-family:var(--body);font-weight:500;font-size:13px;letter-spacing:.04em;color:var(--dim)}
+.chips{display:flex;flex-wrap:wrap;align-items:center;gap:8px;flex:1 1 400px}
+.chip{display:inline-flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border:1px solid var(--line2);border-radius:4px;font-family:var(--mono);font-size:13px;color:var(--text);background:var(--panel2)}
+.chip.ok{border-color:var(--ok);color:var(--ok)}
+.chip.warn{border-color:var(--amber);color:var(--amber)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ok);display:inline-block}
+.warn .dot{background:var(--amber)}
+.stop{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-width:164px;height:52px;padding:0 18px;border:2px solid #fff;border-radius:6px;background:var(--stop);color:#fff;font-family:var(--cond);font-weight:700;font-size:26px;letter-spacing:.08em}
+.stop kbd{font-family:var(--mono);font-size:12px;letter-spacing:0;border:1px solid rgba(255,255,255,.8);border-radius:3px;padding:1px 6px;font-weight:400}
+.stop:active{background:#A8141F}
+.body{display:flex;flex:1;min-height:calc(100vh - 68px);overflow:hidden}
+.rail{flex:0 0 96px;display:flex;flex-direction:column;gap:4px;padding:12px 8px;background:var(--panel);border-right:1px solid var(--line)}
+.nav{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:64px;border-radius:6px;font-family:var(--cond);font-weight:600;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);border:1px solid transparent;background:transparent;width:100%}
+.nav svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.nav.on,.nav.active{color:var(--sig);background:var(--panel2);border-color:var(--sig)}
+.nav:hover{color:var(--text)}
+.rail .gap{flex:1}
+.work{flex:1;overflow-y:auto;display:flex;flex-wrap:wrap;gap:16px;padding:16px 20px;align-content:flex-start}
+.centre{flex:999 1 520px;min-width:0;display:flex;flex-direction:column;gap:16px}
+.side{flex:1 1 320px;max-width:380px;display:flex;flex-direction:column;gap:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px}
+.lab{font-family:var(--cond);font-weight:600;font-size:14px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);margin:0 0 10px;display:block}
+.stage{display:flex;flex-wrap:wrap;gap:20px;align-items:center}
+.disc{flex:0 0 300px;width:300px;height:300px}
+.sweep{transform-origin:180px 180px;animation:sweep 7s linear infinite}
+@keyframes sweep{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.sweep{animation:none}}
+.read{flex:1 1 260px;display:flex;flex-direction:column;gap:14px}
+.big{font-family:var(--cond);font-weight:700;font-size:54px;line-height:1;letter-spacing:.01em;color:var(--sig);margin:0}
+.sub{color:var(--dim);font-size:14px;margin:0}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.stat{border:1px solid var(--line);border-radius:6px;padding:10px 12px;background:var(--panel2)}
+.stat b{display:block;font-family:var(--mono);font-weight:500;font-size:18px;color:var(--text);margin-bottom:2px}
+.stat span{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);display:block}
+.bars{display:flex;align-items:flex-end;gap:3px;height:18px;margin-top:6px}
+.bars i{display:block;width:6px;background:var(--sig);border-radius:1px}
+.deckhead{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.seg{display:inline-flex;border:1px solid var(--line2);border-radius:6px;overflow:hidden}
+.seg button{min-height:44px;min-width:76px;padding:0 14px;border:0;background:transparent;font-family:var(--cond);font-weight:600;font-size:15px;letter-spacing:.05em;text-transform:uppercase;color:var(--dim)}
+.seg button+button{border-left:1px solid var(--line2)}
+.seg button.on{background:var(--sig);color:var(--sig-ink)}
+.deck{display:flex;flex-wrap:wrap;gap:20px}
+.moves{flex:999 1 360px;display:flex;flex-direction:column;align-items:center;gap:14px}
+.area{height:224px;display:flex;align-items:center;justify-content:center;gap:48px;width:100%}
+.stick{position:relative;width:208px;height:208px;border-radius:50%;border:2px solid var(--line2);background:radial-gradient(circle,transparent 0 38%,var(--line) 38% 39%,transparent 39% 68%,var(--line) 68% 69%,transparent 69%),var(--panel2);touch-action:none;cursor:grab}
+.knob{position:absolute;left:50%;top:50%;width:76px;height:76px;margin:-38px 0 0 -38px;border-radius:50%;background:var(--sig);border:4px solid var(--sig-ink);box-shadow:0 0 0 2px var(--sig);pointer-events:none}
+.slotv{position:relative;width:84px;height:208px;border-radius:42px;border:2px solid var(--line2);background:var(--panel2);touch-action:none}
+.sloth{position:relative;width:208px;height:84px;border-radius:42px;border:2px solid var(--line2);background:var(--panel2);touch-action:none}
+.slotv .knob,.sloth .knob{width:64px;height:64px;margin:-32px 0 0 -32px}
+.cap{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);text-align:center;margin-top:8px}
+.dpad{display:grid;grid-template-columns:repeat(3,68px);grid-template-rows:repeat(3,68px);gap:6px}
+.dpad button{border:1px solid var(--line2);border-radius:8px;background:var(--panel2);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-family:var(--mono);font-size:12px;color:var(--dim);user-select:none;-webkit-user-select:none}
+.dpad button svg{width:26px;height:26px;stroke:var(--text);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.dpad button.busy,.dpad button:active{background:var(--sig);border-color:var(--sig);color:var(--sig-ink)}
+.dpad button.busy svg,.dpad button:active svg{stroke:var(--sig-ink)}
+.dpad .mid{border:1px dashed var(--line);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--dim);text-align:center}
+.turns{display:flex;gap:12px;width:100%;max-width:440px}
+.turns button{flex:1;min-height:52px;display:flex;align-items:center;justify-content:center;gap:10px;border:1px solid var(--line2);border-radius:8px;background:var(--panel2);font-family:var(--cond);font-weight:600;font-size:16px;letter-spacing:.06em;text-transform:uppercase;color:var(--text)}
+.turns button svg{width:24px;height:24px;stroke:var(--sig);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.turns button.busy,.turns button:active{background:var(--sig);border-color:var(--sig);color:var(--sig-ink)}
+.turns button.busy svg,.turns button:active svg{stroke:var(--sig-ink)}
+kbd.k{font-family:var(--mono);font-size:12px;color:var(--text);border:1px solid var(--line2);border-bottom-width:2px;border-radius:4px;padding:1px 6px;background:var(--bg);text-transform:none;letter-spacing:0;font-weight:400}
+.acts{flex:1 1 210px;max-width:280px;display:flex;flex-direction:column;gap:8px}
+.act{display:flex;align-items:center;gap:10px;min-height:48px;padding:0 12px;border:1px solid var(--line2);border-radius:6px;background:var(--panel2);text-align:left;width:100%;color:var(--text)}
+.act svg.i{width:22px;height:22px;stroke:var(--text);fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.act .n{font-family:var(--cond);font-weight:600;font-size:17px;letter-spacing:.06em;text-transform:uppercase;flex:1}
+.act .st{font-family:var(--mono);font-size:12px;color:var(--dim)}
+.act.busy{border-color:var(--amber)}
+.act.busy .st{color:var(--amber)}
+.act.done .st{color:var(--ok)}
+.heard{margin:0 0 8px;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px}
+.heard li{border-top:1px solid var(--line);padding-top:10px}
+.heard q{display:block;font-size:18px;font-weight:500}
+.route{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:6px;font-family:var(--mono);font-size:13px;color:var(--dim)}
+.tag{display:inline-block;padding:1px 8px;border-radius:3px;font-family:var(--cond);font-weight:700;font-size:13px;letter-spacing:.14em;text-transform:uppercase}
+.tag.cmd{background:var(--sig);color:var(--sig-ink)}
+.tag.chat{background:var(--violet);color:#2A1A0E}
+.keys{display:grid;grid-template-columns:auto 1fr;gap:8px 12px;align-items:center;font-size:14px;color:var(--dim)}
+.keys span.g{display:flex;gap:4px}
+.note{font-size:14px;color:var(--dim);margin:0}
+
+/* Connect screen */
+.form{flex:1 1 520px;min-width:0}
+.info{flex:1 1 300px;min-width:0;display:flex;flex-direction:column;gap:16px}
+h1{font-size:32px;line-height:1.1;margin:0 0 6px;font-weight:700}
+.lead{color:var(--dim);margin:0 0 20px}
+.found{display:flex;flex-direction:column;gap:8px;margin-bottom:6px}
+.robot{display:flex;align-items:center;gap:14px;min-height:64px;padding:8px 14px;border:2px solid var(--sig);border-radius:8px;background:var(--panel2);width:100%;text-align:left}
+.robot .radio{flex:none;width:20px;height:20px;border:2px solid var(--sig);border-radius:50%;display:flex;align-items:center;justify-content:center}
+.robot .radio::after{content:'';width:10px;height:10px;border-radius:50%;background:var(--sig)}
+.robot b{display:block;font-size:18px}
+.robot span.m{font-family:var(--mono);font-size:13px;color:var(--dim)}
+.robot .when{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--ok)}
+.field{margin-top:18px}
+.field input{display:block;width:100%;min-height:52px;padding:0 14px;border:1px solid var(--line2);border-radius:6px;background:var(--bg);font-size:18px}
+.field input.pin{font-family:var(--mono);font-size:28px;letter-spacing:.5em;max-width:300px}
+.help{font-size:13px;color:var(--dim);margin:6px 0 0}
+.alert{display:flex;gap:12px;align-items:flex-start;margin-top:18px;padding:12px 14px;border-radius:6px;border:1px solid var(--bad);background:#2A1714;font-size:15px}
+.alert svg{flex:none;width:22px;height:22px;stroke:var(--bad);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;margin-top:1px}
+.alert b{display:block}
+.go{margin-top:22px;display:inline-flex;align-items:center;justify-content:center;gap:10px;min-width:220px;min-height:56px;padding:0 24px;border:0;border-radius:6px;background:var(--sig);color:var(--sig-ink);font-weight:700;font-size:20px;letter-spacing:.06em;text-transform:uppercase}
+.list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:12px;color:var(--dim)}
+.list li{display:flex;gap:12px}
+.list svg{flex:none;width:22px;height:22px;stroke:var(--amber);fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;margin-top:1px}
+
+/* Talk & Persona */
+.ptt-btn{width:100%;min-height:72px;padding:0 24px;border:2px solid var(--line2);border-radius:8px;background:var(--panel2);font-weight:700;font-size:18px;letter-spacing:.08em;text-transform:uppercase;display:flex;align-items:center;justify-content:center;gap:12px;user-select:none;-webkit-user-select:none;transition:background .15s,border-color .15s}
+.ptt-btn svg{width:28px;height:28px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ptt-btn.active{background:var(--sig);border-color:var(--sig);color:var(--sig-ink)}
+.listen-lamp{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--dim);margin-top:10px}
+.lamp{width:8px;height:8px;border-radius:50%;background:var(--dim);display:inline-block}
+.lamp.on{background:var(--amber);box-shadow:0 0 6px var(--amber)}
+.type-row{display:flex;gap:8px;margin-top:12px}
+.type-row input{flex:1;min-height:44px;padding:0 14px;border:1px solid var(--line2);border-radius:6px;background:var(--bg);color:var(--text);font:inherit}
+.type-row button{min-height:44px;padding:0 16px;border:1px solid var(--line2);border-radius:6px;background:var(--panel2);font-weight:600;font:inherit;color:inherit;cursor:pointer}
+.conv-log{margin:0;padding:0;list-style:none;display:flex;flex-direction:column}
+.conv-log li{border-top:1px solid var(--line);padding:10px 0;display:grid;grid-template-columns:1fr auto;gap:8px}
+.conv-log time{font-family:var(--mono);font-size:12px;color:var(--dim)}
+.conv-log .who{font-size:12px;color:var(--dim);display:block;margin-bottom:4px}
+.conv-log .said{margin:0;font-size:16px;font-weight:500}
+.conv-log .said.arya{color:var(--amber)}
+.persona{display:flex;flex-direction:column;gap:10px;margin-top:8px}
+.pbtn{display:flex;align-items:flex-start;gap:12px;min-height:56px;padding:10px 14px;border:1px solid var(--line2);border-radius:8px;background:var(--panel2);text-align:left;width:100%;cursor:pointer;font:inherit;color:inherit}
+.pbtn.on{border-color:var(--sig)}
+.pbtn .pradio{flex:none;width:18px;height:18px;border:2px solid var(--line2);border-radius:50%;display:flex;align-items:center;justify-content:center;margin-top:3px}
+.pbtn.on .pradio{border-color:var(--sig)}
+.pbtn.on .pradio::after{content:'';width:9px;height:9px;border-radius:50%;background:var(--sig)}
+.pbtn b{display:block;font-size:17px;font-weight:600}
+.pbtn .d{display:block;font-size:13px;color:var(--dim);margin-top:2px}
+.person-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+.forget-btn{min-height:36px;padding:0 12px;border:1px solid var(--line2);border-radius:6px;background:transparent;color:var(--bad);font-size:13px;font-weight:600;cursor:pointer}
+[hidden]{display:none!important}
 </style>
 </head>
 <body>
-<div id="app">
-  <div id="status">
-    <div id="dot"></div>
-    <div id="state">not connected</div>
-    <div id="last"></div>
-  </div>
+<div class="app" id="app">
 
-  <form id="login" autocomplete="off">
-    <input id="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN" aria-label="PIN">
-    <button type="submit">Connect</button>
-  </form>
-  <div id="msg"></div>
-  <button id="reconnect" type="button">Reconnect</button>
-
-  <div id="control">
-    <div class="pad" id="pad">
-      <button data-btn="tl" type="button">&#8630; Turn L</button>
-      <button data-btn="fwd" type="button">&#9650; Forward</button>
-      <button data-btn="tr" type="button">Turn R &#8631;</button>
-      <button data-btn="left" type="button">&#9664; Strafe L</button>
-      <button data-btn="back" type="button">&#9660; Back</button>
-      <button data-btn="right" type="button">Strafe R &#9654;</button>
-    </div>
-    <div id="speedrow"><span>speed</span>
-      <input id="speed" type="range" min="0.1" max="1" step="0.1" value="0.5" aria-label="speed">
-      <span id="speedval">0.5</span></div>
-    <div class="row">
-      <button data-cmd="stand" type="button">Stand</button>
-      <button data-cmd="sit" type="button">Sit</button>
-      <button data-cmd="wave" type="button">Wave</button>
-    </div>
-    <div id="persona">
-      <div class="row" id="modes">
-        <button data-mode="calm" type="button">Calm</button>
-        <button data-mode="funny" type="button">Funny</button>
-        <button data-mode="roast" type="button">Roast</button>
+  <!-- ==================== CONNECT SCREEN ==================== -->
+  <div id="screen-connect">
+    <header class="top">
+      <div class="brand">
+        <svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#E0A83A" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M15 2l11 6.5v13L15 28 4 21.5v-13z"/><circle cx="15" cy="15" r="3.5"/></svg>
+        ARYA <small>Control</small>
       </div>
-      <details id="who">
-        <summary>speaking with <b id="whoname">guest</b> &middot; mood <b id="mood">neutral</b></summary>
-        <div id="whoinner">
-          <label>Speaker
-            <select id="speaker" aria-label="speaker"><option value="guest">guest</option></select>
-          </label>
-          <div id="people"></div>
-          <div id="peoplenote">Say &ldquo;my name is ...&rdquo; (or type it) to add someone. Forget deletes
-            what Arya remembers about that person. &ldquo;auto-roast ok&rdquo; only decides whether Arya may
-            start a roast by herself later; roast mode still roasts whoever is talking.</div>
+      <div class="chips" role="status">
+        <span class="chip" id="chip-status"><i class="dot"></i><span id="chip-text">Not linked</span></span>
+      </div>
+      <button class="stop" id="stop-connect" aria-label="STOP, shortcut Space" onclick="sendStop()">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M8 2h8l6 6v8l-6 6H8l-6-6V8z"/></svg>
+        STOP<kbd>Space</kbd>
+      </button>
+    </header>
+
+    <div class="work" style="max-width:1120px;margin:0 auto;flex-direction:row;flex-wrap:wrap;padding:40px 24px;align-items:flex-start">
+      <section class="card form" aria-labelledby="conn-h" style="flex:1 1 520px;min-width:0">
+        <h1 id="conn-h">Connect to Arya</h1>
+        <p class="lead">Pick your robot, type the PIN from its terminal, and you are driving.</p>
+
+        <span class="lab">Robot</span>
+        <div class="found">
+          <button class="robot" aria-pressed="true" onclick="pickAutoAddress()">
+            <i class="radio"></i>
+            <div><b>Arya</b><span class="m" id="auto-addr-label">127.0.0.1:8765</span></div>
+            <span class="when">local</span>
+          </button>
         </div>
-      </details>
+
+        <div class="field" style="margin-top:12px">
+          <label class="lab" for="addr">Or type an address</label>
+          <input id="addr" type="text" inputmode="url" autocomplete="off" placeholder="192.168.1.42:8765">
+          <p class="help">Use this if the robot is not found automatically.</p>
+        </div>
+
+        <div class="field">
+          <label class="lab" for="pin">Password</label>
+          <input id="pin" class="pin" type="password" inputmode="numeric" autocomplete="current-password" maxlength="16" value="2560" placeholder="2560" aria-describedby="pinhelp">
+          <p class="help" id="pinhelp">Password is 2560.</p>
+        </div>
+
+        <div id="connect-alert" class="alert" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.3 3.9L2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+          <div><b id="alert-title"></b><span id="alert-body"></span></div>
+        </div>
+
+        <button class="go" id="btn-connect" onclick="doConnect()">
+          CONNECT
+        </button>
+      </section>
+
+      <aside style="flex:1 1 300px;min-width:0;display:flex;flex-direction:column;gap:16px">
+        <section class="card">
+          <span class="lab">Good to know</span>
+          <ul class="list">
+            <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM4 21a8 8 0 0 1 16 0"/></svg>One controller at a time. A second browser is refused until the first one leaves.</li>
+            <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13a10 10 0 0 1 14 0M8.5 16.5a5 5 0 0 1 7 0M12 20h.01"/></svg>Everything stays on your network. No internet is needed.</li>
+            <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h10a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zM12 18h.01"/></svg>On a phone, open this same address in its browser.</li>
+            <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l9 5v6c0 5-4 8-9 9-5-1-9-4-9-9V7z"/></svg>If the link drops, the robot stops itself.</li>
+          </ul>
+        </section>
+      </aside>
     </div>
-    <div id="voice">
-      <button id="ptt" type="button" disabled>HOLD TO TALK</button>
-      <button id="voicebtn" type="button">Hear Arya on this phone</button>
-      <div id="listen"><div id="lamp"></div><span id="listentext">idle</span></div>
-      <div id="pttnote">The microphone is the robot's: speak near the robot. A voice "stop" works
-        only while you hold the button; the STOP button always works.</div>
-      <div id="log" aria-live="polite"></div>
-      <form id="sayrow" autocomplete="off">
-        <input id="say" type="text" placeholder="type to Arya" maxlength="120" aria-label="type to Arya">
-        <button id="saysend" type="submit">Send</button>
-      </form>
+  </div><!-- /screen-connect -->
+
+  <!-- ==================== CONNECTED MAIN SCREEN ==================== -->
+  <div id="screen-main" hidden>
+    <header class="top">
+      <div class="brand">
+        <svg width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="#E0A83A" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M15 2l11 6.5v13L15 28 4 21.5v-13z"/><circle cx="15" cy="15" r="3.5"/></svg>
+        ARYA <small id="page-sub">Control</small>
+      </div>
+      <div class="chips" role="status" aria-label="Connection">
+        <span class="chip ok" id="chip-linked"><i class="dot"></i>Linked</span>
+        <span class="chip" id="chip-addr">hexa.local:8765</span>
+        <span class="chip" id="chip-lat">18 ms</span>
+        <span class="chip" id="chip-state">You are the controller</span>
+      </div>
+      <button class="stop" id="stop" aria-label="STOP, shortcut Space" onclick="sendStop()">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M8 2h8l6 6v8l-6 6H8l-6-6V8z"/></svg>
+        STOP<kbd>Space</kbd>
+      </button>
+    </header>
+
+    <div class="body">
+      <!-- Left Rail Navigation -->
+      <nav class="rail" aria-label="Sections">
+        <button class="nav on" id="nav-drive" onclick="showTab('drive')">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l7 18-7-4-7 4z"/></svg>
+          DRIVE
+        </button>
+        <button class="nav" id="nav-talk" onclick="showTab('talk')">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>
+          TALK
+        </button>
+        <button class="nav" id="nav-arya" onclick="showTab('arya')">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg>
+          ARYA
+        </button>
+        <button class="nav" id="nav-vision" onclick="showTab('vision')">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>
+          VISION
+        </button>
+        <button class="nav" id="nav-moves" onclick="showTab('moves')">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>
+          MOVES
+        </button>
+        <button class="nav" id="nav-follow" onclick="showTab('follow')">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12a3 3 0 1 0 6 0 3 3 0 0 0-6 0M12 3v4M12 17v4M3 12h4M17 12h4"/></svg>
+          FOLLOW
+        </button>
+        <button class="nav" id="nav-health" onclick="showTab('health')">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h12v12H6zM9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg>
+          HEALTH
+        </button>
+        <div class="gap"></div>
+        <button class="nav" id="nav-admin" onclick="showTab('admin')">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M14 4v4M8 10v4M16 16v4"/></svg>
+          ADMIN
+        </button>
+      </nav>
+
+      <!-- == DRIVE TAB == -->
+      <main class="work" id="tab-drive">
+        <div class="centre">
+          <!-- Robot state card -->
+          <section class="card" aria-label="Robot state">
+            <div class="stage">
+              <svg class="disc" viewBox="0 0 360 360" role="img" aria-label="Top-down robot compass view">
+                <circle cx="180" cy="180" r="172" fill="#191816" stroke="#8A8374" stroke-width="2"/>
+                <circle cx="180" cy="180" r="125" fill="none" stroke="#3A3630" stroke-width="1.5"/>
+                <circle cx="180" cy="180" r="80"  fill="none" stroke="#3A3630" stroke-width="1.5"/>
+                <circle cx="180" cy="180" r="38"  fill="none" stroke="#3A3630" stroke-width="1.5"/>
+                <path d="M180 8v344M8 180h344" stroke="#3A3630" stroke-width="1.5"/>
+                <g class="sweep"><path d="M180 180L180 8" stroke="#E0A83A" stroke-width="2" stroke-dasharray="2 5"/></g>
+                <g stroke="#8A8374" stroke-width="2"><path d="M180 8v10M180 342v10M8 180h10M342 180h10"/></g>
+                <g stroke="#E0A83A" stroke-width="3" stroke-linecap="round" fill="#E0A83A">
+                  <path d="M188 166L203 140M196 180L226 180M188 194L203 220M172 194L157 220M164 180L134 180M172 166L157 140" fill="none"/>
+                  <circle cx="203" cy="140" r="3.5"/><circle cx="226" cy="180" r="3.5"/><circle cx="203" cy="220" r="3.5"/>
+                  <circle cx="157" cy="220" r="3.5"/><circle cx="134" cy="180" r="3.5"/><circle cx="157" cy="140" r="3.5"/>
+                </g>
+                <path d="M180 158l19 11v22l-19 11-19-11v-22z" fill="#292621" stroke="#E0A83A" stroke-width="3" stroke-linejoin="round"/>
+                <path d="M180 164l6 9h-12z" fill="#E0A83A"/>
+                <g font-family="sans-serif" font-weight="600" font-size="14" letter-spacing="1.5" fill="#B1AB9D" text-anchor="middle">
+                  <text x="180" y="36">FRONT</text><text x="180" y="338">BACK</text>
+                  <text x="34" y="186">L</text><text x="326" y="186">R</text>
+                </g>
+              </svg>
+              <div class="read">
+                <div>
+                  <p class="lab">Robot reports</p>
+                  <p class="big" id="state-label">STANDING</p>
+                  <p class="sub" id="state-sub">State as reported by the robot, 0.3 s ago. Nothing is commanded now.</p>
+                </div>
+                <div class="stats">
+                  <div class="stat"><span>Link</span><b id="lat-val">18 ms</b>
+                    <div class="bars" aria-hidden="true"><i style="height:6px"></i><i style="height:8px"></i><i style="height:7px"></i><i style="height:12px"></i><i style="height:8px"></i><i style="height:7px"></i><i style="height:9px"></i><i style="height:8px"></i></div>
+                  </div>
+                  <div class="stat"><span>Speed</span><b id="speed-label">NORMAL</b></div>
+                  <div class="stat"><span>Last ack</span><b id="last-ack">STAND &middot; DONE</b></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Controls card -->
+          <section class="card" aria-label="Controls">
+            <div class="deckhead">
+              <p class="lab" style="margin:0">Controls</p>
+              <div class="seg" role="group" aria-label="Control layout">
+                <button class="on" id="tab-layout-stick" onclick="setLayout('stick')">STICK</button>
+                <button id="tab-layout-pad" onclick="setLayout('pad')">PAD</button>
+                <button id="tab-layout-dual" onclick="setLayout('dual')">DUAL</button>
+              </div>
+            </div>
+            <div class="deck">
+              <div class="moves">
+                <div class="area">
+                  <!-- STICK VIEW -->
+                  <div id="view-stick">
+                    <div class="stick" id="stick" role="group" aria-label="Move stick: forward, back and strafe">
+                      <div class="knob" id="stick-knob"></div>
+                    </div>
+                    <div class="cap">DRAG TO WALK - W A S D</div>
+                  </div>
+                  <!-- PAD VIEW -->
+                  <div id="view-pad" style="display:none">
+                    <div class="dpad" role="group" aria-label="Move pad">
+                      <span></span>
+                      <button id="dp-fwd" data-dir="forward" aria-label="Forward, W"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>W</button>
+                      <span></span>
+                      <button id="dp-sl" data-dir="strafe_l" aria-label="Strafe left, A"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>A</button>
+                      <div class="mid">hold to walk</div>
+                      <button id="dp-sr" data-dir="strafe_r" aria-label="Strafe right, D"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>D</button>
+                      <span></span>
+                      <button id="dp-back" data-dir="backward" aria-label="Back, S"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"/></svg>S</button>
+                      <span></span>
+                    </div>
+                  </div>
+                  <!-- DUAL VIEW -->
+                  <div id="view-dual" style="display:none">
+                    <div style="display:flex;gap:32px">
+                      <div><div class="slotv" id="slot-v" role="group" aria-label="Forward and back"><div class="knob" id="dual-knob-v"></div></div><div class="cap">Forward / back</div></div>
+                      <div><div class="sloth" id="slot-h" role="group" aria-label="Strafe left and right"><div class="knob" id="dual-knob-h"></div></div><div class="cap">Strafe</div></div>
+                    </div>
+                  </div>
+                </div>
+                <!-- Dedicated Turn Buttons -->
+                <div class="turns" role="group" aria-label="Turn">
+                  <button id="btn-turn-l" aria-label="Turn left, Q"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/></svg>TURN LEFT <kbd class="k">Q</kbd></button>
+                  <button id="btn-turn-r" aria-label="Turn right, E">TURN RIGHT <kbd class="k">E</kbd><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5"/></svg></button>
+                </div>
+              </div>
+
+              <!-- Actions & Speed -->
+              <div class="acts">
+                <p class="lab" style="margin-bottom:2px">ACTIONS</p>
+                <button class="act done" id="act-stand" onclick="sendCmd('stand')">
+                  <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a2 2 0 1 0 0 .01M12 8v7M8 11h8M10 21l2-6 2 6"/></svg>
+                  <span class="n">STAND</span>
+                  <span class="st" id="st-stand">done</span>
+                </button>
+                <button class="act" id="act-sit" onclick="sendCmd('sit')">
+                  <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a2 2 0 1 0 0 .01M12 8v6h5M8 21v-4h9v4"/></svg>
+                  <span class="n">SIT</span>
+                  <span class="st" id="st-sit"></span>
+                </button>
+                <button class="act" id="act-wave" onclick="sendCmd('wave')">
+                  <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 11V6a1.5 1.5 0 0 1 3 0v4M10 10V4.5a1.5 1.5 0 0 1 3 0V10M13 10V6a1.5 1.5 0 0 1 3 0v6c0 4-2 7-6 7s-6-3-6-6v-1a1.5 1.5 0 0 1 3 0"/></svg>
+                  <span class="n">WAVE</span>
+                  <span class="st" id="st-wave"></span>
+                </button>
+
+                <p class="lab" style="margin:10px 0 2px">SPEED</p>
+                <div class="seg" role="group" aria-label="Speed" style="width:100%">
+                  <button id="spd-btn-slow" style="flex:1;min-width:0;padding:0 6px" onclick="setSpeed('slow')">SLOW 1</button>
+                  <button class="on" id="spd-btn-normal" style="flex:1;min-width:0;padding:0 6px" onclick="setSpeed('normal')">NORMAL 2</button>
+                  <button id="spd-btn-fast" style="flex:1;min-width:0;padding:0 6px" onclick="setSpeed('fast')">FAST 3</button>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- Right Side column -->
+        <aside class="side" aria-label="Details">
+          <section class="card">
+            <p class="lab">LAST HEARD</p>
+            <ul class="heard" id="heard-list">
+              <li><q>&ldquo;walk forward&rdquo;</q><div class="route"><span class="tag cmd">COMMAND</span>walk &middot; done</div></li>
+              <li><q>&ldquo;what do you think of tuesdays&rdquo;</q><div class="route"><span class="tag chat">CHAT</span>reply spoken</div></li>
+            </ul>
+            <p class="note">Voice &ldquo;stop&rdquo; only works while Arya is listening. The STOP button always works.</p>
+          </section>
+
+          <section class="card">
+            <p class="lab">KEYBOARD</p>
+            <div class="keys">
+              <span class="g"><kbd class="k">W</kbd><kbd class="k">S</kbd></span><span>Forward / back</span>
+              <span class="g"><kbd class="k">A</kbd><kbd class="k">D</kbd></span><span>Strafe left / right</span>
+              <span class="g"><kbd class="k">Q</kbd><kbd class="k">E</kbd></span><span>Turn left / right</span>
+              <span class="g"><kbd class="k">1</kbd><kbd class="k">2</kbd><kbd class="k">3</kbd></span><span>Slow &middot; Normal &middot; Fast</span>
+              <span class="g"><kbd class="k">Space</kbd></span><span>STOP</span>
+            </div>
+          </section>
+
+          <section class="card">
+            <p class="lab">CONTROLLER</p>
+            <p class="note">You are the only controller. A second browser is refused until you leave. Walking stops if this page loses the robot.</p>
+          </section>
+        </aside>
+      </main>
+
+      <!-- -- TALK TAB -- -->
+      <main class="work" id="tab-talk" style="display:none;max-width:700px">
+        <section class="card" aria-label="Voice">
+          <p class="lab">Push to talk</p>
+          <button class="ptt-btn" id="ptt"
+            onpointerdown="pttStart(event)" onpointerup="pttStop()" onpointercancel="pttStop()">
+            <svg viewBox="0 0 24 24"><path d="M12 2a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4zM19 10a7 7 0 0 1-14 0M12 19v3M8 22h8"/></svg>
+            Hold to speak
+          </button>
+          <div class="listen-lamp">
+            <span class="lamp" id="lamp-dot"></span>
+            <span id="lamp-txt">Idle</span>
+          </div>
+          <div class="type-row">
+            <input id="say-inp" type="text" placeholder="Type to Arya..." onkeydown="if(event.key==='Enter')sendSay()">
+            <button onclick="sendSay()">Send</button>
+          </div>
+        </section>
+        <section class="card" aria-label="Conversation" style="flex:1">
+          <p class="lab">Conversation</p>
+          <ol class="conv-log" id="conv-log" aria-live="polite"></ol>
+        </section>
+      </main>
+
+      <!-- -- ARYA TAB (Persona & People) -- -->
+      <main class="work" id="tab-arya" style="display:none;max-width:700px">
+        <section class="card">
+          <p class="lab">How Arya talks</p>
+          <div class="persona" role="group" aria-label="Persona">
+            <button class="pbtn on" data-mode="calm" id="pbtn-calm" onclick="setMode('calm')">
+              <div class="pradio"></div><div><b>Calm</b><span class="d">Helpful, measured, factual.</span></div>
+            </button>
+            <button class="pbtn" data-mode="funny" id="pbtn-funny" onclick="setMode('funny')">
+              <div class="pradio"></div><div><b>Funny</b><span class="d">Light-hearted, playful, still helpful.</span></div>
+            </button>
+            <button class="pbtn" data-mode="roast" id="pbtn-roast" onclick="setMode('roast')">
+              <div class="pradio"></div><div><b>Roast</b><span class="d">Dry wit and gentle sarcasm &mdash; never mean.</span></div>
+            </button>
+          </div>
+          <div style="margin-top:16px">
+            <label class="lab" for="speaker">Speaking with</label>
+            <select id="speaker" style="width:100%;min-height:44px;padding:0 12px;border:1px solid var(--line2);border-radius:6px;background:var(--bg);color:var(--text)">
+              <option value="guest">guest</option>
+            </select>
+          </div>
+          <p class="note" style="margin-top:12px">Persona changes only how Arya talks. It never changes what the robot does, and some topics are off-limits in every mode.</p>
+        </section>
+        <section class="card" style="margin-top:16px">
+          <p class="lab">People Arya remembers</p>
+          <div id="people"></div>
+          <p class="note" id="peoplenote" style="margin-top:8px">No people remembered yet.</p>
+        </section>
+      </main>
+
+      <!-- Placeholder tabs for other rail items -->
+      <main class="work" id="tab-vision" style="display:none">
+        <section class="card"><p class="lab">Vision</p><p class="note">Vision camera feed and face recognition.</p></section>
+      </main>
+      <main class="work" id="tab-moves" style="display:none">
+        <section class="card"><p class="lab">Moves</p><p class="note">Movement patterns and gait sequences.</p></section>
+      </main>
+      <main class="work" id="tab-follow" style="display:none">
+        <section class="card"><p class="lab">Follow Me</p><p class="note">Visual tracking and person following.</p></section>
+      </main>
+      <main class="work" id="tab-health" style="display:none">
+        <section class="card"><p class="lab">Health</p><p class="note">System telemetry, battery, and motor diagnostics.</p></section>
+      </main>
+      <main class="work" id="tab-admin" style="display:none">
+        <section class="card"><p class="lab">Admin</p><p class="note">Calibration, network settings, and logs.</p></section>
+      </main>
     </div>
-    <button id="stop" type="button">STOP</button>
-  </div>
+  </div><!-- /screen-main -->
+
 </div>
 
 <script>
-"use strict";
-// One combined walk message per change and a repeat at send_hz while any move button is held.
-// The server (not this page) enforces the deadman; the stops sent here are a second line.
-var AXES = {
-  fwd: {forward: 1}, back: {forward: -1}, left: {strafe: 1}, right: {strafe: -1},
-  tl: {yaw: 1}, tr: {yaw: -1}
-};
-var ws = null, opened = false, sendHz = 10, repeat = null;
-var held = new Map();            // pointerId -> button name
-var $ = function (id) { return document.getElementById(id); };
+// Pure script using DOM methods without direct HTML insertion
+function $(id){ return document.getElementById(id); }
 
-function store(key, value) {
-  try { if (value === undefined) { return sessionStorage.getItem(key); } sessionStorage.setItem(key, value); }
-  catch (e) { return null; }
-}
-function setState(text, on) { $("state").textContent = text; $("dot").className = on ? "on" : ""; }
-function say(text) { $("msg").textContent = text || ""; }
-function send(obj) { if (ws && ws.readyState === 1) { ws.send(JSON.stringify(obj)); return true; } return false; }
+var ws = null;
+var addr = "";
+var pin = "";
+var speedVal = 0.5;
+var speedMode = "normal";
+var curLayout = "stick";
+var curForward = 0;
+var curStrafe = 0;
+var curYaw = 0;
+var walkLoop = null;
+var HZ = 10;
+var audioCtx = null, micStream = null, micProc = null, pbCtx = null, pttOn = false;
 
-function axes() {
-  var names = new Set(held.values()), sum = {forward: 0, strafe: 0, yaw: 0};
-  names.forEach(function (name) {
-    var axis = AXES[name];
-    for (var key in axis) { sum[key] += axis[key]; }
-  });
-  return sum;
+// -- Connect & Navigation --
+function pickAutoAddress(){
+  $("addr").value = $("auto-addr-label").textContent.trim();
 }
-function walkMessage() {
-  var a = axes();
-  return {action: "walk", forward: a.forward, strafe: a.strafe, yaw: a.yaw,
-          speed: parseFloat($("speed").value)};
+function showAlert(title, body){
+  $("alert-title").textContent = title;
+  $("alert-body").textContent = " " + body;
+  $("connect-alert").hidden = false;
 }
-function anyMove() { var a = axes(); return a.forward !== 0 || a.strafe !== 0 || a.yaw !== 0; }
+function hideAlert(){ $("connect-alert").hidden = true; }
 
-function paint() {
-  var names = new Set(held.values());
-  document.querySelectorAll("[data-btn]").forEach(function (b) {
-    b.classList.toggle("held", names.has(b.dataset.btn));
-  });
-}
-function update() {                 // the held set changed
-  paint();
-  send(walkMessage());              // all-zero = release: the robot ramps down to a halt
-  if (anyMove() && repeat === null) {
-    repeat = setInterval(function () { send(walkMessage()); }, 1000 / sendHz);
-  } else if (!anyMove() && repeat !== null) {
-    clearInterval(repeat); repeat = null;
+function showTab(name){
+  var tabs = ["drive", "talk", "arya", "vision", "moves", "follow", "health", "admin"];
+  for (var i = 0; i < tabs.length; i++){
+    var el = $("tab-" + tabs[i]);
+    if (el) { el.style.display = (tabs[i] === name) ? "flex" : "none"; }
+    var n = $("nav-" + tabs[i]);
+    if (n) { n.classList.toggle("on", tabs[i] === name); }
   }
-}
-function stopAll() {                // hard stop: forget every touch, then `stop` (and let go of talk)
-  held.clear();
-  if (repeat !== null) { clearInterval(repeat); repeat = null; }
-  paint();
-  clearVoice();
-  releaseTalk();
-  send({action: "stop"});
+  var titles = {
+    drive: "Control", talk: "Talk", arya: "Persona & People",
+    vision: "Vision", moves: "Moves", follow: "Follow", health: "Health", admin: "Admin"
+  };
+  $("page-sub").textContent = titles[name] || "Control";
 }
 
-// Hold to talk: the server owns the limit and releases on stop and on disconnect too.
-var talkPointer = null;
-function releaseTalk() {
-  if (talkPointer !== null) {
-    talkPointer = null; $("ptt").classList.remove("held");
-    stopMic();                       // the last frame goes out before the release (same socket, in order)
-    send({action: "ptt_release"});
-  }
+function setLayout(mode){
+  curLayout = mode;
+  $("tab-layout-stick").classList.toggle("on", mode === "stick");
+  $("tab-layout-pad").classList.toggle("on", mode === "pad");
+  $("tab-layout-dual").classList.toggle("on", mode === "dual");
+
+  $("view-stick").style.display = (mode === "stick") ? "block" : "none";
+  $("view-pad").style.display = (mode === "pad") ? "block" : "none";
+  $("view-dual").style.display = (mode === "dual") ? "block" : "none";
 }
 
-// Phone microphone (Step 12c): only while the button is held. The server accepts these frames only
-// from the controller, only while a press is held, and no faster than real time; this page just
-// converts the browser's audio (44.1 or 48 kHz float) to 16 kHz mono 16-bit and sends it.
-var audioInfo = {available: false}, mic = null, audioCtx = null;
-function micSupported() {
-  return !!(window.isSecureContext && navigator.mediaDevices && navigator.mediaDevices.getUserMedia &&
-            (window.AudioContext || window.webkitAudioContext));
+function setSpeed(mode){
+  speedMode = mode;
+  $("spd-btn-slow").classList.toggle("on", mode === "slow");
+  $("spd-btn-normal").classList.toggle("on", mode === "normal");
+  $("spd-btn-fast").classList.toggle("on", mode === "fast");
+
+  var speeds = { slow: 0.25, normal: 0.5, fast: 0.85 };
+  speedVal = speeds[mode] || 0.5;
+  $("speed-label").textContent = mode.toUpperCase();
 }
-function makeResampler(inRate, outRate) {   // box-average decimation, state kept between buffers
-  var ratio = inRate / outRate, carry = new Float32Array(0), next = 0;
-  return function (input) {
-    var data = new Float32Array(carry.length + input.length), out = [], pos = next;
-    data.set(carry); data.set(input, carry.length);
-    while (pos + ratio <= data.length) {
-      var start = Math.floor(pos), end = Math.min(data.length, Math.ceil(pos + ratio)), sum = 0;
-      for (var i = start; i < end; i++) { sum += data[i]; }
-      out.push(sum / (end - start));
-      pos += ratio;
+
+function doConnect(){
+  var a = $("addr").value.trim(), p = $("pin").value.trim() || "2560";
+  hideAlert();
+  try { localStorage.setItem("hexa_pin", p); } catch(err){}
+  addr = a || (location.host || "127.0.0.1:8765");
+  pin = p;
+  $("btn-connect").disabled = true;
+  openWs();
+}
+
+try {
+  var saved = localStorage.getItem("hexa_pin");
+  if (saved && $("pin")) { $("pin").value = saved; }
+  else if ($("pin") && !$("pin").value) { $("pin").value = "2560"; }
+} catch(err){}
+
+function openWs(){
+  if (ws){ ws.close(); ws = null; }
+  var proto = location.protocol === "https:" ? "wss" : "ws";
+  ws = new WebSocket(proto + "://" + addr + "/ws?pin=" + encodeURIComponent(pin));
+  ws.binaryType = "arraybuffer";
+  ws.onopen = function(){
+    $("screen-connect").hidden = true;
+    $("screen-main").hidden = false;
+    $("chip-addr").textContent = addr;
+    $("chip-state").textContent = "You are the controller";
+    showTab("drive");
+    try {
+      if (document.activeElement && document.activeElement.blur) {
+        document.activeElement.blur();
+      }
+      window.focus();
+    } catch(err){}
+  };
+  ws.onmessage = onMsg;
+  ws.onerror = function(){
+    showAlert("Cannot connect to " + addr, "Wrong password (default is 2560) or robot server is offline.");
+    resetConn();
+  };
+  ws.onclose = function(ev){
+    if (!$("screen-main").hidden){
+      $("screen-connect").hidden = false;
+      $("screen-main").hidden = true;
+      showAlert("Disconnected", "The connection was closed (code " + ev.code + ").");
+    } else {
+      showAlert("Cannot connect to " + addr, "Wrong password (default is 2560) or robot server is offline.");
     }
-    var keep = Math.floor(pos);
-    carry = data.slice(keep); next = pos - keep;
-    return out;
+    resetConn();
   };
 }
-function toPcm16(samples) {
-  var pcm = new Int16Array(samples.length);
-  for (var i = 0; i < samples.length; i++) {
-    var v = Math.max(-1, Math.min(1, samples[i]));
-    pcm[i] = v < 0 ? v * 32768 : v * 32767;
+
+function resetConn(){
+  $("btn-connect").disabled = false;
+  ws = null;
+  stopAll();
+}
+
+// -- Sending Messages --
+function send(obj){
+  if (ws && ws.readyState === 1){
+    ws.send(JSON.stringify(obj));
   }
-  return pcm;
 }
-function prepareAudio() {          // inside the tap: iOS only starts audio from a user gesture
-  var Ctx = window.AudioContext || window.webkitAudioContext;
-  if (!audioCtx) { audioCtx = new Ctx(); }
-  if (audioCtx.state === "suspended") { audioCtx.resume(); }
+
+function sendStop(){
+  curForward = 0;
+  curStrafe = 0;
+  curYaw = 0;
+  if (walkLoop){ clearInterval(walkLoop); walkLoop = null; }
+  var knob = $("stick-knob");
+  if (knob){ knob.style.transform = "translate(0px, 0px)"; }
+  document.querySelectorAll(".dpad button.busy, .turns button.busy").forEach(function(b){
+    b.classList.remove("busy");
+  });
+  send({action: "stop"});
+  $("last-ack").textContent = "STOP · DONE";
 }
-function startMic() {              // resolves true when frames can flow
-  return navigator.mediaDevices.getUserMedia(
-    {audio: {channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true}}
-  ).then(function (stream) {
-    var source = audioCtx.createMediaStreamSource(stream);
-    var node = audioCtx.createScriptProcessor(2048, 1, 1), silent = audioCtx.createGain();
-    var resample = makeResampler(audioCtx.sampleRate, audioInfo.rate || 16000);
-    var maxSamples = Math.floor((audioInfo.max_frame_bytes || 8192) / 2);
-    silent.gain.value = 0;
-    node.onaudioprocess = function (event) {
-      if (!mic || !ws || ws.readyState !== 1 || ws.bufferedAmount > 65536) { return; }  // never queue up
-      var pcm = toPcm16(resample(event.inputBuffer.getChannelData(0)));
-      for (var at = 0; at < pcm.length; at += maxSamples) {
-        var part = pcm.subarray(at, at + maxSamples);
-        if (part.length) { ws.send(part.buffer.slice(part.byteOffset, part.byteOffset + part.byteLength)); }
-      }
+
+function stopAll(){
+  var wasMoving = (curForward !== 0 || curStrafe !== 0 || curYaw !== 0 || walkLoop !== null);
+  curForward = 0;
+  curStrafe = 0;
+  curYaw = 0;
+  if (walkLoop){ clearInterval(walkLoop); walkLoop = null; }
+  var knob = $("stick-knob");
+  if (knob){ knob.style.transform = "translate(0px, 0px)"; }
+  document.querySelectorAll(".dpad button.busy, .turns button.busy").forEach(function(b){
+    b.classList.remove("busy");
+  });
+  if (wasMoving){
+    send({action: "walk", forward: 0, strafe: 0, yaw: 0, speed: speedVal});
+  }
+}
+
+function sendCmd(cmd){
+  curForward = 0;
+  curStrafe = 0;
+  curYaw = 0;
+  if (walkLoop){ clearInterval(walkLoop); walkLoop = null; }
+  var knob = $("stick-knob");
+  if (knob){ knob.style.transform = "translate(0px, 0px)"; }
+  document.querySelectorAll(".dpad button.busy, .turns button.busy").forEach(function(b){
+    b.classList.remove("busy");
+  });
+  var actBtn = $("act-" + cmd);
+  if (actBtn){
+    document.querySelectorAll(".acts .act").forEach(function(a){ a.classList.remove("busy", "done"); });
+    actBtn.classList.add("busy");
+    var st = $("st-" + cmd);
+    if (st){ st.textContent = "running..."; }
+  }
+  send({action: cmd});
+  $("last-ack").textContent = cmd.toUpperCase();
+}
+
+function sendWalk(){
+  if (curForward === 0 && curStrafe === 0 && curYaw === 0){
+    if (walkLoop){ clearInterval(walkLoop); walkLoop = null; }
+    send({action: "walk", forward: 0, strafe: 0, yaw: 0, speed: speedVal});
+  } else {
+    var msg = {
+      action: "walk",
+      forward: Math.round(curForward * 100) / 100,
+      strafe: Math.round(curStrafe * 100) / 100,
+      yaw: Math.round(curYaw * 100) / 100,
+      speed: speedVal
     };
-    source.connect(node); node.connect(silent); silent.connect(audioCtx.destination);
-    mic = {stream: stream, source: source, node: node, silent: silent};
-    return true;
-  });
-}
-function stopMic() {
-  var m = mic; mic = null;
-  if (!m) { return; }
-  m.node.onaudioprocess = null;
-  try { m.source.disconnect(); m.node.disconnect(); m.silent.disconnect(); } catch (e) { /* already apart */ }
-  m.stream.getTracks().forEach(function (track) { track.stop(); });   // the browser's mic light goes off
-}
-// Arya's voice (Step 12c-2): the server sends one binary message per sentence (8-byte header:
-// "A", 3 pad bytes, the sample rate as u32 LE; then mono 16-bit samples). They are played back to
-// back; audio_clear, STOP, a new press and a closed socket drop everything not yet played.
-var voiceWanted = false, voiceMuted = false, voiceAvailable = false;
-var voiceSources = [], voiceNext = 0, voiceCount = 0;
-function clearVoice() {
-  var list = voiceSources; voiceSources = []; voiceNext = 0;
-  list.forEach(function (s) { s.onended = null; try { s.stop(); } catch (e) { /* not started */ } });
-}
-function playVoice(buf) {
-  if (!voiceWanted || !audioCtx || buf.byteLength <= 8) { return; }
-  var view = new DataView(buf);
-  if (view.getUint8(0) !== 65) { return; }
-  var rate = view.getUint32(4, true), pcm = new Int16Array(buf, 8, (buf.byteLength - 8) >> 1);
-  voiceCount++; paintVoice();
-  logLine("info", "voice: " + (pcm.length / rate).toFixed(1) + " s received, sound is " + audioCtx.state);
-  if (audioCtx.state === "suspended") { audioCtx.resume(); }
-  var audio = audioCtx.createBuffer(1, pcm.length, rate), data = audio.getChannelData(0);
-  for (var i = 0; i < pcm.length; i++) { data[i] = pcm[i] / 32768; }
-  var source = audioCtx.createBufferSource();
-  source.buffer = audio; source.connect(audioCtx.destination);
-  var at = Math.max(audioCtx.currentTime + 0.03, voiceNext);
-  source.start(at); voiceNext = at + audio.duration;
-  voiceSources.push(source);
-  source.onended = function () {
-    var at = voiceSources.indexOf(source); if (at >= 0) { voiceSources.splice(at, 1); }
-  };
-}
-function beep() {
-  var osc = audioCtx.createOscillator(), gain = audioCtx.createGain(), t = audioCtx.currentTime;
-  osc.frequency.value = 660; gain.gain.value = 0.2;
-  osc.connect(gain); gain.connect(audioCtx.destination);
-  osc.start(t); osc.stop(t + 0.25);
-}
-function paintVoice() {
-  $("voicebtn").classList.toggle("on", voiceWanted);
-  $("voicebtn").textContent = voiceWanted
-    ? "Arya's voice is on, " + voiceCount + " sentences received (tap to mute)" : "Hear Arya on this phone";
-}
-function turnVoiceOn(withBeep) {     // only from a tap or a press: the browser unlocks sound from a gesture
-  prepareAudio();
-  var tick = audioCtx.createBufferSource();
-  tick.buffer = audioCtx.createBuffer(1, 1, audioCtx.sampleRate);
-  tick.connect(audioCtx.destination); tick.start();
-  if (withBeep) { beep(); }          // you should HEAR this: if not, the phone's sound is the problem
-  voiceCount = 0; voiceWanted = true; voiceMuted = false;
-  send({action: "voice", on: true});
-  paintVoice();
-}
-$("voicebtn").addEventListener("click", function () {
-  if (!voiceWanted) { turnVoiceOn(true); return; }
-  voiceWanted = false; voiceMuted = true;   // muted on purpose: a later press does not undo it
-  clearVoice();
-  send({action: "voice", on: false});
-  paintVoice();
-});
-function logLine(kind, text) {
-  var log = $("log"), line = document.createElement("div");
-  line.className = kind; line.textContent = text; log.appendChild(line);
-  while (log.childNodes.length > 200) { log.removeChild(log.firstChild); }
-  log.scrollTop = log.scrollHeight;
-}
-function setListening(on) {
-  $("listen").classList.toggle("on", on);
-  $("listentext").textContent = on ? "LISTENING" : "idle";
-}
-var ptt = $("ptt");
-ptt.addEventListener("pointerdown", function (e) {
-  e.preventDefault();
-  if (ptt.disabled || talkPointer !== null) { return; }
-  try { ptt.setPointerCapture(e.pointerId); } catch (err) { /* not capturable */ }
-  talkPointer = e.pointerId; ptt.classList.add("held");
-  clearVoice();                      // talking over Arya cuts her at once (the server clears too)
-  if (voiceAvailable && !voiceWanted && !voiceMuted) { turnVoiceOn(false); }   // the first press is the tap
-  if (!audioInfo.available) { send({action: "ptt_press"}); return; }   // the robot's own microphone
-  var mine = e.pointerId;
-  prepareAudio();
-  startMic().then(function () {
-    if (talkPointer !== mine) { stopMic(); return; }          // let go while the browser asked
-    send({action: "ptt_press"});
-  }).catch(function (err) {
-    if (talkPointer === mine) { releaseTalk(); }
-    logLine("error", "microphone: " + (err && err.name === "NotAllowedError"
-      ? "permission denied (allow the microphone for this page)" : "not available"));
-  });
-});
-["pointerup", "pointercancel", "lostpointercapture"].forEach(function (name) {
-  ptt.addEventListener(name, function (e) { e.preventDefault(); if (e.pointerId === talkPointer) { releaseTalk(); } });
-});
-$("sayrow").addEventListener("submit", function (e) {
-  e.preventDefault();
-  var text = $("say").value.trim();
-  if (text && send({action: "say", text: text})) { $("say").value = ""; }
-});
-// Persona: the mode, who is speaking, and the people Arya remembers. Names come from
-// people, so they are only ever put into the page with textContent.
-var personaOn = false;
-function paintPersona(p) {
-  if (!p) { return; }
-  personaOn = true;
-  document.getElementById("app").classList.add("has-persona");
-  document.querySelectorAll("[data-mode]").forEach(function (b) {
-    b.classList.toggle("on", b.dataset.mode === p.mode);
-  });
-  $("whoname").textContent = p.speaker;
-  $("mood").textContent = p.mood;
-  var select = $("speaker"), people = $("people");
-  select.textContent = "";
-  var guest = document.createElement("option");
-  guest.value = "guest"; guest.textContent = "guest"; select.appendChild(guest);
-  people.textContent = "";
-  (p.people || []).forEach(function (person) {
-    var option = document.createElement("option");
-    option.value = person.name; option.textContent = person.name; select.appendChild(option);
-    var row = document.createElement("div"), label = document.createElement("span");
-    var button = document.createElement("button");
-    var okLabel = document.createElement("label"), ok = document.createElement("input");
-    row.className = "person";
-    label.textContent = person.name + " (" + person.facts + (person.facts === 1 ? " fact)" : " facts)");
-    ok.type = "checkbox"; ok.checked = person.roast_ok !== false;
-    ok.setAttribute("aria-label", "roast ok for " + person.name);
-    ok.addEventListener("change", function () {
-      send({action: "set_roast_ok", id: person.id, roast_ok: ok.checked});
-    });
-    okLabel.appendChild(ok); okLabel.appendChild(document.createTextNode("auto-roast ok"));
-    button.type = "button"; button.textContent = "Forget";
-    button.addEventListener("click", function () {
-      if (window.confirm("Forget " + person.name + "? This deletes everything Arya remembers about them.")) {
-        send({action: "forget_person", id: person.id});
-      }
-    });
-    row.appendChild(label); row.appendChild(okLabel); row.appendChild(button);
-    people.appendChild(row);
-  });
-  select.value = p.speaker;
-  if (!p.memory) { $("peoplenote").textContent = "Memory is off: nothing is remembered."; }
-}
-document.querySelectorAll("[data-mode]").forEach(function (button) {
-  button.addEventListener("click", function () { send({action: "set_mode", mode: button.dataset.mode}); });
-});
-$("speaker").addEventListener("change", function () {
-  send({action: "set_speaker", name: $("speaker").value});
-});
-
-function applyHello(m) {
-  paintPersona(m.persona);
-  var p = m.ptt || {}, t = m.say || {};
-  audioInfo = m.audio || {available: false};
-  var voiceOk = !!(m.voice && m.voice.available && (window.AudioContext || window.webkitAudioContext));
-  voiceAvailable = voiceOk;
-  $("voicebtn").classList.toggle("avail", voiceOk);
-  if (voiceOk && voiceWanted) { send({action: "voice", on: true}); }   // a reconnect keeps the choice
-  if (!voiceOk) { voiceWanted = false; }
-  paintVoice();
-  var phoneMic = !!audioInfo.available, usable = !!p.available;
-  var why = "";
-  if (phoneMic && !micSupported()) {          // the phone cannot open its microphone here
-    usable = false;
-    why = window.isSecureContext
-      ? "this browser cannot open the microphone"
-      : "the phone microphone needs a secure page: open the https:// address (see the README)";
+    send(msg);
+    if (!walkLoop){
+      walkLoop = setInterval(function(){
+        if (curForward !== 0 || curStrafe !== 0 || curYaw !== 0){
+          send({
+            action: "walk",
+            forward: Math.round(curForward * 100) / 100,
+            strafe: Math.round(curStrafe * 100) / 100,
+            yaw: Math.round(curYaw * 100) / 100,
+            speed: speedVal
+          });
+        }
+      }, 100);
+    }
   }
-  ptt.disabled = !usable;
-  ptt.textContent = usable ? "HOLD TO TALK" : "TALK UNAVAILABLE";
-  $("pttnote").textContent = usable
-    ? (phoneMic
-        ? "Your phone is the microphone: hold the button and speak. A voice \"stop\" works only while you hold the button; the STOP button always works."
-        : "The microphone is the robot's: speak near the robot. A voice \"stop\" works only while you hold the button; the STOP button always works.")
-    : "Talking is off: " + (why || p.reason || "not available") + ". Typing still works.";
-  $("say").disabled = $("saysend").disabled = !t.available;
-  if (t.max_chars) { $("say").maxLength = t.max_chars; }
-  if (!t.available) { $("say").placeholder = t.reason || "typing is off"; }
 }
 
-document.querySelectorAll("[data-btn]").forEach(function (button) {
-  button.addEventListener("pointerdown", function (e) {
-    e.preventDefault();
-    try { button.setPointerCapture(e.pointerId); } catch (err) { /* not capturable */ }
-    held.set(e.pointerId, button.dataset.btn);
-    update();
-  });
-  button.addEventListener("pointerup", function (e) {
-    e.preventDefault();
-    if (held.delete(e.pointerId)) { update(); }
-  });
-  button.addEventListener("pointercancel", function (e) {
-    held.delete(e.pointerId);
-    stopAll();
-  });
-  button.addEventListener("lostpointercapture", function (e) {
-    if (held.delete(e.pointerId)) { update(); }
-  });
+// -- Stick Pointer Controls --
+var stick = $("stick");
+var stickPointer = null;
+var stickCenter = {x: 0, y: 0};
+var stickMaxR = 56;
+
+stick.addEventListener("pointerdown", function(e){
+  e.preventDefault();
+  try { stick.setPointerCapture(e.pointerId); } catch(err){}
+  stickPointer = e.pointerId;
+  var rect = stick.getBoundingClientRect();
+  stickCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  handleStickMove(e);
 });
-document.querySelectorAll("[data-cmd]").forEach(function (button) {
-  button.addEventListener("pointerdown", function (e) {
+stick.addEventListener("pointermove", function(e){
+  if (stickPointer === e.pointerId){
     e.preventDefault();
-    held.clear(); if (repeat !== null) { clearInterval(repeat); repeat = null; } paint();
-    send({action: button.dataset.cmd});
-  });
+    handleStickMove(e);
+  }
 });
-$("stop").addEventListener("pointerdown", function (e) { e.preventDefault(); stopAll(); });
-$("speed").addEventListener("input", function () {
-  $("speedval").textContent = $("speed").value;
-  if (anyMove()) { send(walkMessage()); }
+function handleStickEnd(e){
+  if (stickPointer === e.pointerId){
+    stickPointer = null;
+    $("stick-knob").style.transform = "translate(0px, 0px)";
+    curForward = 0;
+    curStrafe = 0;
+    sendWalk();
+  }
+}
+stick.addEventListener("pointerup", handleStickEnd);
+stick.addEventListener("pointercancel", handleStickEnd);
+stick.addEventListener("lostpointercapture", handleStickEnd);
+
+function handleStickMove(e){
+  var dx = e.clientX - stickCenter.x;
+  var dy = e.clientY - stickCenter.y;
+  var dist = Math.hypot(dx, dy);
+  if (dist > stickMaxR){
+    dx = (dx / dist) * stickMaxR;
+    dy = (dy / dist) * stickMaxR;
+  }
+  $("stick-knob").style.transform = "translate(" + dx + "px, " + dy + "px)";
+  curForward = -(dy / stickMaxR);
+  curStrafe = -(dx / stickMaxR);
+  sendWalk();
+}
+
+// -- Turn Buttons --
+var turnL = $("btn-turn-l"), turnR = $("btn-turn-r");
+turnL.addEventListener("pointerdown", function(e){
+  e.preventDefault();
+  try { turnL.setPointerCapture(e.pointerId); } catch(err){}
+  turnL.classList.add("busy");
+  curYaw = 1.0;
+  sendWalk();
+});
+turnL.addEventListener("pointerup", function(e){
+  e.preventDefault();
+  turnL.classList.remove("busy");
+  curYaw = 0;
+  sendWalk();
+});
+turnL.addEventListener("pointercancel", function(e){
+  turnL.classList.remove("busy");
+  curYaw = 0;
+  sendWalk();
 });
 
-// No long-press menu, no text selection, no scroll or zoom gestures on the controls.
-["contextmenu", "selectstart", "dragstart", "gesturestart"].forEach(function (name) {
-  document.addEventListener(name, function (e) { e.preventDefault(); });
+turnR.addEventListener("pointerdown", function(e){
+  e.preventDefault();
+  try { turnR.setPointerCapture(e.pointerId); } catch(err){}
+  turnR.classList.add("busy");
+  curYaw = -1.0;
+  sendWalk();
 });
-document.addEventListener("touchmove", function (e) {
-  var t = e.target, id = t && t.id;
-  var inLog = t && t.closest && t.closest("#log, #whoinner");
-  if (id !== "speed" && id !== "say" && !inLog) { e.preventDefault(); }
-}, {passive: false});
+turnR.addEventListener("pointerup", function(e){
+  e.preventDefault();
+  turnR.classList.remove("busy");
+  curYaw = 0;
+  sendWalk();
+});
+turnR.addEventListener("pointercancel", function(e){
+  turnR.classList.remove("busy");
+  curYaw = 0;
+  sendWalk();
+});
 
-// Leaving the page for any reason stops the robot.
-document.addEventListener("visibilitychange", function () { if (document.hidden) { stopAll(); } });
+// -- DPad Buttons --
+document.querySelectorAll(".dpad button").forEach(function(btn){
+  var dir = btn.dataset.dir;
+  btn.addEventListener("pointerdown", function(e){
+    e.preventDefault();
+    try { btn.setPointerCapture(e.pointerId); } catch(err){}
+    btn.classList.add("busy");
+    if (dir === "forward") curForward = 1.0;
+    if (dir === "backward") curForward = -1.0;
+    if (dir === "strafe_l") curStrafe = 1.0;
+    if (dir === "strafe_r") curStrafe = -1.0;
+    sendWalk();
+  });
+  function onBtnEnd(e){
+    e.preventDefault();
+    btn.classList.remove("busy");
+    if (dir === "forward" || dir === "backward") curForward = 0;
+    if (dir === "strafe_l" || dir === "strafe_r") curStrafe = 0;
+    sendWalk();
+  }
+  btn.addEventListener("pointerup", onBtnEnd);
+  btn.addEventListener("pointercancel", onBtnEnd);
+});
+
+// -- Keyboard Controls --
+document.addEventListener("keydown", function(e){
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+  if (e.code === "Space" || e.key === " "){ e.preventDefault(); sendStop(); return; }
+  if (e.repeat) return;
+  var code = e.code, key = (e.key || "").toLowerCase();
+  if (code === "KeyW" || key === "w") curForward = 1.0;
+  else if (code === "KeyS" || key === "s") curForward = -1.0;
+  else if (code === "KeyA" || key === "a") curStrafe = 1.0;
+  else if (code === "KeyD" || key === "d") curStrafe = -1.0;
+  else if (code === "KeyQ" || key === "q") curYaw = 1.0;
+  else if (code === "KeyE" || key === "e") curYaw = -1.0;
+  else if (code === "Digit1" || key === "1") setSpeed("slow");
+  else if (code === "Digit2" || key === "2") setSpeed("normal");
+  else if (code === "Digit3" || key === "3") setSpeed("fast");
+  else return;
+  sendWalk();
+});
+document.addEventListener("keyup", function(e){
+  var code = e.code, key = (e.key || "").toLowerCase();
+  if (code === "KeyW" || code === "KeyS" || key === "w" || key === "s") curForward = 0;
+  else if (code === "KeyA" || code === "KeyD" || key === "a" || key === "d") curStrafe = 0;
+  else if (code === "KeyQ" || code === "KeyE" || key === "q" || key === "e") curYaw = 0;
+  else return;
+  sendWalk();
+});
+
+// -- Safety & Pagehide --
+document.addEventListener("contextmenu", function(e){ e.preventDefault(); });
+document.addEventListener("visibilitychange", function(){ if (document.hidden) stopAll(); });
 window.addEventListener("blur", stopAll);
 window.addEventListener("pagehide", stopAll);
 
-function connect(pin) {
-  say(""); setState("connecting...", false); opened = false;
-  document.getElementById("app").classList.remove("lost");
-  var scheme = location.protocol === "https:" ? "wss:" : "ws:";
-  ws = new WebSocket(scheme + "//" + location.host + "/ws?pin=" + encodeURIComponent(pin));
-  ws.onopen = function () { opened = true; store("pin", pin); };
-  ws.binaryType = "arraybuffer";
-  ws.onmessage = function (event) {
-    if (typeof event.data !== "string") { playVoice(event.data); return; }
-    var m; try { m = JSON.parse(event.data); } catch (e) { return; }
-    if (m.type === "hello") {
-      sendHz = m.send_hz || sendHz;
-      document.getElementById("app").classList.add("app-on");
-      setState(m.state, true);
-      applyHello(m);
-      logLine("info", "connected");
-    } else if (m.type === "status") {
-      setState(m.state, true);
-      var why = m.detail && m.detail.reason ? ": " + m.detail.reason : "";
-      $("last").textContent = m.status + why;
-      logLine("status", "body: " + m.status + why);
-    } else if (m.type === "persona") {
-      paintPersona(m);
-    } else if (m.type === "listening") {
-      setListening(m.on);
-    } else if (m.type === "heard") {
-      logLine("heard", "heard: " + m.text);
-    } else if (m.type === "route") {
-      var what = m.route === "chat" ? "chat" : (m.action || m.route);
-      logLine("route", "decided: " + what + (m.early_stop ? " (early stop)" : ""));
-    } else if (m.type === "said") {
-      logLine("said", "arya: " + m.text);
-    } else if (m.type === "audio_clear") {
-      clearVoice();
-    } else if (m.type === "ptt_timeout") {
-      releaseTalk(); setListening(false);
-      logLine("error", "released: talking is limited to " + m.max_s + " s");
-    } else if (m.type === "deadman") {
-      held.clear(); paint();
-      if (repeat !== null) { clearInterval(repeat); repeat = null; }
-      $("last").textContent = "stopped: signal lost";
-    } else if (m.type === "error") {
-      $("last").textContent = "refused: " + m.reason;
-      logLine("error", "refused: " + m.reason);
-    }
-  };
-  ws.onclose = function () {
-    held.clear(); paint(); talkPointer = null; ptt.classList.remove("held"); setListening(false);
-    stopMic(); clearVoice();
-    if (repeat !== null) { clearInterval(repeat); repeat = null; }
-    setState("disconnected", false);
-    document.getElementById("app").classList.remove("app-on");
-    document.getElementById("app").classList.remove("has-persona");
-    document.getElementById("app").classList.add("lost");
-    say(opened ? "Connection lost. The robot was told to stop."
-               : "Refused: wrong PIN, too many tries (wait a minute), or another phone is in control.");
-  };
+// -- Persona & People Management --
+function setMode(m){
+  document.querySelectorAll("[data-mode]").forEach(function(btn){
+    btn.classList.toggle("on", btn.dataset.mode === m);
+  });
+  send({action: "set_mode", mode: m});
+}
+document.querySelectorAll("[data-mode]").forEach(function(button){
+  button.addEventListener("click", function(){
+    setMode(button.dataset.mode);
+  });
+});
+
+$("speaker").addEventListener("change", function(){
+  send({action: "set_speaker", name: $("speaker").value});
+});
+
+function renderPeopleList(list){
+  var root = $("people");
+  while (root.firstChild){ root.removeChild(root.firstChild); }
+  if (!list || list.length === 0){
+    $("peoplenote").textContent = "No people remembered yet.";
+    return;
+  }
+  $("peoplenote").textContent = "";
+  list.forEach(function(p){
+    var row = document.createElement("div");
+    row.className = "person-row";
+
+    var nameEl = document.createElement("b");
+    nameEl.textContent = p.name;
+    row.appendChild(nameEl);
+
+    var seenEl = document.createElement("span");
+    seenEl.style.color = "var(--dim)";
+    seenEl.style.marginLeft = "auto";
+    seenEl.textContent = p.last_seen || "";
+    row.appendChild(seenEl);
+
+    var chk = document.createElement("input");
+    chk.type = "checkbox";
+    chk.checked = !!p.roast_ok;
+    chk.addEventListener("change", function(){
+      send({action: "set_roast_ok", id: p.id, roast_ok: chk.checked});
+    });
+    row.appendChild(chk);
+
+    var fBtn = document.createElement("button");
+    fBtn.className = "forget-btn";
+    fBtn.textContent = "Forget";
+    fBtn.addEventListener("click", function(){
+      if (window.confirm("Forget " + p.name + "? This deletes everything Arya remembers about them.")){
+        send({action: "forget_person", id: p.id});
+      }
+    });
+    row.appendChild(fBtn);
+    root.appendChild(row);
+  });
 }
 
-$("login").addEventListener("submit", function (e) {
-  e.preventDefault();
-  var pin = $("pin").value.trim();
-  if (pin) { connect(pin); }
-});
-$("reconnect").addEventListener("click", function () {
-  var pin = store("pin") || $("pin").value.trim();
-  if (pin) { connect(pin); } else { say("Enter the PIN."); }
-});
-var fromHash = /(?:^#|&)pin=([^&]*)/.exec(location.hash);
-if (fromHash) {                      // http://host:port/#pin=123456 connects at once
-  history.replaceState(null, "", location.pathname);
-  connect(decodeURIComponent(fromHash[1]));
+// -- Inbound Message Handling --
+function onMsg(ev){
+  if (ev.data instanceof ArrayBuffer) return;
+  var m;
+  try { m = JSON.parse(ev.data); } catch(e){ return; }
+
+  if (m.type === "hello"){
+    $("chip-state").textContent = (m.state || "STANDING").toUpperCase();
+    $("state-label").textContent = (m.state || "STANDING").toUpperCase();
+  } else if (m.type === "status"){
+    var st = (m.state || m.status || "").toUpperCase();
+    if (st) {
+      $("state-label").textContent = st;
+      $("chip-state").textContent = st;
+      $("state-sub").textContent = m.detail && m.detail.reason ? ("Status: " + m.detail.reason) : "State as reported by the robot.";
+    }
+    if (m.action && $("act-" + m.action)){
+      var aBtn = $("act-" + m.action);
+      if (m.status === "accepted"){
+        document.querySelectorAll(".acts .act").forEach(function(a){ a.classList.remove("busy"); });
+        aBtn.classList.add("busy");
+        var sb = $("st-" + m.action); if (sb) sb.textContent = "moving...";
+      } else if (m.status === "done"){
+        aBtn.classList.remove("busy");
+        aBtn.classList.add("done");
+        var sd = $("st-" + m.action); if (sd) sd.textContent = "done";
+        $("last-ack").textContent = m.action.toUpperCase() + " · DONE";
+      }
+    }
+  } else if (m.type === "persona"){
+    if (m.mode){ setMode(m.mode); }
+    if (m.speaker){ $("speaker").value = m.speaker; }
+    if (m.people){ renderPeopleList(m.people); }
+  } else if (m.type === "listening"){
+    setLamp(m.on);
+  } else if (m.type === "heard"){
+    addHeard(m.text, m.tag || "command");
+  } else if (m.type === "said"){
+    addConv("Arya", m.text, true);
+  } else if (m.type === "deadman"){
+    stopAll();
+  }
+}
+
+function setLamp(on){
+  $("lamp-dot").className = "lamp" + (on ? " on" : "");
+  $("lamp-txt").textContent = on ? "Listening..." : "Idle";
+}
+
+function addHeard(text, tag){
+  var list = $("heard-list");
+  var li = document.createElement("li");
+  var q = document.createElement("q");
+  q.textContent = '"' + text + '"';
+  var div = document.createElement("div");
+  div.className = "route";
+  var span = document.createElement("span");
+  span.className = "tag " + (tag === "command" ? "cmd" : "chat");
+  span.textContent = tag.toUpperCase();
+  div.appendChild(span);
+  div.appendChild(document.createTextNode(" " + (tag === "command" ? "walk · done" : "reply spoken")));
+  li.appendChild(q);
+  li.appendChild(div);
+  list.insertBefore(li, list.firstChild);
+  while (list.children.length > 5){ list.removeChild(list.lastChild); }
+}
+
+function addConv(who, text, isArya){
+  var log = $("conv-log");
+  var li = document.createElement("li");
+  var div = document.createElement("div");
+  var w = document.createElement("span");
+  w.className = "who";
+  w.textContent = who;
+  var p = document.createElement("p");
+  p.className = "said" + (isArya ? " arya" : "");
+  p.textContent = text;
+  div.appendChild(w);
+  div.appendChild(p);
+  li.appendChild(div);
+  log.insertBefore(li, log.firstChild);
+  while (log.children.length > 50){ log.removeChild(log.lastChild); }
+}
+
+function sendSay(){
+  var inp = $("say-inp");
+  var txt = inp.value.trim();
+  if (!txt) return;
+  send({action: "say", text: txt});
+  addConv("You", txt, false);
+  inp.value = "";
+}
+
+function pttStart(e){
+  if (pttOn) return;
+  pttOn = true;
+  $("ptt").classList.add("active");
+  $("ptt").textContent = "Speaking...";
+  send({action: "ptt_press"});
+}
+function pttStop(){
+  if (!pttOn) return;
+  pttOn = false;
+  $("ptt").classList.remove("active");
+  $("ptt").textContent = "Hold to speak";
+  send({action: "ptt_release"});
 }
 </script>
 </body>

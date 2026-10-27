@@ -454,7 +454,8 @@ class HexaApp:
         if options.lan and not urls:
             print("web page: no LAN address found (is Wi-Fi up? try `hostname -I`)",
                   file=sys.stderr)
-        shown = pin if generated else "(the one set in HEXA_WEB_PIN or config.WEB_PIN)"
+        shown = pin
+        print(f"web password: {shown}", file=sys.stderr)
         print(f"web PIN: {shown}", file=sys.stderr)
         if context is not None and options.lan:
             print("the certificate is self-signed: the phone shows a one-time warning, accept it "
